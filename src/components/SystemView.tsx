@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useLayoutEffect, useRef, useState } from 'react'
 import { curveCatmullRom, line, select, zoom, type ZoomBehavior, zoomIdentity } from 'd3'
 import type { CoverageState, Diagram, DiagramConnector } from '../types'
-import { layoutDiagram } from '../utils/layout'
+import { computeSystemLayout } from '../utils/systemLayout'
 
 interface SystemViewProps {
   diagrams: Diagram[]
@@ -10,18 +10,10 @@ interface SystemViewProps {
   currentStateId: string | null
 }
 
-const CELL_WIDTH = 520
-const CELL_HEIGHT = 320
-const GRID_GAP = 28
-
 export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: SystemViewProps) => {
-  const layouts = useMemo(
-    () =>
-      diagrams.map((diagram) => ({
-        diagram,
-        layout: layoutDiagram(diagram),
-      })),
-    [diagrams],
+  const systemLayout = useMemo(
+    () => computeSystemLayout(diagrams, connectors),
+    [diagrams, connectors],
   )
 
   const svgRef = useRef<SVGSVGElement>(null)
@@ -37,30 +29,20 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: S
     [],
   )
 
-  const columns = 2
-  const rows = Math.ceil(layouts.length / columns)
-  const gridWidth = columns * CELL_WIDTH + (columns - 1) * GRID_GAP
-  const gridHeight = rows * CELL_HEIGHT + (rows - 1) * GRID_GAP
-
-  const centers = layouts.reduce<Record<string, { x: number; y: number }>>((acc, entry, index) => {
-    const col = index % columns
-    const row = Math.floor(index / columns)
-    const centerX = col * (CELL_WIDTH + GRID_GAP) + CELL_WIDTH / 2
-    const centerY = row * (CELL_HEIGHT + GRID_GAP) + CELL_HEIGHT / 2
-    acc[entry.diagram.id] = { x: centerX, y: centerY }
-    return acc
-  }, {})
-
   const computeFitTransform = useCallback(() => {
     if (!svgRef.current) return zoomIdentity
     const { width: svgW, height: svgH } = svgRef.current.getBoundingClientRect()
     if (svgW === 0 || svgH === 0) return zoomIdentity
-    const padding = 20
-    const scale = Math.min((svgW - padding * 2) / gridWidth, (svgH - padding * 2) / gridHeight)
-    const tx = svgW / 2 - (gridWidth / 2) * scale
-    const ty = svgH / 2 - (gridHeight / 2) * scale
+
+    const cx = (systemLayout.bounds.minX + systemLayout.bounds.maxX) / 2
+    const cy = (systemLayout.bounds.minY + systemLayout.bounds.maxY) / 2
+    const dw = systemLayout.width + 120
+    const dh = systemLayout.height + 120
+    const scale = Math.min(svgW / dw, svgH / dh)
+    const tx = svgW / 2 - cx * scale
+    const ty = svgH / 2 - cy * scale
     return zoomIdentity.translate(tx, ty).scale(scale)
-  }, [gridWidth, gridHeight])
+  }, [systemLayout])
 
   useLayoutEffect(() => {
     if (!svgRef.current) return
@@ -73,7 +55,7 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: S
     const initialTransform = computeFitTransform()
 
     const zoomBehavior: ZoomBehavior<SVGSVGElement, unknown> = zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.1, 8])
+      .scaleExtent([0.02, 8])
       .wheelDelta((event) => -event.deltaY * (event.deltaMode === 1 ? 0.005 : event.deltaMode ? 0.1 : 0.0002))
       .on('zoom', (event) => {
         setTransform(event.transform)
@@ -86,7 +68,7 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: S
     return () => {
       svg.on('.zoom', null)
     }
-  }, [gridWidth, gridHeight, computeFitTransform])
+  }, [computeFitTransform])
 
   const handleReset = useCallback(() => {
     if (!svgRef.current || !zoomBehaviorRef.current) return
@@ -114,113 +96,117 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: S
           >
             <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)" />
           </marker>
+          <marker
+            id="arrow-connector"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
+          </marker>
         </defs>
 
         <g transform={transform.toString()} style={{ transition: 'transform 0.05s linear' }}>
-          <g className="system-connectors">
-            {connectors.map((connector) => {
-              const from = centers[connector.from.diagramId]
-              const to = centers[connector.to.diagramId]
-              if (!from || !to) {
-                return null
-              }
+          {/* Diagram group backgrounds */}
+          <g className="system-groups">
+            {systemLayout.groups.map((group) => (
+              <g key={group.id}>
+                <circle
+                  cx={group.cx}
+                  cy={group.cy}
+                  r={group.radius}
+                  className="diagram-group-bg"
+                />
+                <text
+                  x={group.cx}
+                  y={group.cy - group.radius - 8}
+                  className="diagram-group-label"
+                  textAnchor="middle"
+                >
+                  {group.name}
+                </text>
+              </g>
+            ))}
+          </g>
+
+          {/* Cross-diagram connector edges (behind intra edges) */}
+          <g className="cross-edges">
+            {systemLayout.crossEdges.map((edge) => {
+              const midX = (edge.from.x + edge.to.x) / 2
+              const midY = (edge.from.y + edge.to.y) / 2
+              const dx = edge.to.x - edge.from.x
+              const dy = edge.to.y - edge.from.y
+              const len = Math.sqrt(dx * dx + dy * dy) || 1
+              const offset = Math.min(len * 0.15, 50)
+              const cpX = midX - (dy / len) * offset
+              const cpY = midY + (dx / len) * offset
+
               const path = edgeLine([
-                { x: from.x, y: from.y },
-                { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 - 30 },
-                { x: to.x, y: to.y },
+                { x: edge.from.x, y: edge.from.y },
+                { x: cpX, y: cpY },
+                { x: edge.to.x, y: edge.to.y },
               ])
               return (
-                <path
-                  key={connector.id}
-                  d={path ?? ''}
-                  className={`edge-path connector ${connector.type}`}
-                  markerEnd="url(#arrow-system)"
-                  vectorEffect="non-scaling-stroke"
-                />
+                <g key={edge.id}>
+                  <path
+                    d={path ?? ''}
+                    className="cross-edge-path"
+                    markerEnd="url(#arrow-connector)"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <text x={cpX} y={cpY - 8} className="cross-edge-label" textAnchor="middle">
+                    {edge.label}
+                  </text>
+                </g>
               )
             })}
           </g>
 
-          {layouts.map((entry, index) => {
-            const { diagram, layout } = entry
-            const col = index % columns
-            const row = Math.floor(index / columns)
-            const offsetX = col * (CELL_WIDTH + GRID_GAP)
-            const offsetY = row * (CELL_HEIGHT + GRID_GAP)
-            const scale = Math.min(
-              (CELL_WIDTH - 120) / layout.width,
-              (CELL_HEIGHT - 120) / layout.height,
-              1,
-            )
-            const translateX = offsetX + 60
-            const translateY = offsetY + 80
-
-            return (
-              <g key={diagram.id}>
-                <rect
-                  className="diagram-frame"
-                  x={offsetX}
-                  y={offsetY}
-                  width={CELL_WIDTH}
-                  height={CELL_HEIGHT}
-                  rx={18}
-                  ry={18}
-                />
-                <text x={offsetX + 24} y={offsetY + 32} className="diagram-title">
-                  {diagram.name}
-                </text>
-
-                <g
-                  transform={`translate(${translateX}, ${translateY}) scale(${scale}) translate(${-layout.bounds.minX
-                    }, ${-layout.bounds.minY})`}
-                >
-                  <g className="diagram-edges">
-                    {layout.edges.map((edge) => {
-                      const path = edgeLine(edge.points) ?? ''
-                      const midPoint = edge.points[Math.floor(edge.points.length / 2)]
-                      return (
-                        <g key={edge.id}>
-                          <path
-                            d={path}
-                            className="edge-path"
-                            markerEnd="url(#arrow-system)"
-                            vectorEffect="non-scaling-stroke"
-                          />
-                          {edge.label && midPoint ? (
-                            <text
-                              x={midPoint.x}
-                              y={midPoint.y - 10}
-                              className="edge-label"
-                            >
-                              {edge.label}
-                            </text>
-                          ) : null}
-                        </g>
-                      )
-                    })}
-                  </g>
-                  <g className="diagram-nodes">
-                    {layout.nodes.map((node) => {
-                      const visited = coverage.visitedNodes.has(node.id)
-                      const current = currentStateId === node.id
-                      return (
-                        <g
-                          key={node.id}
-                          transform={`translate(${node.x - node.width / 2}, ${node.y - node.height / 2})`}
-                          className={`node ${visited ? 'visited' : ''} ${current ? 'current' : ''}`}
-                        >
-                          <rect width={node.width} height={node.height} rx={12} ry={12} />
-                          <text x={node.width / 2} y={node.height / 2 + 4} textAnchor="middle">
-                            {node.label}
-                          </text>
-                        </g>
-                      )
-                    })}
-                  </g>
+          {/* Intra-diagram edges */}
+          <g className="diagram-edges">
+            {systemLayout.intraEdges.map((edge) => {
+              const path = edgeLine(edge.points) ?? ''
+              const midPoint = edge.points[Math.floor(edge.points.length / 2)]
+              return (
+                <g key={edge.id}>
+                  <path
+                    d={path}
+                    className="edge-path"
+                    markerEnd="url(#arrow-system)"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  {edge.label && midPoint ? (
+                    <text x={midPoint.x} y={midPoint.y - 10} className="edge-label">
+                      {edge.label}
+                    </text>
+                  ) : null}
                 </g>
-              </g>
-            )
-          })}
+              )
+            })}
+          </g>
+
+          {/* All nodes */}
+          <g className="diagram-nodes">
+            {systemLayout.nodes.map((node) => {
+              const visited = coverage.visitedNodes.has(node.id)
+              const current = currentStateId === node.id
+              return (
+                <g
+                  key={node.id}
+                  transform={`translate(${node.x - node.width / 2}, ${node.y - node.height / 2})`}
+                  className={`node ${node.type} ${visited ? 'visited' : ''} ${current ? 'current' : ''}`}
+                >
+                  <rect width={node.width} height={node.height} rx={12} ry={12} />
+                  <text x={node.width / 2} y={node.height / 2 + 4} textAnchor="middle">
+                    {node.label}
+                  </text>
+                </g>
+              )
+            })}
+          </g>
         </g>
       </svg>
       <div className="zoom-info">
