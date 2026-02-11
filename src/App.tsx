@@ -73,6 +73,8 @@ function App() {
       setSelectedDiagramId(payload.diagrams[0]?.id ?? '')
       setDataSource(file.name)
       setError(null)
+      setFocusDiagramId(null)
+      setViewMode('diagram')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid JSON file')
     }
@@ -104,8 +106,26 @@ function App() {
   if (!data) {
     return (
       <div className="app-shell loading-shell">
-        <div className="pulse" />
-        <p>Loading diagram data…</p>
+        {dataSource === '' ? (
+          <>
+            <p>尚未載入任何資料</p>
+            <label className="header-file" style={{ marginTop: 16, cursor: 'pointer' }}>
+              <span className="button-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" className="icon">
+                  <path d="M12 5v14" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                  <path d="M5 12h14" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                </svg>
+              </span>
+              匯入 JSON
+              <input type="file" accept="application/json" onChange={handleFileChange} />
+            </label>
+          </>
+        ) : (
+          <>
+            <div className="pulse" />
+            <p>Loading diagram data…</p>
+          </>
+        )}
       </div>
     )
   }
@@ -151,6 +171,31 @@ function App() {
               </svg>
             </span>
             匯出
+          </button>
+          <button
+            type="button"
+            className="header-button"
+            onClick={() => {
+              setData(null)
+              setSelectedDiagramId('')
+              setDataSource('')
+              setError(null)
+              setFocusDiagramId(null)
+              setViewMode('diagram')
+            }}
+          >
+            <span className="button-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" className="icon">
+                <path d="M3 6h18" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                <path
+                  d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6h12z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                />
+              </svg>
+            </span>
+            清空
           </button>
           <span className="header-source">來源: {dataSource}</span>
         </div>
