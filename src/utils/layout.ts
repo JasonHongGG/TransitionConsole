@@ -1,12 +1,8 @@
 import dagre from 'dagre'
 import type { Diagram, DiagramLayout } from '../types'
 
-const MIN_NODE_WIDTH = 120
-const NODE_HEIGHT = 48
-const NODE_PADDING = 24
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(max, Math.max(min, value))
+const NODE_WIDTH = 140
+const NODE_HEIGHT = 44
 
 export const layoutDiagram = (diagram: Diagram): DiagramLayout => {
   if (diagram.states.length === 0) {
@@ -25,13 +21,12 @@ export const layoutDiagram = (diagram: Diagram): DiagramLayout => {
   }
 
   const graph = new dagre.graphlib.Graph()
-  graph.setGraph({ rankdir: 'LR', nodesep: 50, ranksep: 70, marginx: 20, marginy: 20 })
+  graph.setGraph({ rankdir: 'LR', nodesep: 56, ranksep: 80, marginx: 20, marginy: 20 })
   graph.setDefaultEdgeLabel(() => ({}))
 
   diagram.states.forEach((state) => {
-    const targetWidth = clamp(state.label.length * 10 + NODE_PADDING, MIN_NODE_WIDTH, 220)
     graph.setNode(state.id, {
-      width: targetWidth,
+      width: NODE_WIDTH,
       height: NODE_HEIGHT,
       label: state.label,
       type: state.type,
@@ -51,7 +46,7 @@ export const layoutDiagram = (diagram: Diagram): DiagramLayout => {
       label: state.label,
       x: node?.x ?? 0,
       y: node?.y ?? 0,
-      width: node?.width ?? MIN_NODE_WIDTH,
+      width: node?.width ?? NODE_WIDTH,
       height: node?.height ?? NODE_HEIGHT,
       type: state.type,
     }

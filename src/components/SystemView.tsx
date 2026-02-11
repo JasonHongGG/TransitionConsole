@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useRef, useState } from 'react'
+import { useCallback, useMemo, useLayoutEffect, useRef, useState } from 'react'
 import { curveCatmullRom, line, select, zoom, type ZoomBehavior, zoomIdentity } from 'd3'
 import type { CoverageState, Diagram, DiagramConnector } from '../types'
 import { layoutDiagram } from '../utils/layout'
@@ -25,8 +25,7 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: S
   )
 
   const svgRef = useRef<SVGSVGElement>(null)
-
-  // State to track d3-zoom transform, initialized to Identity for exact initial layout match
+  const zoomBehaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
   const [transform, setTransform] = useState(zoomIdentity)
 
   const edgeLine = useMemo(
@@ -40,11 +39,8 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: S
 
   const columns = 2
   const rows = Math.ceil(layouts.length / columns)
-  const width = columns * CELL_WIDTH + (columns - 1) * GRID_GAP
-  const height = rows * CELL_HEIGHT + (rows - 1) * GRID_GAP
-
-  // Use the calculated width/height for the base viewBox to ensure static layout
-  const viewBox = `0 0 ${width} ${height}`
+  const gridWidth = columns * CELL_WIDTH + (columns - 1) * GRID_GAP
+  const gridHeight = rows * CELL_HEIGHT + (rows - 1) * GRID_GAP
 
   const centers = layouts.reduce<Record<string, { x: number; y: number }>>((acc, entry, index) => {
     const col = index % columns
@@ -55,37 +51,54 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: S
     return acc
   }, {})
 
-  useEffect(() => {
+  const computeFitTransform = useCallback(() => {
+    if (!svgRef.current) return zoomIdentity
+    const { width: svgW, height: svgH } = svgRef.current.getBoundingClientRect()
+    if (svgW === 0 || svgH === 0) return zoomIdentity
+    const padding = 20
+    const scale = Math.min((svgW - padding * 2) / gridWidth, (svgH - padding * 2) / gridHeight)
+    const tx = svgW / 2 - (gridWidth / 2) * scale
+    const ty = svgH / 2 - (gridHeight / 2) * scale
+    return zoomIdentity.translate(tx, ty).scale(scale)
+  }, [gridWidth, gridHeight])
+
+  useLayoutEffect(() => {
     if (!svgRef.current) return
 
-    const svg = select(svgRef.current)
+    const svgEl = svgRef.current
+    const svg = select(svgEl)
+    const { width: svgW, height: svgH } = svgEl.getBoundingClientRect()
+    if (svgW === 0 || svgH === 0) return
+
+    const initialTransform = computeFitTransform()
 
     const zoomBehavior: ZoomBehavior<SVGSVGElement, unknown> = zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.1, 8]) // Increased max zoom to 8x to allow reaching "normal" size
+      .scaleExtent([0.1, 8])
+      .wheelDelta((event) => -event.deltaY * (event.deltaMode === 1 ? 0.005 : event.deltaMode ? 0.1 : 0.0002))
       .on('zoom', (event) => {
         setTransform(event.transform)
       })
 
+    zoomBehaviorRef.current = zoomBehavior
     svg.call(zoomBehavior)
+    svg.call(zoomBehavior.transform, initialTransform)
 
     return () => {
       svg.on('.zoom', null)
     }
-  }, [width, height]) // Re-bind if dimensions change
+  }, [gridWidth, gridHeight, computeFitTransform])
 
-  // Hide labels when zoomed out.
-  // In System View, diagrams are already small (mini).
-  // We only show labels when the user has zoomed in significantly.
-  // Since mini diagrams are ~0.3-0.4x scale, we need ~2.5x - 3x zoom to reach "normal" size.
-  // Setting threshold to 2.5x ensures labels only appear when they are readable.
-  const showLabels = transform.k > 2.5
+  const handleReset = useCallback(() => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return
+    const fitTransform = computeFitTransform()
+    select(svgRef.current).call(zoomBehaviorRef.current.transform, fitTransform)
+  }, [computeFitTransform])
 
   return (
     <div className="diagram-canvas system-canvas" style={{ overflow: 'hidden' }}>
       <svg
         ref={svgRef}
         className="diagram-svg"
-        viewBox={viewBox}
         role="img"
         style={{ cursor: 'grab' }}
       >
@@ -103,7 +116,6 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: S
           </marker>
         </defs>
 
-        {/* Apply zoom transform to the entire content group */}
         <g transform={transform.toString()} style={{ transition: 'transform 0.05s linear' }}>
           <g className="system-connectors">
             {connectors.map((connector) => {
@@ -170,16 +182,15 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: S
                         <g key={edge.id}>
                           <path
                             d={path}
-                            className="edge-path mini"
+                            className="edge-path"
                             markerEnd="url(#arrow-system)"
                             vectorEffect="non-scaling-stroke"
                           />
-                          {edge.label && midPoint && showLabels ? (
+                          {edge.label && midPoint ? (
                             <text
                               x={midPoint.x}
                               y={midPoint.y - 10}
                               className="edge-label"
-                              style={{ fontSize: 24 }}
                             >
                               {edge.label}
                             </text>
@@ -196,7 +207,7 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: S
                         <g
                           key={node.id}
                           transform={`translate(${node.x - node.width / 2}, ${node.y - node.height / 2})`}
-                          className={`node mini ${visited ? 'visited' : ''} ${current ? 'current' : ''}`}
+                          className={`node ${visited ? 'visited' : ''} ${current ? 'current' : ''}`}
                         >
                           <rect width={node.width} height={node.height} rx={12} ry={12} />
                           <text x={node.width / 2} y={node.height / 2 + 4} textAnchor="middle">
@@ -212,6 +223,16 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: S
           })}
         </g>
       </svg>
+      <div className="zoom-info">
+        <span>{Math.round(transform.k * 100)}%</span>
+        <span className="zoom-info-sep">·</span>
+        <span>x: {Math.round(transform.x)}</span>
+        <span className="zoom-info-sep">·</span>
+        <span>y: {Math.round(transform.y)}</span>
+        <button type="button" className="zoom-reset" onClick={handleReset} title="Reset zoom">
+          ⟲
+        </button>
+      </div>
     </div>
   )
 }

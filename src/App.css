@@ -1,6 +1,6 @@
 .app-shell {
   min-height: 100vh;
-  padding: 72px 32px 48px;
+  padding: 72px 32px 12px;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -27,6 +27,7 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -130,6 +131,8 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  flex: 1;
+  min-height: 0;
 }
 
 .app-layout {
@@ -137,6 +140,8 @@
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 16px;
   align-items: start;
+  flex: 1;
+  min-height: 0;
 }
 
 .sidebar {
@@ -146,14 +151,16 @@
 }
 
 .content {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  align-items: start;
+  align-self: stretch;
+  min-height: 0;
 }
 
 .diagram-stage {
-  min-height: 640px;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -376,7 +383,8 @@
 }
 
 .canvas-panel {
-  min-height: 560px;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -615,16 +623,69 @@
 
 .diagram-canvas {
   flex: 1;
+  min-height: 0;
+  position: relative;
   background: radial-gradient(circle at top, rgba(255, 204, 119, 0.08), transparent 55%),
     radial-gradient(circle at 20% 80%, rgba(62, 191, 223, 0.12), transparent 40%);
   border-radius: 18px;
   border: 1px dashed rgba(255, 255, 255, 0.08);
-  padding: 12px;
 }
 
 .diagram-svg {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+}
+
+.zoom-info {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  background: rgba(8, 12, 24, 0.72);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  z-index: 5;
+}
+
+.zoom-info-sep {
+  opacity: 0.3;
+}
+
+.zoom-reset {
+  margin-left: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  padding: 0;
+  line-height: 1;
+}
+
+.zoom-reset:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--text);
 }
 
 .diagram-frame {
@@ -647,7 +708,7 @@
 
 .node text {
   fill: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -670,9 +731,7 @@
   stroke-width: 1.6;
 }
 
-.node.mini text {
-  font-size: 9px;
-}
+
 
 .edge-path {
   fill: none;
@@ -681,10 +740,8 @@
   opacity: 0.7;
 }
 
-.edge-path.mini {
-  stroke-width: 1;
-  opacity: 0.45;
-}
+
+
 
 .edge-path.connector.invokes {
   stroke-dasharray: 4 4;
@@ -692,7 +749,8 @@
 
 .edge-label {
   fill: var(--muted);
-  font-size: 10px;
+  font-size: 9px;
+  text-anchor: middle;
 }
 
 .goal-list {
@@ -859,6 +917,7 @@
     gap: 16px;
   }
 }
+
 .sidebar .panel {
   border-color: var(--line-soft);
 }

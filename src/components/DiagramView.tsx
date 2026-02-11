@@ -1,5 +1,5 @@
-import { useMemo, useEffect, useRef, useState } from 'react'
-import { curveCatmullRom, line, select, zoom, type ZoomBehavior, zoomIdentity } from 'd3'
+import { useCallback, useMemo, useLayoutEffect, useRef, useState } from 'react'
+import { curveCatmullRom, line, select, zoom, type ZoomBehavior, type ZoomTransform, zoomIdentity } from 'd3'
 import type { CoverageState, Diagram } from '../types'
 import { layoutDiagram } from '../utils/layout'
 
@@ -9,13 +9,13 @@ interface DiagramViewProps {
   currentStateId: string | null
 }
 
+// Persist zoom transforms per diagram so switching doesn't reset
+const savedTransforms = new Map<string, ZoomTransform>()
+
 export const DiagramView = ({ diagram, coverage, currentStateId }: DiagramViewProps) => {
   const layout = useMemo(() => layoutDiagram(diagram), [diagram])
   const svgRef = useRef<SVGSVGElement>(null)
-
-  // State to track d3-zoom transform
-  // We strictly initialize to Identity (k=1, x=0, y=0)
-  // This means the initial render is exactly consistent with the base viewBox layout.
+  const zoomBehaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
   const [transform, setTransform] = useState(zoomIdentity)
 
   const edgeLine = useMemo(
@@ -27,44 +27,60 @@ export const DiagramView = ({ diagram, coverage, currentStateId }: DiagramViewPr
     [],
   )
 
-  // We persist the original viewBox logic to ensure LAYOUT STABILITY.
-  // The viewBox establishes the "base coordinate system" where the diagram fits effectively.
-  const viewBox = `${layout.bounds.minX - 80} ${layout.bounds.minY - 80} ${layout.width + 160} ${layout.height + 160}`
+  const computeFitTransform = useCallback(() => {
+    if (!svgRef.current) return zoomIdentity
+    const { width: svgW, height: svgH } = svgRef.current.getBoundingClientRect()
+    if (svgW === 0 || svgH === 0) return zoomIdentity
+    const cx = (layout.bounds.minX + layout.bounds.maxX) / 2
+    const cy = (layout.bounds.minY + layout.bounds.maxY) / 2
+    const dw = layout.width + 100
+    const dh = layout.height + 100
+    const scale = Math.min(svgW / dw, svgH / dh)
+    const tx = svgW / 2 - cx * scale
+    const ty = svgH / 2 - cy * scale
+    return zoomIdentity.translate(tx, ty).scale(scale)
+  }, [layout])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!svgRef.current) return
 
-    const svg = select(svgRef.current)
+    const svgEl = svgRef.current
+    const svg = select(svgEl)
+    const { width: svgW, height: svgH } = svgEl.getBoundingClientRect()
+    if (svgW === 0 || svgH === 0) return
+
+    const diagramId = diagram.id
+    const targetTransform = savedTransforms.get(diagramId) ?? computeFitTransform()
 
     const zoomBehavior: ZoomBehavior<SVGSVGElement, unknown> = zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.2, 4]) // Allow zooming out to 0.2x and in to 4x of the "fit" size
+      .scaleExtent([0.05, 5])
+      .wheelDelta((event) => -event.deltaY * (event.deltaMode === 1 ? 0.005 : event.deltaMode ? 0.1 : 0.0002))
       .on('zoom', (event) => {
         setTransform(event.transform)
+        savedTransforms.set(diagramId, event.transform)
       })
 
-    // Apply the zoom behavior
+    zoomBehaviorRef.current = zoomBehavior
     svg.call(zoomBehavior)
-
-    // IMPORTANT: we do NOT manually set an initial transform here from clientRects.
-    // We rely on the SVG viewBox to handle the initial "Fit to Screen".
-    // d3-zoom's internal state starts at Identity (k=1, x=0, y=0), which matches our render state.
+    svg.call(zoomBehavior.transform, targetTransform)
 
     return () => {
       svg.on('.zoom', null)
     }
-  }, [layout]) // Re-bind if layout (and thus viewBox) changes fundamentally
+  }, [layout, diagram.id, computeFitTransform])
 
-  // Hide labels when zoomed out.
-  // Since k=1 represents "Fit to Screen" (the initial view),
-  // k < 0.6 means we are significantly smaller than the fitted view.
-  const showLabels = transform.k >= 0.6
+  const handleReset = useCallback(() => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return
+    savedTransforms.delete(diagram.id)
+    const fitTransform = computeFitTransform()
+    select(svgRef.current).call(zoomBehaviorRef.current.transform, fitTransform)
+  }, [diagram.id, computeFitTransform])
 
   return (
     <div className="diagram-canvas" style={{ overflow: 'hidden' }}>
       <svg
         ref={svgRef}
         className="diagram-svg"
-        viewBox={viewBox}
         role="img"
         style={{ cursor: 'grab' }}
       >
@@ -82,11 +98,6 @@ export const DiagramView = ({ diagram, coverage, currentStateId }: DiagramViewPr
           </marker>
         </defs>
 
-        {/* 
-          We wrap the content in a group that receives the zoom transform.
-          The transform is applied ON TOP of the viewBox coordinate system.
-          Initial state is Identity, so initial render is identical to original.
-        */}
         <g transform={transform.toString()} style={{ transition: 'transform 0.05s linear' }}>
           <g className="diagram-edges">
             {layout.edges.map((edge) => {
@@ -98,9 +109,9 @@ export const DiagramView = ({ diagram, coverage, currentStateId }: DiagramViewPr
                     d={path}
                     className="edge-path"
                     markerEnd="url(#arrow)"
-                    vectorEffect="non-scaling-stroke" // Tries to keep stroke width consistent visually
+                    vectorEffect="non-scaling-stroke"
                   />
-                  {edge.label && midPoint && showLabels ? (
+                  {edge.label && midPoint ? (
                     <text x={midPoint.x} y={midPoint.y - 10} className="edge-label">
                       {edge.label}
                     </text>
@@ -130,6 +141,16 @@ export const DiagramView = ({ diagram, coverage, currentStateId }: DiagramViewPr
           </g>
         </g>
       </svg>
+      <div className="zoom-info">
+        <span>{Math.round(transform.k * 100)}%</span>
+        <span className="zoom-info-sep">·</span>
+        <span>x: {Math.round(transform.x)}</span>
+        <span className="zoom-info-sep">·</span>
+        <span>y: {Math.round(transform.y)}</span>
+        <button type="button" className="zoom-reset" onClick={handleReset} title="Reset zoom">
+          ⟲
+        </button>
+      </div>
     </div>
   )
 }
