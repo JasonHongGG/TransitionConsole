@@ -17,6 +17,7 @@ function App() {
   const [dataSource, setDataSource] = useState<string>('public/data.json')
   const [showGoals, setShowGoals] = useState(false)
   const [agentOpen, setAgentOpen] = useState(false)
+  const [focusDiagramId, setFocusDiagramId] = useState<string | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -157,35 +158,35 @@ function App() {
       <main className="main">
         <div className="app-layout">
           <aside className="sidebar">
-              <div className="overlay-card">
-                <div className="overlay-header">
-                  <span className="section-title">
-                    <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
-                      <rect x="3" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                      <rect x="14" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                      <rect x="3" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                      <rect x="14" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                    </svg>
-                    Diagrams
-                  </span>
-                  <button
-                    type="button"
-                    className="icon-button"
-                    onClick={() => setShowGoals(true)}
-                    aria-label="Open coverage goals"
-                    title="Coverage goals"
+            <div className="overlay-card">
+              <div className="overlay-header">
+                <span className="section-title">
+                  <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
+                    <rect x="3" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                    <rect x="14" y="4" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                    <rect x="3" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                    <rect x="14" y="14" width="7" height="6" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                  </svg>
+                  Diagrams
+                </span>
+                <button
+                  type="button"
+                  className="icon-button"
+                  onClick={() => setShowGoals(true)}
+                  aria-label="Open coverage goals"
+                  title="Coverage goals"
+                >
+                  <svg
+                    className="icon"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    focusable="false"
                   >
-                    <svg
-                      className="icon"
-                      viewBox="0 0 24 24"
-                      aria-hidden="true"
-                      focusable="false"
-                    >
-                      <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1.8" />
-                      <circle cx="12" cy="12" r="2.2" fill="currentColor" />
-                    </svg>
-                  </button>
-                </div>
+                    <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1.8" />
+                    <circle cx="12" cy="12" r="2.2" fill="currentColor" />
+                  </svg>
+                </button>
+              </div>
               <div className="view-toggle">
                 <button
                   type="button"
@@ -197,15 +198,21 @@ function App() {
                 <button
                   type="button"
                   className={viewMode === 'system' ? 'active' : ''}
-                  onClick={() => setViewMode('system')}
+                  onClick={() => { setViewMode('system'); setFocusDiagramId(null) }}
                 >
                   System View
                 </button>
               </div>
               <DiagramList
                 diagrams={data.diagrams}
-                selectedId={selectedDiagramId}
-                onSelect={setSelectedDiagramId}
+                selectedId={viewMode === 'system' ? (focusDiagramId ?? '') : selectedDiagramId}
+                onSelect={(id) => {
+                  if (viewMode === 'system') {
+                    setFocusDiagramId((prev) => (prev === id ? null : id))
+                  } else {
+                    setSelectedDiagramId(id)
+                  }
+                }}
               />
             </div>
 
@@ -307,6 +314,7 @@ function App() {
                     connectors={connectors}
                     coverage={agentRunner.coverage}
                     currentStateId={agentRunner.currentStateId}
+                    selectedDiagramId={focusDiagramId ?? undefined}
                   />
                 )}
               </div>
@@ -330,18 +338,18 @@ function App() {
                 </button>
                 {agentOpen ? (
                   <div className="overlay-card agent-float">
-                  <div className="overlay-header">
-                    <span className="section-title">
-                      <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
-                        <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                        <path d="M12 7v5l3 3" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                      </svg>
-                      Agent Control
-                    </span>
-                    <button type="button" className="icon-button" onClick={() => setAgentOpen(false)}>
-                      <span aria-hidden="true">x</span>
-                    </button>
-                  </div>
+                    <div className="overlay-header">
+                      <span className="section-title">
+                        <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
+                          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                          <path d="M12 7v5l3 3" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                        </svg>
+                        Agent Control
+                      </span>
+                      <button type="button" className="icon-button" onClick={() => setAgentOpen(false)}>
+                        <span aria-hidden="true">x</span>
+                      </button>
+                    </div>
                     <AgentPanel
                       diagrams={data.diagrams}
                       coverage={agentRunner.coverage}

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react'
 import { curveCatmullRom, line, select, zoom, type ZoomBehavior, zoomIdentity } from 'd3'
 import type { CoverageState, Diagram, DiagramConnector } from '../types'
 import { computeSystemLayout } from '../utils/systemLayout'
@@ -8,9 +8,10 @@ interface SystemViewProps {
   connectors: DiagramConnector[]
   coverage: CoverageState
   currentStateId: string | null
+  selectedDiagramId?: string
 }
 
-export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: SystemViewProps) => {
+export const SystemView = ({ diagrams, connectors, coverage, currentStateId, selectedDiagramId }: SystemViewProps) => {
   const systemLayout = useMemo(
     () => computeSystemLayout(diagrams, connectors),
     [diagrams, connectors],
@@ -80,6 +81,32 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId }: S
     const fitTransform = computeFitTransform()
     select(svgRef.current).call(zoomBehaviorRef.current.transform, fitTransform)
   }, [computeFitTransform])
+
+  // Zoom to selected diagram group, or zoom-to-fit when deselected
+  useEffect(() => {
+    if (!svgRef.current || !zoomBehaviorRef.current) return
+    const svgEl = svgRef.current
+    const { width: svgW, height: svgH } = svgEl.getBoundingClientRect()
+    if (svgW === 0 || svgH === 0) return
+
+    let targetTransform = computeFitTransform()
+
+    if (selectedDiagramId) {
+      const group = systemLayout.groups.find((g) => g.id === selectedDiagramId)
+      if (group) {
+        const diameter = group.radius * 2 + 80
+        const scale = Math.min(svgW / diameter, svgH / diameter)
+        const tx = svgW / 2 - group.cx * scale
+        const ty = svgH / 2 - group.cy * scale
+        targetTransform = zoomIdentity.translate(tx, ty).scale(scale)
+      }
+    }
+
+    select(svgEl)
+      .transition()
+      .duration(600)
+      .call(zoomBehaviorRef.current.transform, targetTransform)
+  }, [selectedDiagramId, systemLayout.groups, computeFitTransform])
 
   return (
     <div className="diagram-canvas system-canvas" style={{ overflow: 'hidden' }}>
