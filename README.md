@@ -1,4 +1,4 @@
-# Transitor UI
+# TransitionConsole
 
 Frontend console for visualizing hierarchical transition diagrams from JSON and streaming agent-driven coverage.
 
@@ -24,4 +24,3 @@ The Copilot SDK requires the Copilot CLI installed and available in PATH (or set
 - Copilot agent streaming via `/api/agent/stream`
 - Mock runner fallback when `VITE_AGENT_MODE=mock`
 - Status panel with pass/fail validation results
-# TransitionConsole

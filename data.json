@@ -1,0 +1,2205 @@
+{
+  "system": "ActivityManagementPlatform",
+  "version": "2.0",
+  "generatedAt": "2026-02-09T21:12:49.448Z",
+  "inputs": {
+    "specPath": "StateTranstionDiagram/spec.md",
+    "transitionPath": "StateTranstionDiagram/transition.md"
+  },
+  "spec": {
+    "raw": null,
+    "summary": {
+      "productName": "社團活動管理平台",
+      "goals": [
+        "瀏覽即將舉辦的活動",
+        "報名活動 / 取消報名活動",
+        "管理員可建立、管理活動並查看報名狀況",
+        "使用者登入與身分驗證",
+        "角色權限控管",
+        "活動狀態管理（State Machine）",
+        "名額控管與一致性（避免超賣）",
+        "前後端資料一致性（含交易與防重複）",
+        "讓使用者可清楚看到報名狀態與可用名額",
+        "讓管理員可快速掌握活動與報名名單"
+      ],
+      "roles": [
+        {
+          "id": "member",
+          "label": "Member"
+        },
+        {
+          "id": "admin",
+          "label": "Admin"
+        }
+      ]
+    }
+  },
+  "diagrams": [
+    {
+      "id": "global_app",
+      "name": "Global App State",
+      "level": "global",
+      "parentDiagramId": null,
+      "roles": [],
+      "source": {
+        "type": "mermaid",
+        "sectionTitle": "Global",
+        "order": 1
+      },
+      "groups": [],
+      "states": [
+        {
+          "id": "global.Unauthenticated",
+          "label": "Unauthenticated",
+          "type": "start",
+          "groupId": null,
+          "tags": [
+            "global"
+          ],
+          "meta": {
+            "diagramId": "global_app",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Unauthenticated"
+            }
+          }
+        },
+        {
+          "id": "global.AuthenticatedMember",
+          "label": "AuthenticatedMember",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "global"
+          ],
+          "meta": {
+            "diagramId": "global_app",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "AuthenticatedMember"
+            }
+          }
+        },
+        {
+          "id": "global.AuthenticatedAdmin",
+          "label": "AuthenticatedAdmin",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "global"
+          ],
+          "meta": {
+            "diagramId": "global_app",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "AuthenticatedAdmin"
+            }
+          }
+        }
+      ],
+      "transitions": [
+        {
+          "id": "t.global_app.0001",
+          "from": "global.Unauthenticated",
+          "to": "global.AuthenticatedMember",
+          "event": "login_success_member",
+          "roles": [],
+          "validations": [
+            "auth API returns 200 and role=member"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "login_success_member"
+          },
+          "meta": {
+            "diagramId": "global_app",
+            "source": {
+              "raw": "Unauthenticated --> AuthenticatedMember: login_success_member"
+            }
+          }
+        },
+        {
+          "id": "t.global_app.0002",
+          "from": "global.Unauthenticated",
+          "to": "global.AuthenticatedAdmin",
+          "event": "login_success_admin",
+          "roles": [],
+          "validations": [
+            "auth API returns 200 and role=admin"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "login_success_admin"
+          },
+          "meta": {
+            "diagramId": "global_app",
+            "source": {
+              "raw": "Unauthenticated --> AuthenticatedAdmin: login_success_admin"
+            }
+          }
+        },
+        {
+          "id": "t.global_app.0003",
+          "from": "global.AuthenticatedMember",
+          "to": "global.Unauthenticated",
+          "event": "logout",
+          "roles": [],
+          "validations": [
+            "session/token cleared and UI shows logged out"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "logout"
+          },
+          "meta": {
+            "diagramId": "global_app",
+            "source": {
+              "raw": "AuthenticatedMember --> Unauthenticated: logout"
+            }
+          }
+        },
+        {
+          "id": "t.global_app.0004",
+          "from": "global.AuthenticatedAdmin",
+          "to": "global.Unauthenticated",
+          "event": "logout",
+          "roles": [],
+          "validations": [
+            "session/token cleared and UI shows logged out"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "logout"
+          },
+          "meta": {
+            "diagramId": "global_app",
+            "source": {
+              "raw": "AuthenticatedAdmin --> Unauthenticated: logout"
+            }
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "c.global_app.contains.page_navigation",
+          "type": "contains",
+          "from": {
+            "diagramId": "global_app"
+          },
+          "to": {
+            "diagramId": "page_navigation"
+          },
+          "meta": {
+            "reason": "derived from parentDiagramId"
+          }
+        }
+      ],
+      "meta": {
+        "pageName": null,
+        "featureName": null,
+        "entryStateId": "global.Unauthenticated"
+      }
+    },
+    {
+      "id": "page_navigation",
+      "name": "Page State Machine",
+      "level": "page",
+      "parentDiagramId": "global_app",
+      "roles": [],
+      "source": {
+        "type": "mermaid",
+        "sectionTitle": "Page",
+        "order": 2
+      },
+      "groups": [],
+      "states": [
+        {
+          "id": "page.Navigation.ActivityList",
+          "label": "ActivityList",
+          "type": "start",
+          "groupId": null,
+          "tags": [
+            "page"
+          ],
+          "meta": {
+            "diagramId": "page_navigation",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "ActivityList"
+            }
+          }
+        },
+        {
+          "id": "page.Navigation.ActivityDetail",
+          "label": "ActivityDetail",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page"
+          ],
+          "meta": {
+            "diagramId": "page_navigation",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "ActivityDetail"
+            }
+          }
+        },
+        {
+          "id": "page.Navigation.MyActivities",
+          "label": "MyActivities",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page"
+          ],
+          "meta": {
+            "diagramId": "page_navigation",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "MyActivities"
+            }
+          }
+        },
+        {
+          "id": "page.Navigation.AdminPanel",
+          "label": "AdminPanel",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page"
+          ],
+          "meta": {
+            "diagramId": "page_navigation",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "AdminPanel"
+            }
+          }
+        },
+        {
+          "id": "page.Navigation.AdminActivityEditor",
+          "label": "AdminActivityEditor",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page"
+          ],
+          "meta": {
+            "diagramId": "page_navigation",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "AdminActivityEditor"
+            }
+          }
+        },
+        {
+          "id": "page.Navigation.AdminRegistrations",
+          "label": "AdminRegistrations",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page"
+          ],
+          "meta": {
+            "diagramId": "page_navigation",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "AdminRegistrations"
+            }
+          }
+        },
+        {
+          "id": "page.Navigation.Error401",
+          "label": "Error401",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page"
+          ],
+          "meta": {
+            "diagramId": "page_navigation",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Error401"
+            }
+          }
+        },
+        {
+          "id": "page.Navigation.Error403",
+          "label": "Error403",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page"
+          ],
+          "meta": {
+            "diagramId": "page_navigation",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Error403"
+            }
+          }
+        },
+        {
+          "id": "page.Navigation.Error404",
+          "label": "Error404",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page"
+          ],
+          "meta": {
+            "diagramId": "page_navigation",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Error404"
+            }
+          }
+        }
+      ],
+      "transitions": [
+        {
+          "id": "t.page_navigation.0001",
+          "from": "page.Navigation.ActivityList",
+          "to": "page.Navigation.ActivityDetail",
+          "event": "open_activity",
+          "roles": [],
+          "validations": [
+            "activity detail API returns 200 and UI renders data"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "open_activity"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "ActivityList --> ActivityDetail: open_activity"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0002",
+          "from": "page.Navigation.ActivityDetail",
+          "to": "page.Navigation.ActivityList",
+          "event": "back_to_list",
+          "roles": [],
+          "validations": [
+            "UI navigates to list and preserves filters"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "back_to_list"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "ActivityDetail --> ActivityList: back_to_list"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0003",
+          "from": "page.Navigation.ActivityList",
+          "to": "page.Navigation.MyActivities",
+          "event": "open_my_activities",
+          "roles": [],
+          "validations": [
+            "my activities API returns only user registrations"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "open_my_activities"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "ActivityList --> MyActivities: open_my_activities"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0004",
+          "from": "page.Navigation.MyActivities",
+          "to": "page.Navigation.ActivityDetail",
+          "event": "open_activity",
+          "roles": [],
+          "validations": [
+            "activity detail UI loads for selected activity"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "open_activity"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "MyActivities --> ActivityDetail: open_activity"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0005",
+          "from": "page.Navigation.ActivityList",
+          "to": "page.Navigation.AdminPanel",
+          "event": "open_admin_panel",
+          "roles": [],
+          "validations": [
+            "admin role required and admin UI loads"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "open_admin_panel"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "ActivityList --> AdminPanel: open_admin_panel"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0006",
+          "from": "page.Navigation.AdminPanel",
+          "to": "page.Navigation.AdminActivityEditor",
+          "event": "create_or_edit_activity",
+          "roles": [],
+          "validations": [
+            "editor loads with draft or existing data"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "create_or_edit_activity"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "AdminPanel --> AdminActivityEditor: create_or_edit_activity"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0007",
+          "from": "page.Navigation.AdminPanel",
+          "to": "page.Navigation.AdminRegistrations",
+          "event": "view_registrations",
+          "roles": [],
+          "validations": [
+            "registrations API returns list with name/email/time"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "view_registrations"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "AdminPanel --> AdminRegistrations: view_registrations"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0008",
+          "from": "page.Navigation.AdminActivityEditor",
+          "to": "page.Navigation.AdminPanel",
+          "event": "save_or_cancel",
+          "roles": [],
+          "validations": [
+            "save returns 200 or cancel discards changes"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "save_or_cancel"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "AdminActivityEditor --> AdminPanel: save_or_cancel"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0009",
+          "from": "page.Navigation.AdminRegistrations",
+          "to": "page.Navigation.AdminPanel",
+          "event": "back",
+          "roles": [],
+          "validations": [
+            "UI returns to admin panel"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "back"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "AdminRegistrations --> AdminPanel: back"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0010",
+          "from": "page.Navigation.ActivityList",
+          "to": "page.Navigation.Error401",
+          "event": "auth_required",
+          "roles": [],
+          "validations": [
+            "unauthenticated request yields 401"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "auth_required"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "ActivityList --> Error401: auth_required"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0011",
+          "from": "page.Navigation.AdminPanel",
+          "to": "page.Navigation.Error403",
+          "event": "forbidden",
+          "roles": [],
+          "validations": [
+            "non-admin request yields 403"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "forbidden"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "AdminPanel --> Error403: forbidden"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0012",
+          "from": "page.Navigation.ActivityList",
+          "to": "page.Navigation.Error404",
+          "event": "activity_not_found",
+          "roles": [],
+          "validations": [
+            "missing activity yields 404"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "activity_not_found"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "ActivityList --> Error404: activity_not_found"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0013",
+          "from": "page.Navigation.Error401",
+          "to": "page.Navigation.ActivityList",
+          "event": "back",
+          "roles": [],
+          "validations": [
+            "UI navigates back to list"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "back"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "Error401 --> ActivityList: back"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0014",
+          "from": "page.Navigation.Error403",
+          "to": "page.Navigation.ActivityList",
+          "event": "back",
+          "roles": [],
+          "validations": [
+            "UI navigates back to list"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "back"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "Error403 --> ActivityList: back"
+            }
+          }
+        },
+        {
+          "id": "t.page_navigation.0015",
+          "from": "page.Navigation.Error404",
+          "to": "page.Navigation.ActivityList",
+          "event": "back",
+          "roles": [],
+          "validations": [
+            "UI navigates back to list"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "back"
+          },
+          "meta": {
+            "diagramId": "page_navigation",
+            "source": {
+              "raw": "Error404 --> ActivityList: back"
+            }
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "c.global_app.contains.page_navigation",
+          "type": "contains",
+          "from": {
+            "diagramId": "global_app"
+          },
+          "to": {
+            "diagramId": "page_navigation"
+          },
+          "meta": {
+            "reason": "derived from parentDiagramId"
+          }
+        },
+        {
+          "id": "c.page_navigation.contains.page_activity_member",
+          "type": "contains",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "page_activity_member"
+          },
+          "meta": {
+            "reason": "derived from parentDiagramId"
+          }
+        },
+        {
+          "id": "c.page_navigation.contains.page_activity_admin",
+          "type": "contains",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "page_activity_admin"
+          },
+          "meta": {
+            "reason": "derived from parentDiagramId"
+          }
+        },
+        {
+          "id": "c.page_navigation.contains.feature_registration",
+          "type": "contains",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "feature_registration"
+          },
+          "meta": {
+            "reason": "derived from parentDiagramId"
+          }
+        },
+        {
+          "id": "c.page_navigation.contains.feature_activityvisibility",
+          "type": "contains",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "feature_activityvisibility"
+          },
+          "meta": {
+            "reason": "derived from parentDiagramId"
+          }
+        },
+        {
+          "id": "c.page_navigation.invokes.feature_registration",
+          "type": "invokes",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "feature_registration"
+          },
+          "meta": {
+            "reason": "page invokes feature"
+          }
+        },
+        {
+          "id": "c.page_navigation.invokes.feature_activityvisibility",
+          "type": "invokes",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "feature_activityvisibility"
+          },
+          "meta": {
+            "reason": "page invokes feature"
+          }
+        },
+        {
+          "id": "c.page_navigation.contains.feature_activity_visibility",
+          "type": "contains",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "feature_activity_visibility"
+          },
+          "meta": {
+            "reason": "Feature diagram parent is Base Page",
+            "orphaned": true,
+            "orphanedReason": "present in baseline but not derivable from transition.md"
+          }
+        },
+        {
+          "id": "c.page_navigation.invokes.feature_activity_visibility",
+          "type": "invokes",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "feature_activity_visibility"
+          },
+          "meta": {
+            "reason": "Activity list visibility depends on activity status",
+            "orphaned": true,
+            "orphanedReason": "present in baseline but not derivable from transition.md"
+          }
+        }
+      ],
+      "meta": {
+        "pageName": "Navigation",
+        "featureName": null,
+        "entryStateId": "page.Navigation.ActivityList"
+      }
+    },
+    {
+      "id": "page_activity_member",
+      "name": "Role: Member",
+      "level": "page",
+      "parentDiagramId": "page_navigation",
+      "roles": [
+        "member"
+      ],
+      "source": {
+        "type": "mermaid",
+        "sectionTitle": "Role: Member",
+        "order": 3
+      },
+      "groups": [],
+      "states": [
+        {
+          "id": "page.activity.member.Browsing",
+          "label": "Browsing",
+          "type": "start",
+          "groupId": null,
+          "tags": [
+            "page",
+            "member"
+          ],
+          "meta": {
+            "diagramId": "page_activity_member",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Browsing"
+            }
+          }
+        },
+        {
+          "id": "page.activity.member.ViewingDetail",
+          "label": "ViewingDetail",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "member"
+          ],
+          "meta": {
+            "diagramId": "page_activity_member",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "ViewingDetail"
+            }
+          }
+        },
+        {
+          "id": "page.activity.member.Registered",
+          "label": "Registered",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "member"
+          ],
+          "meta": {
+            "diagramId": "page_activity_member",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Registered"
+            }
+          }
+        },
+        {
+          "id": "page.activity.member.Cancelled",
+          "label": "Cancelled",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "member"
+          ],
+          "meta": {
+            "diagramId": "page_activity_member",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Cancelled"
+            }
+          }
+        },
+        {
+          "id": "page.Activity.member.Browsing",
+          "label": "Browsing",
+          "type": "start",
+          "groupId": null,
+          "tags": [
+            "page",
+            "member"
+          ],
+          "meta": {
+            "diagramId": "page_activity_member",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Browsing"
+            },
+            "orphaned": true,
+            "orphanedReason": "present in baseline but not derivable from transition.md"
+          }
+        },
+        {
+          "id": "page.Activity.member.ViewingDetail",
+          "label": "ViewingDetail",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "member"
+          ],
+          "meta": {
+            "diagramId": "page_activity_member",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "ViewingDetail"
+            },
+            "orphaned": true,
+            "orphanedReason": "present in baseline but not derivable from transition.md"
+          }
+        },
+        {
+          "id": "page.Activity.member.Registered",
+          "label": "Registered",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "member"
+          ],
+          "meta": {
+            "diagramId": "page_activity_member",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Registered"
+            },
+            "orphaned": true,
+            "orphanedReason": "present in baseline but not derivable from transition.md"
+          }
+        },
+        {
+          "id": "page.Activity.member.Cancelled",
+          "label": "Cancelled",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "member"
+          ],
+          "meta": {
+            "diagramId": "page_activity_member",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Cancelled"
+            },
+            "orphaned": true,
+            "orphanedReason": "present in baseline but not derivable from transition.md"
+          }
+        }
+      ],
+      "transitions": [
+        {
+          "id": "t.page_activity_member.0001",
+          "from": "page.activity.member.Browsing",
+          "to": "page.activity.member.ViewingDetail",
+          "event": "open_activity",
+          "roles": [
+            "member"
+          ],
+          "validations": [
+            "activity detail UI shows registration status"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "open_activity"
+          },
+          "meta": {
+            "diagramId": "page_activity_member",
+            "source": {
+              "raw": "Browsing --> ViewingDetail: open_activity"
+            }
+          }
+        },
+        {
+          "id": "t.page_activity_member.0002",
+          "from": "page.activity.member.ViewingDetail",
+          "to": "page.activity.member.Registered",
+          "event": "register",
+          "roles": [
+            "member"
+          ],
+          "validations": [
+            "registration API returns 200 and count increments"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "register"
+          },
+          "meta": {
+            "diagramId": "page_activity_member",
+            "source": {
+              "raw": "ViewingDetail --> Registered: register"
+            }
+          }
+        },
+        {
+          "id": "t.page_activity_member.0003",
+          "from": "page.activity.member.Registered",
+          "to": "page.activity.member.ViewingDetail",
+          "event": "view_detail",
+          "roles": [
+            "member"
+          ],
+          "validations": [
+            "detail shows registered state"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "view_detail"
+          },
+          "meta": {
+            "diagramId": "page_activity_member",
+            "source": {
+              "raw": "Registered --> ViewingDetail: view_detail"
+            }
+          }
+        },
+        {
+          "id": "t.page_activity_member.0004",
+          "from": "page.activity.member.Registered",
+          "to": "page.activity.member.Browsing",
+          "event": "open_list",
+          "roles": [
+            "member"
+          ],
+          "validations": [
+            "list shows \"已報名\""
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "open_list"
+          },
+          "meta": {
+            "diagramId": "page_activity_member",
+            "source": {
+              "raw": "Registered --> Browsing: open_list"
+            }
+          }
+        },
+        {
+          "id": "t.page_activity_member.0005",
+          "from": "page.activity.member.Registered",
+          "to": "page.activity.member.Cancelled",
+          "event": "cancel_registration",
+          "roles": [
+            "member"
+          ],
+          "validations": [
+            "cancel API returns 200 and count decrements"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "cancel_registration"
+          },
+          "meta": {
+            "diagramId": "page_activity_member",
+            "source": {
+              "raw": "Registered --> Cancelled: cancel_registration"
+            }
+          }
+        },
+        {
+          "id": "t.page_activity_member.0006",
+          "from": "page.activity.member.Cancelled",
+          "to": "page.activity.member.ViewingDetail",
+          "event": "view_detail",
+          "roles": [
+            "member"
+          ],
+          "validations": [
+            "detail shows \"可報名\" if capacity available"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "view_detail"
+          },
+          "meta": {
+            "diagramId": "page_activity_member",
+            "source": {
+              "raw": "Cancelled --> ViewingDetail: view_detail"
+            }
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "c.page_navigation.contains.page_activity_member",
+          "type": "contains",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "page_activity_member"
+          },
+          "meta": {
+            "reason": "derived from parentDiagramId"
+          }
+        },
+        {
+          "id": "c.page_activity_member.invokes.feature_registration",
+          "type": "invokes",
+          "from": {
+            "diagramId": "page_activity_member"
+          },
+          "to": {
+            "diagramId": "feature_registration"
+          },
+          "meta": {
+            "reason": "registration-like events in role flow"
+          }
+        }
+      ],
+      "meta": {
+        "pageName": "activity",
+        "featureName": null,
+        "entryStateId": "page.activity.member.Browsing",
+        "changes": [
+          "field 'meta' updated to match expected derivation"
+        ]
+      }
+    },
+    {
+      "id": "page_activity_admin",
+      "name": "Role: Admin",
+      "level": "page",
+      "parentDiagramId": "page_navigation",
+      "roles": [
+        "admin"
+      ],
+      "source": {
+        "type": "mermaid",
+        "sectionTitle": "Role: Admin",
+        "order": 4
+      },
+      "groups": [],
+      "states": [
+        {
+          "id": "page.activity.admin.Draft",
+          "label": "Draft",
+          "type": "start",
+          "groupId": null,
+          "tags": [
+            "page",
+            "admin"
+          ],
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Draft"
+            }
+          }
+        },
+        {
+          "id": "page.activity.admin.Published",
+          "label": "Published",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "admin"
+          ],
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Published"
+            }
+          }
+        },
+        {
+          "id": "page.activity.admin.Full",
+          "label": "Full",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "admin"
+          ],
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Full"
+            }
+          }
+        },
+        {
+          "id": "page.activity.admin.Closed",
+          "label": "Closed",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "admin"
+          ],
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Closed"
+            }
+          }
+        },
+        {
+          "id": "page.activity.admin.Archived",
+          "label": "Archived",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "admin"
+          ],
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Archived"
+            }
+          }
+        },
+        {
+          "id": "page.Activity.admin.Draft",
+          "label": "Draft",
+          "type": "start",
+          "groupId": null,
+          "tags": [
+            "page",
+            "admin"
+          ],
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Draft"
+            },
+            "orphaned": true,
+            "orphanedReason": "present in baseline but not derivable from transition.md"
+          }
+        },
+        {
+          "id": "page.Activity.admin.Published",
+          "label": "Published",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "admin"
+          ],
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Published"
+            },
+            "orphaned": true,
+            "orphanedReason": "present in baseline but not derivable from transition.md"
+          }
+        },
+        {
+          "id": "page.Activity.admin.Full",
+          "label": "Full",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "admin"
+          ],
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Full"
+            },
+            "orphaned": true,
+            "orphanedReason": "present in baseline but not derivable from transition.md"
+          }
+        },
+        {
+          "id": "page.Activity.admin.Closed",
+          "label": "Closed",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "admin"
+          ],
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Closed"
+            },
+            "orphaned": true,
+            "orphanedReason": "present in baseline but not derivable from transition.md"
+          }
+        },
+        {
+          "id": "page.Activity.admin.Archived",
+          "label": "Archived",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "page",
+            "admin"
+          ],
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Archived"
+            },
+            "orphaned": true,
+            "orphanedReason": "present in baseline but not derivable from transition.md"
+          }
+        }
+      ],
+      "transitions": [
+        {
+          "id": "t.page_activity_admin.0001",
+          "from": "page.activity.admin.Draft",
+          "to": "page.activity.admin.Published",
+          "event": "publish",
+          "roles": [
+            "admin"
+          ],
+          "validations": [
+            "activity status=published and visible in list"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "publish"
+          },
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "source": {
+              "raw": "Draft --> Published: publish"
+            }
+          }
+        },
+        {
+          "id": "t.page_activity_admin.0002",
+          "from": "page.activity.admin.Published",
+          "to": "page.activity.admin.Full",
+          "event": "auto_full",
+          "roles": [
+            "admin"
+          ],
+          "validations": [
+            "registration count==capacity triggers status=full"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "auto_full"
+          },
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "source": {
+              "raw": "Published --> Full: auto_full"
+            }
+          }
+        },
+        {
+          "id": "t.page_activity_admin.0003",
+          "from": "page.activity.admin.Full",
+          "to": "page.activity.admin.Published",
+          "event": "capacity_released",
+          "roles": [
+            "admin"
+          ],
+          "validations": [
+            "cancel frees slot and status=published"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "capacity_released"
+          },
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "source": {
+              "raw": "Full --> Published: capacity_released"
+            }
+          }
+        },
+        {
+          "id": "t.page_activity_admin.0004",
+          "from": "page.activity.admin.Published",
+          "to": "page.activity.admin.Closed",
+          "event": "close_registration",
+          "roles": [
+            "admin"
+          ],
+          "validations": [
+            "status=closed and registration API rejects new"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "close_registration"
+          },
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "source": {
+              "raw": "Published --> Closed: close_registration"
+            }
+          }
+        },
+        {
+          "id": "t.page_activity_admin.0005",
+          "from": "page.activity.admin.Full",
+          "to": "page.activity.admin.Closed",
+          "event": "close_registration",
+          "roles": [
+            "admin"
+          ],
+          "validations": [
+            "status=closed and registration API rejects new"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "close_registration"
+          },
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "source": {
+              "raw": "Full --> Closed: close_registration"
+            }
+          }
+        },
+        {
+          "id": "t.page_activity_admin.0006",
+          "from": "page.activity.admin.Closed",
+          "to": "page.activity.admin.Archived",
+          "event": "archive",
+          "roles": [
+            "admin"
+          ],
+          "validations": [
+            "status=archived and hidden from list"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "archive"
+          },
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "source": {
+              "raw": "Closed --> Archived: archive"
+            }
+          }
+        },
+        {
+          "id": "t.page_activity_admin.0007",
+          "from": "page.activity.admin.Draft",
+          "to": "page.activity.admin.Archived",
+          "event": "archive",
+          "roles": [
+            "admin"
+          ],
+          "validations": [
+            "status=archived and hidden from list"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "archive"
+          },
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "source": {
+              "raw": "Draft --> Archived: archive"
+            }
+          }
+        },
+        {
+          "id": "t.page_activity_admin.0008",
+          "from": "page.activity.admin.Published",
+          "to": "page.activity.admin.Draft",
+          "event": "unpublish_to_draft",
+          "roles": [
+            "admin"
+          ],
+          "validations": [
+            "status=draft and hidden from list"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "unpublish_to_draft"
+          },
+          "meta": {
+            "diagramId": "page_activity_admin",
+            "source": {
+              "raw": "Published --> Draft: unpublish_to_draft"
+            }
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "c.page_navigation.contains.page_activity_admin",
+          "type": "contains",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "page_activity_admin"
+          },
+          "meta": {
+            "reason": "derived from parentDiagramId"
+          }
+        },
+        {
+          "id": "c.page_activity_admin.invokes.feature_registration",
+          "type": "invokes",
+          "from": {
+            "diagramId": "page_activity_admin"
+          },
+          "to": {
+            "diagramId": "feature_registration"
+          },
+          "meta": {
+            "reason": "registration-like events in role flow"
+          }
+        }
+      ],
+      "meta": {
+        "pageName": "activity",
+        "featureName": null,
+        "entryStateId": "page.activity.admin.Draft",
+        "changes": [
+          "field 'meta' updated to match expected derivation"
+        ]
+      }
+    },
+    {
+      "id": "feature_registration",
+      "name": "Feature: Registration",
+      "level": "feature",
+      "parentDiagramId": "page_navigation",
+      "roles": [],
+      "source": {
+        "type": "mermaid",
+        "sectionTitle": "Feature: Registration",
+        "order": 5
+      },
+      "groups": [],
+      "states": [
+        {
+          "id": "feature.Registration.NotRegistered",
+          "label": "NotRegistered",
+          "type": "start",
+          "groupId": null,
+          "tags": [
+            "feature"
+          ],
+          "meta": {
+            "diagramId": "feature_registration",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "NotRegistered"
+            }
+          }
+        },
+        {
+          "id": "feature.Registration.Registered",
+          "label": "Registered",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "feature"
+          ],
+          "meta": {
+            "diagramId": "feature_registration",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Registered"
+            }
+          }
+        },
+        {
+          "id": "feature.Registration.Cancelled",
+          "label": "Cancelled",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "feature"
+          ],
+          "meta": {
+            "diagramId": "feature_registration",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Cancelled"
+            }
+          }
+        }
+      ],
+      "transitions": [
+        {
+          "id": "t.feature_registration.0001",
+          "from": "feature.Registration.NotRegistered",
+          "to": "feature.Registration.Registered",
+          "event": "register",
+          "roles": [],
+          "validations": [
+            "transaction commits and unique(user_id,activity_id)"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "register"
+          },
+          "meta": {
+            "diagramId": "feature_registration",
+            "source": {
+              "raw": "NotRegistered --> Registered: register"
+            }
+          }
+        },
+        {
+          "id": "t.feature_registration.0002",
+          "from": "feature.Registration.Registered",
+          "to": "feature.Registration.Cancelled",
+          "event": "cancel",
+          "roles": [],
+          "validations": [
+            "registration canceled_at set and capacity released"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "cancel"
+          },
+          "meta": {
+            "diagramId": "feature_registration",
+            "source": {
+              "raw": "Registered --> Cancelled: cancel"
+            }
+          }
+        },
+        {
+          "id": "t.feature_registration.0003",
+          "from": "feature.Registration.Cancelled",
+          "to": "feature.Registration.Registered",
+          "event": "register_again",
+          "roles": [],
+          "validations": [
+            "new registration allowed before deadline"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "register_again"
+          },
+          "meta": {
+            "diagramId": "feature_registration",
+            "source": {
+              "raw": "Cancelled --> Registered: register_again"
+            }
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "c.page_navigation.contains.feature_registration",
+          "type": "contains",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "feature_registration"
+          },
+          "meta": {
+            "reason": "derived from parentDiagramId"
+          }
+        },
+        {
+          "id": "c.page_navigation.invokes.feature_registration",
+          "type": "invokes",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "feature_registration"
+          },
+          "meta": {
+            "reason": "page invokes feature"
+          }
+        },
+        {
+          "id": "c.page_activity_member.invokes.feature_registration",
+          "type": "invokes",
+          "from": {
+            "diagramId": "page_activity_member"
+          },
+          "to": {
+            "diagramId": "feature_registration"
+          },
+          "meta": {
+            "reason": "registration-like events in role flow"
+          }
+        },
+        {
+          "id": "c.page_activity_admin.invokes.feature_registration",
+          "type": "invokes",
+          "from": {
+            "diagramId": "page_activity_admin"
+          },
+          "to": {
+            "diagramId": "feature_registration"
+          },
+          "meta": {
+            "reason": "registration-like events in role flow"
+          }
+        }
+      ],
+      "meta": {
+        "pageName": null,
+        "featureName": "Registration",
+        "entryStateId": "feature.Registration.NotRegistered"
+      }
+    },
+    {
+      "id": "feature_activityvisibility",
+      "name": "Feature: ActivityVisibility",
+      "level": "feature",
+      "parentDiagramId": "page_navigation",
+      "roles": [],
+      "source": {
+        "type": "mermaid",
+        "sectionTitle": "Feature: ActivityVisibility",
+        "order": 6
+      },
+      "groups": [],
+      "states": [
+        {
+          "id": "feature.ActivityVisibility.Hidden",
+          "label": "Hidden",
+          "type": "start",
+          "groupId": null,
+          "tags": [
+            "feature"
+          ],
+          "meta": {
+            "diagramId": "feature_activityvisibility",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Hidden"
+            }
+          }
+        },
+        {
+          "id": "feature.ActivityVisibility.Listed",
+          "label": "Listed",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "feature"
+          ],
+          "meta": {
+            "diagramId": "feature_activityvisibility",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Listed"
+            }
+          }
+        }
+      ],
+      "transitions": [
+        {
+          "id": "t.feature_activityvisibility.0001",
+          "from": "feature.ActivityVisibility.Hidden",
+          "to": "feature.ActivityVisibility.Listed",
+          "event": "status_published_or_full",
+          "roles": [],
+          "validations": [
+            "list API returns activity"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "status_published_or_full"
+          },
+          "meta": {
+            "diagramId": "feature_activityvisibility",
+            "source": {
+              "raw": "Hidden --> Listed: status_published_or_full"
+            }
+          }
+        },
+        {
+          "id": "t.feature_activityvisibility.0002",
+          "from": "feature.ActivityVisibility.Listed",
+          "to": "feature.ActivityVisibility.Hidden",
+          "event": "status_archived_or_draft",
+          "roles": [],
+          "validations": [
+            "list API excludes activity"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "status_archived_or_draft"
+          },
+          "meta": {
+            "diagramId": "feature_activityvisibility",
+            "source": {
+              "raw": "Listed --> Hidden: status_archived_or_draft"
+            }
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "c.page_navigation.contains.feature_activityvisibility",
+          "type": "contains",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "feature_activityvisibility"
+          },
+          "meta": {
+            "reason": "derived from parentDiagramId"
+          }
+        },
+        {
+          "id": "c.page_navigation.invokes.feature_activityvisibility",
+          "type": "invokes",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "feature_activityvisibility"
+          },
+          "meta": {
+            "reason": "page invokes feature"
+          }
+        }
+      ],
+      "meta": {
+        "pageName": null,
+        "featureName": "ActivityVisibility",
+        "entryStateId": "feature.ActivityVisibility.Hidden"
+      }
+    },
+    {
+      "id": "feature_activity_visibility",
+      "name": "Feature: ActivityVisibility",
+      "level": "feature",
+      "parentDiagramId": "page_navigation",
+      "roles": [],
+      "source": {
+        "type": "mermaid",
+        "sectionTitle": "Feature: ActivityVisibility",
+        "order": 6
+      },
+      "groups": [],
+      "states": [
+        {
+          "id": "feature.ActivityVisibility.Hidden",
+          "label": "Hidden",
+          "type": "start",
+          "groupId": null,
+          "tags": [
+            "feature"
+          ],
+          "meta": {
+            "diagramId": "feature_activity_visibility",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Hidden"
+            }
+          }
+        },
+        {
+          "id": "feature.ActivityVisibility.Listed",
+          "label": "Listed",
+          "type": "normal",
+          "groupId": null,
+          "tags": [
+            "feature"
+          ],
+          "meta": {
+            "diagramId": "feature_activity_visibility",
+            "synthetic": false,
+            "source": {
+              "scope": "root",
+              "raw": "Listed"
+            }
+          }
+        }
+      ],
+      "transitions": [
+        {
+          "id": "t.feature_activity_visibility.0001",
+          "from": "feature.ActivityVisibility.Hidden",
+          "to": "feature.ActivityVisibility.Listed",
+          "event": "status_published_or_full",
+          "roles": [],
+          "validations": [
+            "list API returns activity"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "status_published_or_full"
+          },
+          "meta": {
+            "diagramId": "feature_activity_visibility",
+            "source": {
+              "raw": "Hidden --> Listed: status_published_or_full"
+            }
+          }
+        },
+        {
+          "id": "t.feature_activity_visibility.0002",
+          "from": "feature.ActivityVisibility.Listed",
+          "to": "feature.ActivityVisibility.Hidden",
+          "event": "status_archived_or_draft",
+          "roles": [],
+          "validations": [
+            "list API excludes activity"
+          ],
+          "intent": {
+            "category": "action",
+            "summary": "status_archived_or_draft"
+          },
+          "meta": {
+            "diagramId": "feature_activity_visibility",
+            "source": {
+              "raw": "Listed --> Hidden: status_archived_or_draft"
+            }
+          }
+        }
+      ],
+      "connectors": [
+        {
+          "id": "c.page_navigation.contains.feature_activity_visibility",
+          "type": "contains",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "feature_activity_visibility"
+          },
+          "meta": {
+            "reason": "Feature diagram parent is Base Page"
+          }
+        },
+        {
+          "id": "c.page_navigation.invokes.feature_activity_visibility",
+          "type": "invokes",
+          "from": {
+            "diagramId": "page_navigation"
+          },
+          "to": {
+            "diagramId": "feature_activity_visibility"
+          },
+          "meta": {
+            "reason": "Activity list visibility depends on activity status"
+          }
+        }
+      ],
+      "meta": {
+        "pageName": null,
+        "featureName": "ActivityVisibility",
+        "entryStateId": "feature.ActivityVisibility.Hidden",
+        "orphaned": true,
+        "orphanedReason": "diagram present in baseline but not in transition.md"
+      }
+    }
+  ],
+  "hierarchy": {
+    "roots": [
+      "global_app"
+    ],
+    "childrenByDiagramId": {
+      "global_app": [
+        "page_navigation"
+      ],
+      "page_navigation": [
+        "page_activity_member",
+        "page_activity_admin",
+        "feature_registration",
+        "feature_activityvisibility"
+      ]
+    }
+  },
+  "meta": {
+    "refineLog": [
+      {
+        "kind": "connector",
+        "id": "c.page_navigation.invokes.feature_registration",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "connector",
+        "id": "c.page_activity_member.invokes.feature_registration",
+        "action": "fix",
+        "reason": "removed incorrect orphaned flag; valid cross-diagram relationship inferred from transition.md"
+      },
+      {
+        "kind": "root",
+        "id": "spec.summary.roles",
+        "action": "fix",
+        "reason": "re-derived from spec.md"
+      },
+      {
+        "kind": "connector",
+        "id": "c.page_navigation.contains.feature_activityvisibility",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "connector",
+        "id": "c.page_navigation.invokes.feature_activityvisibility",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "connector",
+        "id": "c.page_navigation.contains.feature_activity_visibility",
+        "action": "orphan",
+        "reason": "present in baseline but not in expected"
+      },
+      {
+        "kind": "connector",
+        "id": "c.page_navigation.invokes.feature_activity_visibility",
+        "action": "orphan",
+        "reason": "present in baseline but not in expected"
+      },
+      {
+        "kind": "state",
+        "id": "page.activity.member.Browsing",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "state",
+        "id": "page.activity.member.ViewingDetail",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "state",
+        "id": "page.activity.member.Registered",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "state",
+        "id": "page.activity.member.Cancelled",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "state",
+        "id": "page.Activity.member.Browsing",
+        "action": "orphan",
+        "reason": "present in baseline but not in expected"
+      },
+      {
+        "kind": "state",
+        "id": "page.Activity.member.ViewingDetail",
+        "action": "orphan",
+        "reason": "present in baseline but not in expected"
+      },
+      {
+        "kind": "state",
+        "id": "page.Activity.member.Registered",
+        "action": "orphan",
+        "reason": "present in baseline but not in expected"
+      },
+      {
+        "kind": "state",
+        "id": "page.Activity.member.Cancelled",
+        "action": "orphan",
+        "reason": "present in baseline but not in expected"
+      },
+      {
+        "kind": "state",
+        "id": "page.activity.admin.Draft",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "state",
+        "id": "page.activity.admin.Published",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "state",
+        "id": "page.activity.admin.Full",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "state",
+        "id": "page.activity.admin.Closed",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "state",
+        "id": "page.activity.admin.Archived",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "state",
+        "id": "page.Activity.admin.Draft",
+        "action": "orphan",
+        "reason": "present in baseline but not in expected"
+      },
+      {
+        "kind": "state",
+        "id": "page.Activity.admin.Published",
+        "action": "orphan",
+        "reason": "present in baseline but not in expected"
+      },
+      {
+        "kind": "state",
+        "id": "page.Activity.admin.Full",
+        "action": "orphan",
+        "reason": "present in baseline but not in expected"
+      },
+      {
+        "kind": "state",
+        "id": "page.Activity.admin.Closed",
+        "action": "orphan",
+        "reason": "present in baseline but not in expected"
+      },
+      {
+        "kind": "state",
+        "id": "page.Activity.admin.Archived",
+        "action": "orphan",
+        "reason": "present in baseline but not in expected"
+      },
+      {
+        "kind": "connector",
+        "id": "c.page_activity_admin.invokes.feature_registration",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "connector",
+        "id": "c.page_activity_admin.invokes.feature_registration",
+        "action": "fix",
+        "reason": "added missing expected item"
+      },
+      {
+        "kind": "diagram",
+        "id": "feature_activityvisibility",
+        "action": "fix",
+        "reason": "added missing expected diagram"
+      },
+      {
+        "kind": "diagram",
+        "id": "feature_activity_visibility",
+        "action": "orphan",
+        "reason": "present in baseline but not in expected"
+      },
+      {
+        "kind": "root",
+        "id": "hierarchy",
+        "action": "fix",
+        "reason": "re-derived from diagrams.parentDiagramId"
+      }
+    ],
+    "validation": {
+      "issues": []
+    }
+  }
+}

@@ -1,0 +1,47 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;600&display=swap');
+
+:root {
+  font-family: 'Space Grotesk', 'Spline Sans Mono', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #f4f6fb;
+  background-color: #05060f;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --surface: rgba(12, 18, 36, 0.96);
+  --line: rgba(255, 255, 255, 0.32);
+  --line-soft: rgba(255, 255, 255, 0.2);
+  --text: #f4f6fb;
+  --muted: rgba(255, 255, 255, 0.7);
+  --accent: #ffcc77;
+  --shadow-soft: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at top left, #14233b, transparent 55%),
+    radial-gradient(circle at 10% 20%, #092041, transparent 40%),
+    radial-gradient(circle at 80% 20%, #39261d, transparent 55%),
+    #05060f;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+#root {
+  min-height: 100vh;
+}
