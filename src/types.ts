@@ -1,4 +1,4 @@
-export type DiagramLevel = 'global' | 'page' | 'feature'
+export type DiagramLevel = 'page' | 'feature'
 
 export type StateType = 'start' | 'end' | 'normal'
 
@@ -72,15 +72,24 @@ export interface DiagramConnector {
   type: ConnectorType
   from: {
     diagramId: string
+    stateId: string | null
   }
   to: {
     diagramId: string
+    stateId: string | null
   }
   meta: {
     reason: string
     orphaned?: boolean
     orphanedReason?: string
   }
+}
+
+export interface DiagramVariant {
+  kind: 'standalone' | 'base' | 'delta'
+  baseDiagramId: string | null
+  deltaDiagramIdsByRole: Record<string, string>
+  appliesToRoles: string[]
 }
 
 export interface DiagramMeta {
@@ -96,6 +105,7 @@ export interface Diagram {
   level: DiagramLevel
   parentDiagramId: string | null
   roles: string[]
+  variant: DiagramVariant
   source: DiagramSource
   groups: unknown[]
   states: DiagramState[]

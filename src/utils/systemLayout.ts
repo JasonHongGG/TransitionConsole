@@ -28,6 +28,15 @@ interface GroupLink extends SimulationLinkDatum<GroupNode> {
     label: string
 }
 
+export interface SystemVariantEdge {
+    id: string
+    baseDiagramId: string
+    deltaDiagramId: string
+    from: { x: number; y: number }
+    to: { x: number; y: number }
+    roles: string[]
+}
+
 export interface SystemNode extends LayoutNode {
     diagramId: string
 }
@@ -58,6 +67,7 @@ export interface SystemLayout {
     nodes: SystemNode[]
     intraEdges: SystemIntraEdge[]
     crossEdges: SystemCrossEdge[]
+    variantEdges: SystemVariantEdge[]
     groups: SystemGroup[]
     width: number
     height: number
@@ -75,6 +85,7 @@ export function computeSystemLayout(
             nodes: [],
             intraEdges: [],
             crossEdges: [],
+            variantEdges: [],
             groups: [],
             width: 0,
             height: 0,
@@ -138,7 +149,7 @@ export function computeSystemLayout(
         .force(
             'radial',
             forceRadial<GroupNode>(
-                (d) => (d.level === 'global' ? 0 : d.level === 'page' ? 250 : 500),
+                (d) => (d.level === 'page' ? 250 : 500),
                 0,
                 0,
             ).strength(0.15),
@@ -182,21 +193,12 @@ export function computeSystemLayout(
         })
     })
 
-    // 5. Compute cross-diagram edges (connect entry states)
+    // 5. Compute cross-diagram edges (connect explicit connector endpoints)
     const crossEdges: SystemCrossEdge[] = connectors
         .filter((c) => diagramIdSet.has(c.from.diagramId) && diagramIdSet.has(c.to.diagramId))
         .map((connector) => {
-            const fromDiagram = diagrams.find((d) => d.id === connector.from.diagramId)!
-            const toDiagram = diagrams.find((d) => d.id === connector.to.diagramId)!
-            const fromStateId =
-                fromDiagram.meta.entryStateId ??
-                fromDiagram.states.find((s) => s.type === 'start')?.id ??
-                fromDiagram.states[0]?.id
-            const toStateId =
-                toDiagram.meta.entryStateId ??
-                toDiagram.states.find((s) => s.type === 'start')?.id ??
-                toDiagram.states[0]?.id
-
+            const fromStateId = connector.from.stateId
+            const toStateId = connector.to.stateId
             if (!fromStateId || !toStateId) return null
             const from = nodePositions.get(fromStateId)
             const to = nodePositions.get(toStateId)
@@ -214,7 +216,28 @@ export function computeSystemLayout(
         })
         .filter((e): e is SystemCrossEdge => e !== null)
 
-    // 6. Compute bounds
+    // 6. Compute base/delta variant edges
+    const groupPositions = new Map(groupInfo.map((group) => [group.id, { x: group.cx, y: group.cy }]))
+    const variantEdges: SystemVariantEdge[] = diagrams
+        .filter((diagram) => diagram.variant.kind === 'delta' && diagram.variant.baseDiagramId)
+        .map((diagram) => {
+            const baseDiagramId = diagram.variant.baseDiagramId
+            if (!baseDiagramId) return null
+            const from = groupPositions.get(baseDiagramId)
+            const to = groupPositions.get(diagram.id)
+            if (!from || !to) return null
+            return {
+                id: `v.${baseDiagramId}.extends.${diagram.id}`,
+                baseDiagramId,
+                deltaDiagramId: diagram.id,
+                from,
+                to,
+                roles: diagram.variant.appliesToRoles,
+            }
+        })
+        .filter((edge): edge is SystemVariantEdge => edge !== null)
+
+    // 7. Compute bounds
     let minX = Infinity,
         maxX = -Infinity,
         minY = Infinity,
@@ -230,6 +253,7 @@ export function computeSystemLayout(
         nodes: allNodes,
         intraEdges: allIntraEdges,
         crossEdges,
+        variantEdges,
         groups: groupInfo,
         width: maxX - minX,
         height: maxY - minY,

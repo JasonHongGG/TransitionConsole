@@ -61,6 +61,33 @@ function App() {
     [data, selectedDiagramId],
   )
 
+  const diagramById = useMemo(() => {
+    if (!data) {
+      return new Map<string, GraphData['diagrams'][number]>()
+    }
+    return new Map(data.diagrams.map((diagram) => [diagram.id, diagram]))
+  }, [data])
+
+  const selectedVariantNotes = useMemo(() => {
+    if (!selectedDiagram) {
+      return [] as string[]
+    }
+    if (selectedDiagram.variant.kind === 'base') {
+      const entries = Object.entries(selectedDiagram.variant.deltaDiagramIdsByRole)
+      return entries.map(([role, deltaId]) => {
+        const deltaName = diagramById.get(deltaId)?.name ?? deltaId
+        return `${role} → ${deltaName}`
+      })
+    }
+    if (selectedDiagram.variant.kind === 'delta' && selectedDiagram.variant.baseDiagramId) {
+      const baseName =
+        diagramById.get(selectedDiagram.variant.baseDiagramId)?.name ?? selectedDiagram.variant.baseDiagramId
+      const roles = selectedDiagram.variant.appliesToRoles.join(', ')
+      return [`extends ${baseName}`, roles ? `roles: ${roles}` : 'roles: none']
+    }
+    return [] as string[]
+  }, [diagramById, selectedDiagram])
+
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) {
@@ -248,17 +275,19 @@ function App() {
                   System View
                 </button>
               </div>
-              <DiagramList
-                diagrams={data.diagrams}
-                selectedId={viewMode === 'system' ? (focusDiagramId ?? '') : selectedDiagramId}
-                onSelect={(id) => {
-                  if (viewMode === 'system') {
-                    setFocusDiagramId((prev) => (prev === id ? null : id))
-                  } else {
-                    setSelectedDiagramId(id)
-                  }
-                }}
-              />
+              <div className="diagrams-panel">
+                <DiagramList
+                  diagrams={data.diagrams}
+                  selectedId={viewMode === 'system' ? (focusDiagramId ?? '') : selectedDiagramId}
+                  onSelect={(id) => {
+                    if (viewMode === 'system') {
+                      setFocusDiagramId((prev) => (prev === id ? null : id))
+                    } else {
+                      setSelectedDiagramId(id)
+                    }
+                  }}
+                />
+              </div>
             </div>
 
             {showGoals ? (
@@ -346,6 +375,23 @@ function App() {
                       </div>
                     ) : null}
                   </div>
+                  {viewMode === 'diagram' && selectedDiagram ? (
+                    <div className="panel-header-tags">
+                      <div className="badge-stack">
+                        <span className="badge">{selectedDiagram.level}</span>
+                        <span className="badge">{selectedDiagram.variant.kind}</span>
+                      </div>
+                      {selectedVariantNotes.length > 0 ? (
+                        <div className="variant-notes">
+                          {selectedVariantNotes.map((note) => (
+                            <span key={note} className="variant-note">
+                              {note}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
                 {viewMode === 'diagram' && selectedDiagram ? (
                   <DiagramView

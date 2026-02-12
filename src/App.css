@@ -1,9 +1,11 @@
 .app-shell {
+  height: 100vh;
   min-height: 100vh;
   padding: 72px 32px 12px;
   display: flex;
   flex-direction: column;
   gap: 24px;
+  overflow: hidden;
 }
 
 .loading-shell,
@@ -133,21 +135,26 @@
   gap: 16px;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .app-layout {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
   flex: 1;
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .sidebar {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  height: 100%;
+  min-height: 0;
 }
 
 .content {
@@ -156,6 +163,7 @@
   gap: 16px;
   align-self: stretch;
   min-height: 0;
+  overflow: hidden;
 }
 
 .diagram-stage {
@@ -339,6 +347,30 @@
   gap: 8px;
 }
 
+.panel-header-tags {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.variant-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.variant-note {
+  border-radius: 999px;
+  padding: 3px 8px;
+  border: 1px solid var(--line-soft);
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .badge {
   border-radius: 999px;
   padding: 6px 12px;
@@ -352,12 +384,51 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+  width: 100%;
+}
+
+.diagrams-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  width: 100%;
+}
+
+.diagrams-panel .diagram-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 8px;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 204, 119, 0.45) rgba(255, 255, 255, 0.08);
+}
+
+.diagrams-panel .diagram-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.diagrams-panel .diagram-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+}
+
+.diagrams-panel .diagram-list::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, rgba(255, 204, 119, 0.7), rgba(255, 204, 119, 0.4));
+  border-radius: 999px;
+  border: 2px solid rgba(10, 18, 36, 0.9);
+}
+
+.diagrams-panel .diagram-list::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, rgba(255, 204, 119, 0.9), rgba(255, 204, 119, 0.55));
 }
 
 .diagram-item {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  width: 100%;
   padding: 12px 14px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -396,6 +467,14 @@
   border-radius: 16px;
   padding: 12px;
   box-shadow: var(--shadow-soft);
+}
+
+.sidebar > .overlay-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .button-icon {
@@ -726,6 +805,21 @@
   font-size: 8px;
   font-weight: 500;
   opacity: 0.7;
+}
+
+.variant-edge-path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.3;
+  stroke-dasharray: 5 4;
+  opacity: 0.5;
+}
+
+.variant-edge-label {
+  fill: var(--text);
+  font-size: 8px;
+  font-weight: 600;
+  opacity: 0.75;
 }
 
 .node rect {

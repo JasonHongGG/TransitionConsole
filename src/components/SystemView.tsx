@@ -139,6 +139,17 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
           >
             <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
           </marker>
+          <marker
+            id="arrow-variant"
+            viewBox="0 0 10 10"
+            refX="9"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
+          </marker>
         </defs>
 
         <g transform={transform.toString()} style={{ transition: 'transform 0.05s linear' }}>
@@ -164,7 +175,29 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
             ))}
           </g>
 
-          {/* Cross-diagram connector edges (behind intra edges) */}
+          {/* Base/delta variant edges */}
+          <g className="variant-edges">
+            {systemLayout.variantEdges.map((edge) => {
+              const midX = (edge.from.x + edge.to.x) / 2
+              const midY = (edge.from.y + edge.to.y) / 2
+              const roleText = edge.roles.length > 0 ? edge.roles.join(' | ') : 'all roles'
+              return (
+                <g key={edge.id}>
+                  <path
+                    d={`M ${edge.from.x} ${edge.from.y} L ${edge.to.x} ${edge.to.y}`}
+                    className="variant-edge-path"
+                    markerEnd="url(#arrow-variant)"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <text x={midX} y={midY - 8} className="variant-edge-label" textAnchor="middle">
+                    extends ({roleText})
+                  </text>
+                </g>
+              )
+            })}
+          </g>
+
+          {/* Cross-diagram connector edges (explicit state-to-state) */}
           <g className="cross-edges">
             {systemLayout.crossEdges.map((edge) => {
               const midX = (edge.from.x + edge.to.x) / 2
@@ -247,6 +280,10 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
         <span>x: {Math.round(transform.x)}</span>
         <span className="zoom-info-sep">·</span>
         <span>y: {Math.round(transform.y)}</span>
+        <span className="zoom-info-sep">·</span>
+        <span>connectors: {systemLayout.crossEdges.length}</span>
+        <span className="zoom-info-sep">·</span>
+        <span>variants: {systemLayout.variantEdges.length}</span>
         <button type="button" className="zoom-reset" onClick={handleReset} title="Reset zoom">
           ⟲
         </button>
