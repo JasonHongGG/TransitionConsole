@@ -841,7 +841,8 @@
   left: 12px;
   width: min(360px, calc(100% - 24px));
   max-height: calc(100% - 24px);
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   z-index: 6;
   border-radius: 14px;
   border: 1px solid var(--line-soft);
@@ -878,7 +879,14 @@
 .system-node-info-header {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
   gap: 10px;
+}
+
+.system-node-info-header > div:first-child {
+  flex: 1;
+  min-width: 0;
 }
 
 .system-node-info-kicker {
@@ -894,12 +902,14 @@
   font-size: 14px;
   line-height: 1.2;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 
 .system-node-info-meta {
   margin: 2px 0 0;
   font-size: 11px;
   color: var(--muted);
+  overflow-wrap: anywhere;
 }
 
 .system-node-info-meta.muted-id {
@@ -910,6 +920,8 @@
   display: inline-flex;
   align-items: flex-start;
   gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .system-node-info-overview {
@@ -1034,6 +1046,7 @@
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .system-node-jump,
@@ -1042,6 +1055,8 @@
   font-weight: 600;
   color: var(--text);
   line-height: 1.2;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .system-node-jump {
@@ -1063,6 +1078,10 @@
   border: 1px solid var(--line-soft);
   border-radius: 999px;
   padding: 2px 6px;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .system-node-info-reason {
@@ -1070,6 +1089,7 @@
   font-size: 10px;
   color: var(--muted);
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .node rect {
