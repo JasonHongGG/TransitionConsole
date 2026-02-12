@@ -109,6 +109,60 @@ export function computeSystemLayout(
         }
     })
 
+    const groupById = new Map(groups.map((group) => [group.id, group]))
+
+    const placeOnRing = (nodes: GroupNode[], ringRadius: number, startAngle: number) => {
+        if (nodes.length === 0) return
+        const step = (Math.PI * 2) / nodes.length
+        nodes.forEach((node, index) => {
+            const angle = startAngle + index * step
+            node.x = Math.cos(angle) * ringRadius
+            node.y = Math.sin(angle) * ringRadius
+        })
+    }
+
+    const nonDeltaPages = groups.filter((g) => g.level === 'page' && g.diagram.variant.kind !== 'delta')
+    const nonDeltaFeatures = groups.filter((g) => g.level === 'feature' && g.diagram.variant.kind !== 'delta')
+
+    placeOnRing(nonDeltaPages, 260, -Math.PI / 2)
+    placeOnRing(nonDeltaFeatures, 520, -Math.PI / 2)
+
+    const deltaByBase = new Map<string, GroupNode[]>()
+    groups
+        .filter((g) => g.diagram.variant.kind === 'delta' && g.diagram.variant.baseDiagramId)
+        .forEach((delta) => {
+            const baseId = delta.diagram.variant.baseDiagramId as string
+            const bucket = deltaByBase.get(baseId)
+            if (bucket) {
+                bucket.push(delta)
+            } else {
+                deltaByBase.set(baseId, [delta])
+            }
+        })
+
+    deltaByBase.forEach((deltas, baseId) => {
+        const base = groupById.get(baseId)
+        if (!base) return
+        const bx = base.x ?? 0
+        const by = base.y ?? 0
+        const spread = Math.max(1, deltas.length)
+        deltas.forEach((delta, index) => {
+            const centered = index - (spread - 1) / 2
+            const angle = -Math.PI / 8 + centered * (Math.PI / 8)
+            const distance = base.radius * 0.75 + delta.radius * 0.75 + 24
+            delta.x = bx + Math.cos(angle) * distance
+            delta.y = by + Math.sin(angle) * distance
+        })
+    })
+
+    groups.forEach((group, index) => {
+        if (group.x !== undefined && group.y !== undefined) return
+        const angle = -Math.PI / 2 + index * 0.55
+        const radius = group.level === 'page' ? 260 : 520
+        group.x = Math.cos(angle) * radius
+        group.y = Math.sin(angle) * radius
+    })
+
     const diagramIdSet = new Set(diagrams.map((d) => d.id))
 
     // 2. Build links for force simulation (deduplicate per pair)
@@ -129,6 +183,17 @@ export function computeSystemLayout(
             label: c.meta.reason,
         }))
 
+    const variantLinks: GroupLink[] = diagrams
+        .filter((diagram) => diagram.variant.kind === 'delta' && diagram.variant.baseDiagramId)
+        .map((diagram) => ({
+            source: diagram.variant.baseDiagramId as string,
+            target: diagram.id,
+            id: `variant-link.${diagram.variant.baseDiagramId}.${diagram.id}`,
+            type: 'variant',
+            label: 'extends',
+        }))
+        .filter((link) => diagramIdSet.has(link.source as string) && diagramIdSet.has(link.target as string))
+
     // 3. Run force simulation
     const simulation = forceSimulation<GroupNode>(groups)
         .force('center', forceCenter(0, 0).strength(0.05))
@@ -147,6 +212,17 @@ export function computeSystemLayout(
                     return s.radius + t.radius + 60
                 })
                 .strength(0.4),
+        )
+        .force(
+            'variantLink',
+            forceLink<GroupNode, GroupLink>(variantLinks)
+                .id((d) => d.id)
+                .distance((d) => {
+                    const s = d.source as GroupNode
+                    const t = d.target as GroupNode
+                    return s.radius + t.radius + 18
+                })
+                .strength(0.95),
         )
         .force(
             'radial',

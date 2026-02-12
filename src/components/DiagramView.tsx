@@ -11,6 +11,7 @@ interface DiagramViewProps {
 
 // Persist zoom transforms per diagram so switching doesn't reset
 const savedTransforms = new Map<string, ZoomTransform>()
+const WHEEL_ZOOM_STEP = Math.log2(1.05)
 
 export const DiagramView = ({ diagram, coverage, currentStateId }: DiagramViewProps) => {
   const layout = useMemo(() => layoutDiagram(diagram), [diagram])
@@ -55,11 +56,8 @@ export const DiagramView = ({ diagram, coverage, currentStateId }: DiagramViewPr
     const zoomBehavior: ZoomBehavior<SVGSVGElement, unknown> = zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.05, 5])
       .wheelDelta((event) => {
-        const abs = Math.abs(event.deltaY)
-        // Slow scroll (~100) → ~1%, fast scroll → scales up non-linearly
-        const speed = Math.pow(abs / 100, 1.4) * 0.0002
-        const base = event.deltaMode === 1 ? 0.005 : event.deltaMode ? 0.1 : speed
-        return -event.deltaY * base / (abs || 1) * abs
+        if (event.deltaY === 0) return 0
+        return event.deltaY < 0 ? WHEEL_ZOOM_STEP : -WHEEL_ZOOM_STEP
       })
       .on('zoom', (event) => {
         setTransform(event.transform)
