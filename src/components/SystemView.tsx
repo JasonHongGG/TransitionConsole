@@ -11,11 +11,21 @@ interface SystemViewProps {
   selectedDiagramId?: string
 }
 
+interface NodeRelationItem {
+  id: string
+  targetNodeId: string | null
+  targetLabel: string
+  targetDiagramName: string
+  reason: string
+}
+
 export const SystemView = ({ diagrams, connectors, coverage, currentStateId, selectedDiagramId }: SystemViewProps) => {
   const systemLayout = useMemo(
     () => computeSystemLayout(diagrams, connectors),
     [diagrams, connectors],
   )
+  const diagramsById = useMemo(() => new Map(diagrams.map((diagram) => [diagram.id, diagram])), [diagrams])
+  const nodesById = useMemo(() => new Map(systemLayout.nodes.map((node) => [node.id, node])), [systemLayout.nodes])
 
   const svgRef = useRef<SVGSVGElement>(null)
   const viewportRef = useRef<SVGGElement>(null)
@@ -23,6 +33,8 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
   const transformRef = useRef(zoomIdentity)
   const frameRef = useRef<number | null>(null)
   const [zoomInfo, setZoomInfo] = useState({ k: 1, x: 0, y: 0 })
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [nodeHistory, setNodeHistory] = useState<string[]>([])
 
   const edgeLine = useMemo(
     () =>
@@ -47,6 +59,120 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
     const ty = svgH / 2 - cy * scale
     return zoomIdentity.translate(tx, ty).scale(scale)
   }, [systemLayout])
+
+  const focusNode = useCallback(
+    (nodeId: string, options: { pushHistory?: boolean } = {}) => {
+      const node = nodesById.get(nodeId)
+      if (!node) return
+
+      if (options.pushHistory && selectedNodeId && selectedNodeId !== nodeId) {
+        setNodeHistory((prev) => [...prev, selectedNodeId].slice(-40))
+      }
+
+      setSelectedNodeId(nodeId)
+
+      if (!svgRef.current || !zoomBehaviorRef.current) return
+      const { width: svgW, height: svgH } = svgRef.current.getBoundingClientRect()
+      if (svgW === 0 || svgH === 0) return
+
+      const scale = Math.max(transformRef.current.k, 1.15)
+      const tx = svgW / 2 - node.x * scale
+      const ty = svgH / 2 - node.y * scale
+      const targetTransform = zoomIdentity.translate(tx, ty).scale(scale)
+
+      select(svgRef.current)
+        .transition()
+        .duration(420)
+        .call(zoomBehaviorRef.current.transform, targetTransform)
+    },
+    [nodesById, selectedNodeId],
+  )
+
+  const handleBackToPreviousNode = useCallback(() => {
+    if (nodeHistory.length === 0) return
+    const previousNodeId = nodeHistory[nodeHistory.length - 1]
+    setNodeHistory((prev) => prev.slice(0, -1))
+    focusNode(previousNodeId)
+  }, [focusNode, nodeHistory])
+
+  const selectedNode = selectedNodeId ? nodesById.get(selectedNodeId) ?? null : null
+
+  const selectedNodeDetails = useMemo(() => {
+    if (!selectedNode) return null
+    const sourceDiagram = diagramsById.get(selectedNode.diagramId)
+    if (!sourceDiagram) return null
+
+    const toRelationTarget = (targetNodeId: string | null, fallbackDiagramId: string) => {
+      if (targetNodeId) {
+        const targetNode = nodesById.get(targetNodeId)
+        if (targetNode) {
+          const targetDiagramName = diagramsById.get(targetNode.diagramId)?.name ?? targetNode.diagramId
+          return {
+            targetNodeId,
+            targetLabel: targetNode.label,
+            targetDiagramName,
+          }
+        }
+      }
+      return {
+        targetNodeId,
+        targetLabel: targetNodeId ?? '(diagram) ',
+        targetDiagramName: diagramsById.get(fallbackDiagramId)?.name ?? fallbackDiagramId,
+      }
+    }
+
+    const outgoingTransitions: NodeRelationItem[] = sourceDiagram.transitions
+      .filter((transition) => transition.from === selectedNode.id)
+      .map((transition) => {
+        const target = toRelationTarget(transition.to, sourceDiagram.id)
+        return {
+          id: transition.id,
+          ...target,
+          reason: transition.meta.source.raw || transition.event || transition.intent.summary || transition.id,
+        }
+      })
+
+    const incomingTransitions: NodeRelationItem[] = sourceDiagram.transitions
+      .filter((transition) => transition.to === selectedNode.id)
+      .map((transition) => {
+        const target = toRelationTarget(transition.from, sourceDiagram.id)
+        return {
+          id: transition.id,
+          ...target,
+          reason: transition.meta.source.raw || transition.event || transition.intent.summary || transition.id,
+        }
+      })
+
+    const outgoingConnectors: NodeRelationItem[] = connectors
+      .filter((connector) => connector.from.stateId === selectedNode.id)
+      .map((connector) => {
+        const target = toRelationTarget(connector.to.stateId, connector.to.diagramId)
+        return {
+          id: connector.id,
+          ...target,
+          reason: connector.meta.reason,
+        }
+      })
+
+    const incomingConnectors: NodeRelationItem[] = connectors
+      .filter((connector) => connector.to.stateId === selectedNode.id)
+      .map((connector) => {
+        const target = toRelationTarget(connector.from.stateId, connector.from.diagramId)
+        return {
+          id: connector.id,
+          ...target,
+          reason: connector.meta.reason,
+        }
+      })
+
+    return {
+      sourceDiagramName: sourceDiagram.name,
+      outgoingTransitions,
+      incomingTransitions,
+      outgoingConnectors,
+      incomingConnectors,
+    }
+  }, [selectedNode, diagramsById, nodesById, connectors])
 
   useLayoutEffect(() => {
     if (!svgRef.current) return
@@ -126,8 +252,108 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
       .call(zoomBehaviorRef.current.transform, targetTransform)
   }, [selectedDiagramId, systemLayout.groups, computeFitTransform])
 
+  useEffect(() => {
+    if (!selectedNodeId) return
+    if (!nodesById.has(selectedNodeId)) {
+      setSelectedNodeId(null)
+      setNodeHistory([])
+    }
+  }, [selectedNodeId, nodesById])
+
+  const renderRelationSection = (title: string, items: NodeRelationItem[]) => (
+    <section className="system-node-info-section">
+      <div className="system-node-info-section-head">
+        <div className="system-node-info-section-title">{title}</div>
+        <span className="system-node-info-count">{items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <div className="system-node-info-empty">None</div>
+      ) : (
+        <ul className="system-node-info-list">
+          {items.map((item) => (
+            <li key={item.id} className="system-node-info-item">
+              <div className="system-node-info-item-head">
+                {item.targetNodeId ? (
+                  <button
+                    type="button"
+                    className="system-node-jump"
+                    onClick={() => focusNode(item.targetNodeId ?? '', { pushHistory: true })}
+                    title="Jump to related node"
+                  >
+                    {item.targetLabel}
+                  </button>
+                ) : (
+                  <span className="system-node-static">{item.targetLabel}</span>
+                )}
+                <span className="system-node-info-diagram">{item.targetDiagramName}</span>
+              </div>
+              <p className="system-node-info-reason">{item.reason}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+
   return (
     <div className="diagram-canvas system-canvas" style={{ overflow: 'hidden' }}>
+      {selectedNode && selectedNodeDetails ? (
+        <aside className="system-node-info-panel" role="region" aria-label="Selected node details">
+          <div className="system-node-info-header">
+            <div>
+              <p className="system-node-info-kicker">Node</p>
+              <h4 className="system-node-info-title">{selectedNode.label}</h4>
+              <p className="system-node-info-meta">{selectedNodeDetails.sourceDiagramName}</p>
+              <p className="system-node-info-meta muted-id">{selectedNode.id}</p>
+            </div>
+            <div className="system-node-info-actions">
+              <button
+                type="button"
+                className="system-node-panel-btn"
+                onClick={handleBackToPreviousNode}
+                disabled={nodeHistory.length === 0}
+                title="Back to previous node"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className="system-node-panel-btn"
+                onClick={() => {
+                  setSelectedNodeId(null)
+                  setNodeHistory([])
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+
+          <div className="system-node-info-overview">
+            <div className="system-node-info-stat">
+              <span>Transitions</span>
+              <strong>{selectedNodeDetails.outgoingTransitions.length + selectedNodeDetails.incomingTransitions.length}</strong>
+            </div>
+            <div className="system-node-info-stat">
+              <span>Connectors</span>
+              <strong>{selectedNodeDetails.outgoingConnectors.length + selectedNodeDetails.incomingConnectors.length}</strong>
+            </div>
+          </div>
+
+          <div className="system-node-info-cluster">
+            <p className="system-node-info-cluster-title">Transition Path</p>
+            {renderRelationSection('Outgoing', selectedNodeDetails.outgoingTransitions)}
+            {renderRelationSection('Incoming', selectedNodeDetails.incomingTransitions)}
+          </div>
+
+          <div className="system-node-info-cluster">
+            <p className="system-node-info-cluster-title">Connector</p>
+            {renderRelationSection('Outgoing', selectedNodeDetails.outgoingConnectors)}
+            {renderRelationSection('Incoming', selectedNodeDetails.incomingConnectors)}
+          </div>
+        </aside>
+      ) : null}
+
       <svg
         ref={svgRef}
         className="diagram-svg"
@@ -280,7 +506,8 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
                 <g
                   key={node.id}
                   transform={`translate(${node.x - node.width / 2}, ${node.y - node.height / 2})`}
-                  className={`node ${node.type} ${visited ? 'visited' : ''} ${current ? 'current' : ''}`}
+                  className={`node ${node.type} ${visited ? 'visited' : ''} ${current ? 'current' : ''} ${selectedNodeId === node.id ? 'selected' : ''}`}
+                  onClick={() => focusNode(node.id)}
                 >
                   <rect width={node.width} height={node.height} rx={12} ry={12} />
                   <text x={node.width / 2} y={node.height / 2 + 4} textAnchor="middle">
