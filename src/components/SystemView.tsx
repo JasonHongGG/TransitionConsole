@@ -3,6 +3,8 @@ import { curveCatmullRom, line, select, zoom, type ZoomBehavior, zoomIdentity } 
 import type { CoverageState, Diagram, DiagramConnector } from '../types'
 import { computeSystemLayout } from '../utils/systemLayout'
 
+const WHEEL_ZOOM_STEP = Math.log2(1.1)
+
 interface SystemViewProps {
   diagrams: Diagram[]
   connectors: DiagramConnector[]
@@ -187,10 +189,8 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
     const zoomBehavior: ZoomBehavior<SVGSVGElement, unknown> = zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.02, 8])
       .wheelDelta((event) => {
-        const abs = Math.abs(event.deltaY)
-        const speed = Math.pow(abs / 100, 1.4) * 0.0002
-        const base = event.deltaMode === 1 ? 0.005 : event.deltaMode ? 0.1 : speed
-        return -event.deltaY * base / (abs || 1) * abs
+        if (event.deltaY === 0) return 0
+        return event.deltaY < 0 ? WHEEL_ZOOM_STEP : -WHEEL_ZOOM_STEP
       })
       .on('zoom', (event) => {
         transformRef.current = event.transform

@@ -11,7 +11,7 @@ interface DiagramViewProps {
 
 // Persist zoom transforms per diagram so switching doesn't reset
 const savedTransforms = new Map<string, ZoomTransform>()
-const WHEEL_ZOOM_STEP = Math.log2(1.05)
+const WHEEL_ZOOM_STEP = Math.log2(1.1)
 
 export const DiagramView = ({ diagram, coverage, currentStateId }: DiagramViewProps) => {
   const layout = useMemo(() => layoutDiagram(diagram), [diagram])
