@@ -18,8 +18,11 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
   )
 
   const svgRef = useRef<SVGSVGElement>(null)
+  const viewportRef = useRef<SVGGElement>(null)
   const zoomBehaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
-  const [transform, setTransform] = useState(zoomIdentity)
+  const transformRef = useRef(zoomIdentity)
+  const frameRef = useRef<number | null>(null)
+  const [zoomInfo, setZoomInfo] = useState({ k: 1, x: 0, y: 0 })
 
   const edgeLine = useMemo(
     () =>
@@ -64,7 +67,18 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
         return -event.deltaY * base / (abs || 1) * abs
       })
       .on('zoom', (event) => {
-        setTransform(event.transform)
+        transformRef.current = event.transform
+        if (viewportRef.current) {
+          viewportRef.current.setAttribute('transform', event.transform.toString())
+        }
+
+        if (frameRef.current === null) {
+          frameRef.current = window.requestAnimationFrame(() => {
+            const latest = transformRef.current
+            setZoomInfo({ k: latest.k, x: latest.x, y: latest.y })
+            frameRef.current = null
+          })
+        }
       })
 
     zoomBehaviorRef.current = zoomBehavior
@@ -73,6 +87,10 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
 
     return () => {
       svg.on('.zoom', null)
+      if (frameRef.current !== null) {
+        window.cancelAnimationFrame(frameRef.current)
+        frameRef.current = null
+      }
     }
   }, [computeFitTransform])
 
@@ -152,7 +170,7 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
           </marker>
         </defs>
 
-        <g transform={transform.toString()} style={{ transition: 'transform 0.05s linear' }}>
+        <g ref={viewportRef}>
           {/* Diagram group backgrounds */}
           <g className="system-groups">
             {systemLayout.groups.map((group) => (
@@ -275,11 +293,11 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
         </g>
       </svg>
       <div className="zoom-info">
-        <span>{Math.round(transform.k * 100)}%</span>
+        <span>{Math.round(zoomInfo.k * 100)}%</span>
         <span className="zoom-info-sep">·</span>
-        <span>x: {Math.round(transform.x)}</span>
+        <span>x: {Math.round(zoomInfo.x)}</span>
         <span className="zoom-info-sep">·</span>
-        <span>y: {Math.round(transform.y)}</span>
+        <span>y: {Math.round(zoomInfo.y)}</span>
         <span className="zoom-info-sep">·</span>
         <span>connectors: {systemLayout.crossEdges.length}</span>
         <span className="zoom-info-sep">·</span>
