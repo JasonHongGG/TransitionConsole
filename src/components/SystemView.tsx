@@ -449,9 +449,14 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
               const dx = edge.to.x - edge.from.x
               const dy = edge.to.y - edge.from.y
               const len = Math.sqrt(dx * dx + dy * dy) || 1
-              const offset = Math.min(len * 0.15, 50)
+              const baseOffset = Math.min(len * 0.15, 50)
+              const laneCenter = (edge.parallelCount - 1) / 2
+              const laneOffset = (edge.parallelIndex - laneCenter) * 14
+              const offset = baseOffset + laneOffset
               const cpX = midX - (dy / len) * offset
               const cpY = midY + (dx / len) * offset
+
+              const labelOffset = 8 + Math.abs(laneOffset) * 0.35
 
               const path = edgeLine([
                 { x: edge.from.x, y: edge.from.y },
@@ -466,7 +471,7 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
                     markerEnd="url(#arrow-connector)"
                     vectorEffect="non-scaling-stroke"
                   />
-                  <text x={cpX} y={cpY - 8} className="cross-edge-label" textAnchor="middle">
+                  <text x={cpX} y={cpY - labelOffset} className="cross-edge-label" textAnchor="middle">
                     {edge.label}
                   </text>
                 </g>

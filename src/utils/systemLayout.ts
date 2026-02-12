@@ -53,6 +53,8 @@ export interface SystemCrossEdge {
     to: { x: number; y: number }
     label: string
     type: ConnectorType
+    parallelIndex: number
+    parallelCount: number
 }
 
 export interface SystemGroup {
@@ -194,7 +196,7 @@ export function computeSystemLayout(
     })
 
     // 5. Compute cross-diagram edges (connect explicit connector endpoints)
-    const crossEdges: SystemCrossEdge[] = connectors
+    const rawCrossEdges: SystemCrossEdge[] = connectors
         .filter((c) => diagramIdSet.has(c.from.diagramId) && diagramIdSet.has(c.to.diagramId))
         .map((connector) => {
             const fromStateId = connector.from.stateId
@@ -212,9 +214,34 @@ export function computeSystemLayout(
                 to,
                 label: connector.meta.reason,
                 type: connector.type,
+                parallelIndex: 0,
+                parallelCount: 1,
             }
         })
         .filter((e): e is SystemCrossEdge => e !== null)
+
+    const pairGroups = new Map<string, SystemCrossEdge[]>()
+    rawCrossEdges.forEach((edge) => {
+        const key = `${edge.fromId}=>${edge.toId}`
+        const bucket = pairGroups.get(key)
+        if (bucket) {
+            bucket.push(edge)
+        } else {
+            pairGroups.set(key, [edge])
+        }
+    })
+
+    const crossEdges: SystemCrossEdge[] = []
+    pairGroups.forEach((bucket) => {
+        const total = bucket.length
+        bucket.forEach((edge, index) => {
+            crossEdges.push({
+                ...edge,
+                parallelIndex: index,
+                parallelCount: total,
+            })
+        })
+    })
 
     // 6. Compute base/delta variant edges
     const groupPositions = new Map(groupInfo.map((group) => [group.id, { x: group.cx, y: group.cy }]))
