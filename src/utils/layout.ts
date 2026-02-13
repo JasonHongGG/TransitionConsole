@@ -4,6 +4,20 @@ import type { Diagram, DiagramLayout } from '../types'
 const NODE_WIDTH = 140
 const NODE_HEIGHT = 44
 
+const toStateDisplayLabel = (state: Diagram['states'][number]): string => {
+  const label = state.label?.trim()
+  if (label) {
+    const labelParts = label.split('.').filter(Boolean)
+    if (labelParts.length > 1) {
+      return labelParts[labelParts.length - 1]
+    }
+    return label
+  }
+
+  const idParts = state.id.split('.').filter(Boolean)
+  return idParts[idParts.length - 1] ?? state.id
+}
+
 export const layoutDiagram = (diagram: Diagram): DiagramLayout => {
   if (diagram.states.length === 0) {
     return {
@@ -25,10 +39,11 @@ export const layoutDiagram = (diagram: Diagram): DiagramLayout => {
   graph.setDefaultEdgeLabel(() => ({}))
 
   diagram.states.forEach((state) => {
+    const displayLabel = toStateDisplayLabel(state)
     graph.setNode(state.id, {
       width: NODE_WIDTH,
       height: NODE_HEIGHT,
-      label: state.label,
+      label: displayLabel,
       type: state.type,
     })
   })
@@ -41,9 +56,10 @@ export const layoutDiagram = (diagram: Diagram): DiagramLayout => {
 
   const nodes = diagram.states.map((state) => {
     const node = graph.node(state.id)
+    const displayLabel = toStateDisplayLabel(state)
     return {
       id: state.id,
-      label: state.label,
+      label: displayLabel,
       x: node?.x ?? 0,
       y: node?.y ?? 0,
       width: node?.width ?? NODE_WIDTH,

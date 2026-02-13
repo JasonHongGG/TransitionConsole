@@ -165,9 +165,11 @@ export function computeSystemLayout(
 
     const diagramIdSet = new Set(diagrams.map((d) => d.id))
 
+    const renderConnectors = connectors.filter((connector) => connector.type !== 'contains')
+
     // 2. Build links for force simulation (deduplicate per pair)
     const seen = new Set<string>()
-    const links: GroupLink[] = connectors
+    const links: GroupLink[] = renderConnectors
         .filter((c) => diagramIdSet.has(c.from.diagramId) && diagramIdSet.has(c.to.diagramId))
         .filter((c) => {
             const key = [c.from.diagramId, c.to.diagramId].sort().join('|')
@@ -272,7 +274,7 @@ export function computeSystemLayout(
     })
 
     // 5. Compute cross-diagram edges (connect explicit connector endpoints)
-    const rawCrossEdges: SystemCrossEdge[] = connectors
+    const rawCrossEdges: SystemCrossEdge[] = renderConnectors
         .filter((c) => diagramIdSet.has(c.from.diagramId) && diagramIdSet.has(c.to.diagramId))
         .map((connector) => {
             const fromStateId = connector.from.stateId

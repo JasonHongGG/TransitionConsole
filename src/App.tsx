@@ -53,6 +53,11 @@ function App() {
     return Array.from(map.values())
   }, [data])
 
+  const visibleConnectors = useMemo(
+    () => connectors.filter((connector) => connector.type !== 'contains'),
+    [connectors],
+  )
+
   const agentMode = (import.meta.env.VITE_AGENT_MODE ?? 'mock') as 'mock' | 'copilot'
   const agentRunner = useAgentRunner(data?.diagrams ?? [], agentMode)
 
@@ -402,7 +407,7 @@ function App() {
                 ) : (
                   <SystemView
                     diagrams={data.diagrams}
-                    connectors={connectors}
+                    connectors={visibleConnectors}
                     coverage={agentRunner.coverage}
                     currentStateId={agentRunner.currentStateId}
                     selectedDiagramId={focusDiagramId ?? undefined}
