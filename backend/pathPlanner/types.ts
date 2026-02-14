@@ -5,6 +5,14 @@ export interface PlannedPathDraft {
   edgeIds: string[]
 }
 
+export interface PlannerHistoryPath {
+  pathId?: string
+  pathName?: string
+  semanticGoal?: string
+  edgeIds: string[]
+  plannedRound?: number
+}
+
 export interface PlannerDiagramState {
   id: string
   walked: boolean
@@ -47,6 +55,7 @@ export interface PathPlannerContext {
   maxPaths: number
   specRaw: string | null
   diagrams: PlannerDiagramPayload[]
+  previouslyPlannedPaths: PlannerHistoryPath[]
 }
 
 export interface PathPlanner {

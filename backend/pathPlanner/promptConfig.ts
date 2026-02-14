@@ -13,6 +13,12 @@ export const COPILOT_PLANNER_PROMPT_CONFIG: CopilotPlannerPromptConfig = {
 3. 允許使用已走過(walked=true)的 transition，但整體策略必須以「最少 transition 達成最大新增覆蓋」為優先。
 4. edgeIds 不可捏造，必須來自輸入 diagrams[*].transitions[*].id。
 5. 不可產生空 path，不可產生完全重複(edgeIds 序列相同)的 path。
+6. edgeIds 必須形成「連通路徑」：對任意相鄰兩條邊 e[i], e[i+1]，必須滿足 e[i].to === e[i+1].from。
+7. 嚴禁跳邊：不可出現 A->B 後下一條邊直接從 C 出發（B ≠ C）。若目前狀態無可走邊，必須改選其他可連通邊或結束該 path。
+8. 跨 diagram 也必須靠合法 transition 串接（包含 connector-invokes transition）；不可憑語意直接從某 diagram state 跳到另一 diagram 的起點。
+9. walked=true 代表「已在前次 batch 或既有執行中覆蓋過」；本次規劃必須以覆蓋 walked=false 的 state/transition 為主，不可把已覆蓋路徑重複輸出。
+10. 同一次輸出的多條 path，必須盡量降低彼此重疊；若兩條 path 的主要 edge 序列高度相同，僅保留較短且新增覆蓋較高者。
+11. previouslyPlannedPaths 是歷次規劃（前幾輪 assistantPayload.paths）累積清單；本輪輸出不得與其中任一路徑的 edgeIds 序列完全相同。
 
 【目標】
 在 maxPaths 限制內，回傳多條語意合理的測試路徑；每條路徑都應有明確名稱(name)與測試意圖(semanticGoal)，並盡可能補足未走過區域。
@@ -22,6 +28,15 @@ Format:
 {
   "maxPaths": "number 表示最多可回傳幾條 path",
   "specRaw": "string 表示原始規格內容，用於推導語意與測試重點",
+  "previouslyPlannedPaths": [
+    {
+      "pathId": "string 表示歷史路徑 id（可為空）",
+      "pathName": "string 表示歷史路徑名稱（可為空）",
+      "semanticGoal": "string 表示歷史路徑語意目標（可為空）",
+      "edgeIds": ["string 表示歷史路徑的 transition id 序列"],
+      "plannedRound": "number 表示該路徑屬於第幾輪規劃（可為空）"
+    }
+  ],
   "diagrams": [
     {
       "id": "string 表示 diagram 唯一識別",
@@ -76,7 +91,13 @@ Format:
 - paths 長度不得超過 maxPaths。
 - edgeIds 必須是有效 transition id。
 - 每條 path 的第一個 edge 必須從 page_entry.meta.entryStateId 出發。
+- 每條 path 的 edgeIds 必須逐條連接：前一條 edge 的 to 必須等於下一條 edge 的 from。
+- 禁止「不連通序列」：若某條 path 任兩相鄰 edge 無法銜接，該 path 視為無效，不可輸出。
 - 每條 path 應優先覆蓋更多尚未走過的節點/邊，同時減少不必要步驟。
+- 每條 path 至少要包含 1 個 walked=false 的 transition；若確實不存在任何可達的 walked=false transition，才可回傳已覆蓋路徑，且需最短。
+- 若可行，優先讓每條 path 的「第一個未走過 transition」彼此不同，以提升跨 batch 新增覆蓋。
+- 每條 path 需與 previouslyPlannedPaths 全部項目做比對；edgeIds 序列完全相同者禁止輸出。
+- 輸出前請先自行逐條驗證每條 path 的連通性與起點合法性，不合法就重排 edgeIds。
 - 若無法完美最佳化，仍必須回傳符合上述 schema 的有效 JSON。`,
   userInstruction: 'Return JSON only.',
 }

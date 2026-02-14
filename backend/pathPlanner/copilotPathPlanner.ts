@@ -3,7 +3,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { CopilotClient } from '@github/copilot-sdk'
 import { createLogger } from '../common/logger'
-import type { PathPlanner, PathPlannerContext, PlannedPathDraft, PlannerDiagramPayload } from './types'
+import type { PathPlanner, PathPlannerContext, PlannedPathDraft, PlannerDiagramPayload, PlannerHistoryPath } from './types'
 
 interface CopilotPathEnvelope {
   paths?: Array<{
@@ -70,7 +70,12 @@ export class CopilotPathPlanner implements PathPlanner {
 
   private async logPlannerResponse(entry: {
     request: PathPlannerContext
-    promptPayload: { maxPaths: number; specRaw: string; diagrams: PlannerDiagramPayload[] }
+    promptPayload: {
+      maxPaths: number
+      specRaw: string
+      previouslyPlannedPaths: PlannerHistoryPath[]
+      diagrams: PlannerDiagramPayload[]
+    }
     status: number | null
     ok: boolean
     responseJson: unknown | null
@@ -107,6 +112,7 @@ export class CopilotPathPlanner implements PathPlanner {
     const promptPayload = {
       maxPaths: context.maxPaths,
       specRaw: context.specRaw ?? '',
+      previouslyPlannedPaths: context.previouslyPlannedPaths ?? [],
       diagrams: context.diagrams,
     }
 
@@ -115,6 +121,7 @@ export class CopilotPathPlanner implements PathPlanner {
       maxPaths: context.maxPaths,
       diagrams: context.diagrams.length,
       hasSpec: Boolean(context.specRaw),
+      previousPaths: context.previouslyPlannedPaths.length,
     })
 
     if (!this.token) {

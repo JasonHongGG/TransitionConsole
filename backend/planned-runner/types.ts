@@ -85,6 +85,14 @@ export interface PlannedTransitionPath {
   steps: PlannedTransitionStep[]
 }
 
+export interface PlannedPathHistoryItem {
+  pathId: string
+  pathName: string
+  semanticGoal: string
+  edgeIds: string[]
+  plannedRound: number
+}
+
 export interface PlannedCoverageSummary {
   totalNodes: number
   totalEdges: number
@@ -153,6 +161,7 @@ export interface RuntimeEdge {
 export interface RuntimeState {
   runId: string
   plan: PlannedRunPlan
+  executedPathHistory: PlannedPathHistoryItem[]
   sourceDiagrams: DiagramLike[]
   sourceConnectors: DiagramConnector[]
   allEdges: RuntimeEdge[]

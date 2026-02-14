@@ -6,6 +6,7 @@ import { generatePlannedPaths, withReindexedPaths } from './planner'
 import { buildEmptySnapshot, buildRuntimeSnapshot, computeCoverageSummary } from './snapshot'
 import type {
   ElementExecutionStatus,
+  PlannedPathHistoryItem,
   PlannedRunnerRequest,
   PlannedStepEvent,
   PlannedStepResponse,
@@ -19,6 +20,15 @@ const log = createLogger('planned-runner')
 const createRunId = () => `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
 
 const requestTargetUrl = (runtime: RuntimeState): string => runtime.targetUrl
+
+const toHistoryItems = (plan: RuntimeState['plan'], plannedRound: number): PlannedPathHistoryItem[] =>
+  plan.paths.map((path) => ({
+    pathId: path.id,
+    pathName: path.name,
+    semanticGoal: path.semanticGoal,
+    edgeIds: path.steps.map((step) => step.edgeId),
+    plannedRound,
+  }))
 
 export class PlannedRunner {
   private runtime: RuntimeState | null = null
@@ -78,6 +88,7 @@ export class PlannedRunner {
       request.specRaw,
       nodeStatuses,
       edgeStatuses,
+      [],
     )
 
     log.log('planning paths completed', {
@@ -88,6 +99,7 @@ export class PlannedRunner {
     this.runtime = {
       runId,
       plan,
+      executedPathHistory: [],
       sourceDiagrams: request.diagrams,
       sourceConnectors: request.connectors,
       allEdges: graph.edges,
@@ -306,6 +318,19 @@ export class PlannedRunner {
       replanCount: this.runtime.replanCount,
     })
 
+    const historicalBySignature = new Map<string, PlannedPathHistoryItem>()
+    this.runtime.executedPathHistory.forEach((historyPath) => {
+      const signature = historyPath.edgeIds.join('>')
+      if (signature.length === 0) return
+      historicalBySignature.set(signature, historyPath)
+    })
+    toHistoryItems(this.runtime.plan, this.runtime.replanCount).forEach((historyPath) => {
+      const signature = historyPath.edgeIds.join('>')
+      if (signature.length === 0) return
+      historicalBySignature.set(signature, historyPath)
+    })
+    this.runtime.executedPathHistory = Array.from(historicalBySignature.values())
+
     const plan = await generatePlannedPaths(
       this.pathPlanner,
       this.runtime.sourceDiagrams,
@@ -315,6 +340,7 @@ export class PlannedRunner {
       this.runtime.specRaw,
       this.runtime.nodeStatuses,
       this.runtime.edgeStatuses,
+      this.runtime.executedPathHistory,
     )
 
     const offset = this.runtime.totalPlannedPaths + 1
