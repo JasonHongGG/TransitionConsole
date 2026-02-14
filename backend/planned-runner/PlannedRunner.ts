@@ -1,5 +1,5 @@
 import { createLogger } from '../common/logger'
-import { CopilotPathPlanner, type PathPlanner } from '../pathPlanner/copilotPathPlanner'
+import type { PathPlanner } from '../pathPlanner/types'
 import { StubStepExecutor } from './executor'
 import { buildRuntimeGraph } from './graph'
 import { generatePlannedPaths, withReindexedPaths } from './planner'
@@ -24,10 +24,12 @@ export class PlannedRunner {
   private runtime: RuntimeState | null = null
   private readonly executor: StepExecutor
   private readonly pathPlanner: PathPlanner
+  private readonly resetPlannerCursorOnStart: boolean
 
-  constructor(options: { executor?: StepExecutor; pathPlanner?: PathPlanner } = {}) {
+  constructor(options: { executor?: StepExecutor; pathPlanner: PathPlanner; resetPlannerCursorOnStart?: boolean }) {
     this.executor = options.executor ?? new StubStepExecutor()
-    this.pathPlanner = options.pathPlanner ?? new CopilotPathPlanner()
+    this.pathPlanner = options.pathPlanner
+    this.resetPlannerCursorOnStart = options.resetPlannerCursorOnStart ?? true
   }
 
   async start(request: PlannedRunnerRequest): Promise<PlannedStepResponse> {
@@ -61,6 +63,11 @@ export class PlannedRunner {
     })
 
     log.log('planning paths started', { runId })
+
+    if (this.resetPlannerCursorOnStart && this.pathPlanner.resetRoundCursor) {
+      await this.pathPlanner.resetRoundCursor()
+      log.log('planner cursor reset before start', { runId })
+    }
 
     const plan = await generatePlannedPaths(
       this.pathPlanner,

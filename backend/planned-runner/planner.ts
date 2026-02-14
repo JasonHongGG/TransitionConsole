@@ -3,7 +3,7 @@ import type {
   PlannerDiagramPayload,
   PlannerDiagramState,
   PlannerDiagramTransition,
-} from '../pathPlanner/copilotPathPlanner'
+} from '../pathPlanner/types'
 import { toPlannedStep } from './graph'
 import type {
   DiagramConnector,
