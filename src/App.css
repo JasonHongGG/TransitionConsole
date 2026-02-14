@@ -685,6 +685,10 @@
   right: 0;
   bottom: 72px;
   width: min(360px, 90vw);
+  max-height: calc(100vh - 120px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .agent-float .overlay-header {
@@ -697,10 +701,65 @@
   border: none;
   background: transparent;
   box-shadow: none;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) rgba(255, 255, 255, 0.06);
+}
+
+.agent-float .agent-panel::-webkit-scrollbar {
+  width: 10px;
+}
+
+.agent-float .agent-panel::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+}
+
+.agent-float .agent-panel::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 999px;
+  border: 2px solid rgba(8, 14, 30, 0.95);
+}
+
+.agent-float .agent-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 204, 119, 0.92);
+}
+
+.agent-float .agent-panel .agent-logs {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent) rgba(255, 255, 255, 0.06);
+}
+
+.agent-float .agent-panel .agent-logs::-webkit-scrollbar {
+  width: 10px;
+}
+
+.agent-float .agent-panel .agent-logs::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+}
+
+.agent-float .agent-panel .agent-logs::-webkit-scrollbar-thumb {
+  background: rgba(255, 204, 119, 0.85);
+  border-radius: 999px;
+  border: 2px solid rgba(8, 14, 30, 0.95);
+}
+
+.agent-float .agent-panel .agent-logs::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 204, 119, 0.95);
 }
 
 .agent-float .agent-panel .agent-header {
   display: none;
+}
+
+.agent-float .agent-panel > .agent-logs {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
 }
 
 .diagram-canvas {
@@ -1123,6 +1182,32 @@
   stroke-width: 1.6;
 }
 
+.node.node-status-untested rect {
+  fill: rgba(255, 255, 255, 0.035);
+  stroke: rgba(255, 255, 255, 0.22);
+}
+
+.node.node-status-running rect {
+  fill: rgba(255, 204, 119, 0.22);
+  stroke: rgba(255, 204, 119, 0.95);
+}
+
+.node.node-status-pass rect {
+  fill: rgba(96, 214, 156, 0.2);
+  stroke: rgba(96, 214, 156, 0.95);
+}
+
+.node.node-status-fail rect {
+  fill: rgba(244, 103, 103, 0.2);
+  stroke: rgba(244, 103, 103, 0.94);
+}
+
+.node.node-status-excluded rect {
+  fill: rgba(255, 255, 255, 0.02);
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-dasharray: 4 3;
+}
+
 
 
 .edge-path {
@@ -1143,6 +1228,67 @@
   fill: var(--muted);
   font-size: 9px;
   text-anchor: middle;
+}
+
+.edge-status-untested .edge-path,
+.edge-status-untested .cross-edge-path,
+.edge-status-untested .variant-edge-path {
+  stroke: rgba(255, 255, 255, 0.35);
+  opacity: 0.55;
+}
+
+.system-canvas.testing-inactive .edge-status-untested .cross-edge-path {
+  stroke: var(--accent);
+  opacity: 0.55;
+}
+
+.system-canvas.testing-inactive .edge-status-untested .variant-edge-path {
+  stroke: var(--accent);
+  opacity: 0.5;
+}
+
+.system-canvas.testing-inactive .edge-status-untested .cross-edge-label {
+  fill: var(--accent);
+  opacity: 0.7;
+}
+
+.system-canvas.testing-inactive .edge-status-untested .variant-edge-label {
+  fill: var(--accent);
+  opacity: 0.75;
+}
+
+.system-canvas.testing-active .cross-edge-label,
+.system-canvas.testing-active .variant-edge-label {
+  fill: rgba(255, 255, 255, 0.8);
+}
+
+.edge-status-running .edge-path,
+.edge-status-running .cross-edge-path,
+.edge-status-running .variant-edge-path {
+  stroke: rgba(255, 204, 119, 0.98);
+  opacity: 0.95;
+}
+
+.edge-status-pass .edge-path,
+.edge-status-pass .cross-edge-path,
+.edge-status-pass .variant-edge-path {
+  stroke: rgba(96, 214, 156, 0.95);
+  opacity: 0.95;
+}
+
+.edge-status-fail .edge-path,
+.edge-status-fail .cross-edge-path,
+.edge-status-fail .variant-edge-path {
+  stroke: rgba(244, 103, 103, 0.95);
+  opacity: 0.98;
+}
+
+.edge-status-excluded .edge-path,
+.edge-status-excluded .cross-edge-path,
+.edge-status-excluded .variant-edge-path {
+  stroke: rgba(255, 255, 255, 0.2);
+  opacity: 0.36;
+  stroke-dasharray: 4 4;
 }
 
 .goal-list {
@@ -1219,20 +1365,128 @@
   gap: 12px;
 }
 
-.agent-summary div {
+.agent-summary .summary-card {
   background: rgba(255, 255, 255, 0.04);
   padding: 10px 12px;
   border-radius: 12px;
 }
 
-.agent-summary strong {
-  font-size: 18px;
-  display: block;
+.agent-summary .summary-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.agent-summary span {
+.agent-summary h4 {
+  margin: 0;
+}
+
+.agent-summary .summary-value {
+  margin: 10px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.summary-hint {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--line-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: help;
+  user-select: none;
+}
+
+.summary-hint:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.summary-hint::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--line-soft);
+  background: rgba(8, 14, 30, 0.96);
+  color: var(--text);
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 5;
+}
+
+.summary-hint:hover::after,
+.summary-hint:focus-visible::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.agent-summary p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.agent-summary p + p {
+  margin-top: 4px;
+}
+
+.agent-summary strong {
+  font-size: 16px;
+  display: inline;
+  color: var(--text);
+}
+
+.agent-url-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   font-size: 11px;
   color: var(--muted);
+}
+
+.agent-url-field input {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.agent-planned-progress {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px 12px;
+}
+
+.agent-planned-progress h4 {
+  margin: 0 0 6px;
+}
+
+.agent-planned-progress p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .agent-current p {

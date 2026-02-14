@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react'
 import { curveCatmullRom, line, select, zoom, type ZoomBehavior, zoomIdentity } from 'd3'
-import type { CoverageState, Diagram, DiagramConnector } from '../types'
+import type { CoverageState, Diagram, DiagramConnector, ElementExecutionStatus } from '../types'
 import { computeSystemLayout } from '../utils/systemLayout'
 
 const WHEEL_ZOOM_STEP = Math.log2(1.1)
@@ -11,6 +11,9 @@ interface SystemViewProps {
   coverage: CoverageState
   currentStateId: string | null
   selectedDiagramId?: string
+  isTesting?: boolean
+  activeEdgeId?: string | null
+  nextStateId?: string | null
 }
 
 interface NodeRelationItem {
@@ -21,7 +24,18 @@ interface NodeRelationItem {
   reason: string
 }
 
-export const SystemView = ({ diagrams, connectors, coverage, currentStateId, selectedDiagramId }: SystemViewProps) => {
+const EDGE_STATUSES: ElementExecutionStatus[] = ['untested', 'running', 'pass', 'fail']
+
+export const SystemView = ({
+  diagrams,
+  connectors,
+  coverage,
+  currentStateId,
+  selectedDiagramId,
+  isTesting = false,
+  activeEdgeId = null,
+  nextStateId = null,
+}: SystemViewProps) => {
   const systemLayout = useMemo(
     () => computeSystemLayout(diagrams, connectors),
     [diagrams, connectors],
@@ -38,6 +52,36 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [nodeHistory, setNodeHistory] = useState<string[]>([])
 
+  const resolveNodeStatus = useCallback(
+    (nodeId: string): ElementExecutionStatus => {
+      if (isTesting && nextStateId === nodeId) {
+        return 'running'
+      }
+      if (coverage.nodeStatuses && coverage.nodeStatuses[nodeId]) {
+        return coverage.nodeStatuses[nodeId]
+      }
+      if (currentStateId === nodeId) return 'running'
+      if (coverage.visitedNodes.has(nodeId)) return 'pass'
+      return 'untested'
+    },
+    [isTesting, nextStateId, coverage.nodeStatuses, coverage.visitedNodes, currentStateId],
+  )
+
+  const resolveEdgeStatus = useCallback(
+    (edgeId: string): ElementExecutionStatus => {
+      if (isTesting && activeEdgeId === edgeId) {
+        return 'running'
+      }
+      if (coverage.edgeStatuses && coverage.edgeStatuses[edgeId]) {
+        return coverage.edgeStatuses[edgeId]
+      }
+      const result = coverage.transitionResults[edgeId]
+      if (result === 'pass' || result === 'fail') return result
+      return 'untested'
+    },
+    [isTesting, activeEdgeId, coverage.edgeStatuses, coverage.transitionResults],
+  )
+
   const edgeLine = useMemo(
     () =>
       line<{ x: number; y: number }>()
@@ -45,6 +89,19 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
         .y((d) => d.y)
         .curve(curveCatmullRom.alpha(0.7)),
     [],
+  )
+
+  const markerFill = useCallback(
+    (status: ElementExecutionStatus, markerKind: 'system' | 'connector' | 'variant') => {
+      if (status === 'running') return 'rgba(255, 204, 119, 0.98)'
+      if (status === 'pass') return 'rgba(96, 214, 156, 0.95)'
+      if (status === 'fail') return 'rgba(244, 103, 103, 0.95)'
+      if (markerKind === 'connector' || markerKind === 'variant') {
+        return isTesting ? 'rgba(255, 255, 255, 0.85)' : 'var(--accent)'
+      }
+      return 'rgba(255, 255, 255, 0.35)'
+    },
+    [isTesting],
   )
 
   const computeFitTransform = useCallback(() => {
@@ -255,8 +312,10 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
   useEffect(() => {
     if (!selectedNodeId) return
     if (!nodesById.has(selectedNodeId)) {
-      setSelectedNodeId(null)
-      setNodeHistory([])
+      queueMicrotask(() => {
+        setSelectedNodeId(null)
+        setNodeHistory([])
+      })
     }
   }, [selectedNodeId, nodesById])
 
@@ -296,7 +355,7 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
   )
 
   return (
-    <div className="diagram-canvas system-canvas" style={{ overflow: 'hidden' }}>
+    <div className={`diagram-canvas system-canvas ${isTesting ? 'testing-active' : 'testing-inactive'}`} style={{ overflow: 'hidden' }}>
       {selectedNode && selectedNodeDetails ? (
         <aside className="system-node-info-panel" role="region" aria-label="Selected node details">
           <div className="system-node-info-header">
@@ -361,39 +420,48 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
         style={{ cursor: 'grab' }}
       >
         <defs>
-          <marker
-            id="arrow-system"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)" />
-          </marker>
-          <marker
-            id="arrow-connector"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
-          </marker>
-          <marker
-            id="arrow-variant"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--accent)" />
-          </marker>
+          {EDGE_STATUSES.map((status) => (
+            <marker
+              key={`arrow-system-${status}`}
+              id={`arrow-system-${status}`}
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill={markerFill(status, 'system')} />
+            </marker>
+          ))}
+          {EDGE_STATUSES.map((status) => (
+            <marker
+              key={`arrow-connector-${status}`}
+              id={`arrow-connector-${status}`}
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill={markerFill(status, 'connector')} />
+            </marker>
+          ))}
+          {EDGE_STATUSES.map((status) => (
+            <marker
+              key={`arrow-variant-${status}`}
+              id={`arrow-variant-${status}`}
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill={markerFill(status, 'variant')} />
+            </marker>
+          ))}
         </defs>
 
         <g ref={viewportRef}>
@@ -422,15 +490,16 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
           {/* Base/delta variant edges */}
           <g className="variant-edges">
             {systemLayout.variantEdges.map((edge) => {
+              const edgeStatus = resolveEdgeStatus(edge.id)
               const midX = (edge.from.x + edge.to.x) / 2
               const midY = (edge.from.y + edge.to.y) / 2
               const roleText = edge.roles.length > 0 ? edge.roles.join(' | ') : 'all roles'
               return (
-                <g key={edge.id}>
+                <g key={edge.id} className={`edge-status-${edgeStatus}`}>
                   <path
                     d={`M ${edge.from.x} ${edge.from.y} L ${edge.to.x} ${edge.to.y}`}
                     className="variant-edge-path"
-                    markerEnd="url(#arrow-variant)"
+                    markerEnd={`url(#arrow-variant-${edgeStatus})`}
                     vectorEffect="non-scaling-stroke"
                   />
                   <text x={midX} y={midY - 8} className="variant-edge-label" textAnchor="middle">
@@ -444,6 +513,7 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
           {/* Cross-diagram connector edges (explicit state-to-state) */}
           <g className="cross-edges">
             {systemLayout.crossEdges.map((edge) => {
+              const edgeStatus = resolveEdgeStatus(edge.id)
               const midX = (edge.from.x + edge.to.x) / 2
               const midY = (edge.from.y + edge.to.y) / 2
               const dx = edge.to.x - edge.from.x
@@ -464,11 +534,11 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
                 { x: edge.to.x, y: edge.to.y },
               ])
               return (
-                <g key={edge.id}>
+                <g key={edge.id} className={`edge-status-${edgeStatus}`}>
                   <path
                     d={path ?? ''}
                     className="cross-edge-path"
-                    markerEnd="url(#arrow-connector)"
+                    markerEnd={`url(#arrow-connector-${edgeStatus})`}
                     vectorEffect="non-scaling-stroke"
                   />
                   <text x={cpX} y={cpY - labelOffset} className="cross-edge-label" textAnchor="middle">
@@ -482,14 +552,15 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
           {/* Intra-diagram edges */}
           <g className="diagram-edges">
             {systemLayout.intraEdges.map((edge) => {
+              const edgeStatus = resolveEdgeStatus(edge.id)
               const path = edgeLine(edge.points) ?? ''
               const midPoint = edge.points[Math.floor(edge.points.length / 2)]
               return (
-                <g key={edge.id}>
+                <g key={edge.id} className={`edge-status-${edgeStatus}`}>
                   <path
                     d={path}
                     className="edge-path"
-                    markerEnd="url(#arrow-system)"
+                    markerEnd={`url(#arrow-system-${edgeStatus})`}
                     vectorEffect="non-scaling-stroke"
                   />
                   {edge.label && midPoint ? (
@@ -505,13 +576,14 @@ export const SystemView = ({ diagrams, connectors, coverage, currentStateId, sel
           {/* All nodes */}
           <g className="diagram-nodes">
             {systemLayout.nodes.map((node) => {
+              const executionStatus = resolveNodeStatus(node.id)
               const visited = coverage.visitedNodes.has(node.id)
               const current = currentStateId === node.id
               return (
                 <g
                   key={node.id}
                   transform={`translate(${node.x - node.width / 2}, ${node.y - node.height / 2})`}
-                  className={`node ${node.type} ${visited ? 'visited' : ''} ${current ? 'current' : ''} ${selectedNodeId === node.id ? 'selected' : ''}`}
+                  className={`node ${node.type} ${visited ? 'visited' : ''} ${current ? 'current' : ''} ${selectedNodeId === node.id ? 'selected' : ''} node-status-${executionStatus}`}
                   onClick={() => focusNode(node.id)}
                 >
                   <rect width={node.width} height={node.height} rx={12} ry={12} />

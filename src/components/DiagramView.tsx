@@ -1,23 +1,65 @@
 import { useCallback, useMemo, useLayoutEffect, useRef, useState } from 'react'
 import { curveCatmullRom, line, select, zoom, type ZoomBehavior, type ZoomTransform, zoomIdentity } from 'd3'
-import type { CoverageState, Diagram } from '../types'
+import type { CoverageState, Diagram, ElementExecutionStatus } from '../types'
 import { layoutDiagram } from '../utils/layout'
 
 interface DiagramViewProps {
   diagram: Diagram
   coverage: CoverageState
   currentStateId: string | null
+  isTesting?: boolean
+  activeEdgeId?: string | null
+  nextStateId?: string | null
 }
+
+const EDGE_STATUSES: ElementExecutionStatus[] = ['untested', 'running', 'pass', 'fail']
 
 // Persist zoom transforms per diagram so switching doesn't reset
 const savedTransforms = new Map<string, ZoomTransform>()
 const WHEEL_ZOOM_STEP = Math.log2(1.1)
 
-export const DiagramView = ({ diagram, coverage, currentStateId }: DiagramViewProps) => {
+export const DiagramView = ({
+  diagram,
+  coverage,
+  currentStateId,
+  isTesting = false,
+  activeEdgeId = null,
+  nextStateId = null,
+}: DiagramViewProps) => {
   const layout = useMemo(() => layoutDiagram(diagram), [diagram])
   const svgRef = useRef<SVGSVGElement>(null)
   const zoomBehaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
   const [transform, setTransform] = useState(zoomIdentity)
+
+  const resolveNodeStatus = useCallback(
+    (nodeId: string): ElementExecutionStatus => {
+      if (isTesting && nextStateId === nodeId) {
+        return 'running'
+      }
+      if (coverage.nodeStatuses && coverage.nodeStatuses[nodeId]) {
+        return coverage.nodeStatuses[nodeId]
+      }
+      if (currentStateId === nodeId) return 'running'
+      if (coverage.visitedNodes.has(nodeId)) return 'pass'
+      return 'untested'
+    },
+    [isTesting, nextStateId, coverage.nodeStatuses, coverage.visitedNodes, currentStateId],
+  )
+
+  const resolveEdgeStatus = useCallback(
+    (edgeId: string): ElementExecutionStatus => {
+      if (isTesting && activeEdgeId === edgeId) {
+        return 'running'
+      }
+      if (coverage.edgeStatuses && coverage.edgeStatuses[edgeId]) {
+        return coverage.edgeStatuses[edgeId]
+      }
+      const result = coverage.transitionResults[edgeId]
+      if (result === 'pass' || result === 'fail') return result
+      return 'untested'
+    },
+    [isTesting, activeEdgeId, coverage.edgeStatuses, coverage.transitionResults],
+  )
 
   const edgeLine = useMemo(
     () =>
@@ -27,6 +69,13 @@ export const DiagramView = ({ diagram, coverage, currentStateId }: DiagramViewPr
         .curve(curveCatmullRom.alpha(0.7)),
     [],
   )
+
+  const markerFill = useCallback((status: ElementExecutionStatus) => {
+    if (status === 'running') return 'rgba(255, 204, 119, 0.98)'
+    if (status === 'pass') return 'rgba(96, 214, 156, 0.95)'
+    if (status === 'fail') return 'rgba(244, 103, 103, 0.95)'
+    return 'rgba(255, 255, 255, 0.35)'
+  }, [])
 
   const computeFitTransform = useCallback(() => {
     if (!svgRef.current) return zoomIdentity
@@ -89,30 +138,34 @@ export const DiagramView = ({ diagram, coverage, currentStateId }: DiagramViewPr
         style={{ cursor: 'grab' }}
       >
         <defs>
-          <marker
-            id="arrow"
-            viewBox="0 0 10 10"
-            refX="9"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--line)" />
-          </marker>
+          {EDGE_STATUSES.map((status) => (
+            <marker
+              key={`arrow-${status}`}
+              id={`arrow-${status}`}
+              viewBox="0 0 10 10"
+              refX="9"
+              refY="5"
+              markerWidth="6"
+              markerHeight="6"
+              orient="auto-start-reverse"
+            >
+              <path d="M 0 0 L 10 5 L 0 10 z" fill={markerFill(status)} />
+            </marker>
+          ))}
         </defs>
 
         <g transform={transform.toString()} style={{ transition: 'transform 0.05s linear' }}>
           <g className="diagram-edges">
             {layout.edges.map((edge) => {
+              const edgeStatus = resolveEdgeStatus(edge.id)
               const path = edgeLine(edge.points) ?? ''
               const midPoint = edge.points[Math.floor(edge.points.length / 2)]
               return (
-                <g key={edge.id}>
+                <g key={edge.id} className={`edge-status-${edgeStatus}`}>
                   <path
                     d={path}
                     className="edge-path"
-                    markerEnd="url(#arrow)"
+                    markerEnd={`url(#arrow-${edgeStatus})`}
                     vectorEffect="non-scaling-stroke"
                   />
                   {edge.label && midPoint ? (
@@ -127,13 +180,14 @@ export const DiagramView = ({ diagram, coverage, currentStateId }: DiagramViewPr
 
           <g className="diagram-nodes">
             {layout.nodes.map((node) => {
+              const executionStatus = resolveNodeStatus(node.id)
               const visited = coverage.visitedNodes.has(node.id)
               const current = currentStateId === node.id
               return (
                 <g
                   key={node.id}
                   transform={`translate(${node.x - node.width / 2}, ${node.y - node.height / 2})`}
-                  className={`node ${node.type} ${visited ? 'visited' : ''} ${current ? 'current' : ''}`}
+                  className={`node ${node.type} ${visited ? 'visited' : ''} ${current ? 'current' : ''} node-status-${executionStatus}`}
                 >
                   <rect width={node.width} height={node.height} rx={12} ry={12} />
                   <text x={node.width / 2} y={node.height / 2 + 4} textAnchor="middle">

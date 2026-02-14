@@ -58,8 +58,36 @@ function App() {
     [connectors],
   )
 
-  const agentMode = (import.meta.env.VITE_AGENT_MODE ?? 'mock') as 'mock' | 'copilot'
-  const agentRunner = useAgentRunner(data?.diagrams ?? [], agentMode)
+  const agentRunner = useAgentRunner(data?.diagrams ?? [], visibleConnectors, data?.spec.raw ?? null)
+  const isTestingPhase = agentRunner.running || agentRunner.plannedStatus !== null
+
+  const activeStepEdgeId = useMemo(() => {
+    const rawStepId = agentRunner.plannedStatus?.currentStepId
+    if (!rawStepId) return null
+    return rawStepId.replace(/\.step\.\d+$/, '')
+  }, [agentRunner.plannedStatus?.currentStepId])
+
+  const edgeToNextStateId = useMemo(() => {
+    const map = new Map<string, string>()
+    data?.diagrams.forEach((diagram) => {
+      diagram.transitions.forEach((transition) => {
+        map.set(transition.id, transition.to)
+      })
+    })
+    visibleConnectors
+      .filter((connector) => connector.type === 'invokes' && connector.to.stateId)
+      .forEach((connector) => {
+        if (connector.to.stateId) {
+          map.set(connector.id, connector.to.stateId)
+        }
+      })
+    return map
+  }, [data?.diagrams, visibleConnectors])
+
+  const nextStateId = useMemo(() => {
+    if (!activeStepEdgeId) return null
+    return edgeToNextStateId.get(activeStepEdgeId) ?? null
+  }, [activeStepEdgeId, edgeToNextStateId])
 
   const selectedDiagram = useMemo(
     () => data?.diagrams.find((diagram) => diagram.id === selectedDiagramId) ?? null,
@@ -403,6 +431,9 @@ function App() {
                     diagram={selectedDiagram}
                     coverage={agentRunner.coverage}
                     currentStateId={agentRunner.currentStateId}
+                    isTesting={isTestingPhase}
+                    activeEdgeId={activeStepEdgeId}
+                    nextStateId={nextStateId}
                   />
                 ) : (
                   <SystemView
@@ -411,6 +442,9 @@ function App() {
                     coverage={agentRunner.coverage}
                     currentStateId={agentRunner.currentStateId}
                     selectedDiagramId={focusDiagramId ?? undefined}
+                    isTesting={isTestingPhase}
+                    activeEdgeId={activeStepEdgeId}
+                    nextStateId={nextStateId}
                   />
                 )}
               </div>
@@ -451,13 +485,15 @@ function App() {
                       coverage={agentRunner.coverage}
                       logs={agentRunner.logs}
                       currentStateId={agentRunner.currentStateId}
+                      latestEvent={agentRunner.latestEvent}
                       running={agentRunner.running}
-                      intervalMs={agentRunner.intervalMs}
                       onStart={() => agentRunner.setRunning(true)}
                       onStop={() => agentRunner.setRunning(false)}
                       onStep={agentRunner.step}
                       onReset={agentRunner.reset}
-                      onIntervalChange={agentRunner.setIntervalMs}
+                      targetUrl={agentRunner.targetUrl}
+                      onTargetUrlChange={agentRunner.setTargetUrl}
+                      plannedStatus={agentRunner.plannedStatus}
                     />
                   </div>
                 ) : null}
