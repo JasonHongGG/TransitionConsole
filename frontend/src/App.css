@@ -141,8 +141,10 @@
 }
 
 .app-layout {
+  --left-col: 280px;
+  --right-col: 460px;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: var(--left-col) minmax(0, 1fr) var(--right-col);
   gap: 16px;
   align-items: stretch;
   flex: 1;
@@ -153,7 +155,11 @@
 }
 
 .app-layout.sidebar-collapsed {
-  grid-template-columns: 24px minmax(0, 1fr);
+  --left-col: 24px;
+}
+
+.app-layout.agent-collapsed {
+  --right-col: 24px;
 }
 
 .sidebar {
@@ -541,6 +547,76 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.agent-dock {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: visible;
+}
+
+.agent-dock-content {
+  width: 460px;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  transition: transform 320ms ease;
+  will-change: transform;
+}
+
+.agent-dock.collapsed .agent-dock-content {
+  transform: translateX(calc(100% + var(--app-inline-pad) - var(--sidebar-handle-visible)));
+}
+
+.agent-dock-handle {
+  position: absolute;
+  top: 50%;
+  left: -11px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 74px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(27, 36, 64, 0.82), rgba(20, 28, 52, 0.82));
+  color: rgba(226, 234, 248, 0.72);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease, background 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  z-index: 12;
+}
+
+.agent-dock:hover .agent-dock-handle {
+  opacity: 0.76;
+  pointer-events: auto;
+}
+
+.agent-dock-handle:hover {
+  background: linear-gradient(180deg, rgba(37, 50, 86, 0.9), rgba(25, 36, 66, 0.9));
+  color: var(--text);
+  transform: translateY(-50%);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.26);
+}
+
+.agent-dock-handle .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.agent-dock.collapsed .agent-dock-handle {
+  left: -10px;
+  opacity: 0.82;
+  pointer-events: auto;
+}
+
+.agent-dock-content > .agent-panel {
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -1343,6 +1419,13 @@
   min-height: 0;
 }
 
+.agent-panel-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
 .agent-topbar {
   display: flex;
   gap: 10px;
@@ -1831,6 +1914,20 @@
   }
 
   .sidebar-handle {
+    display: none;
+  }
+
+  .agent-dock {
+    width: 100%;
+  }
+
+  .agent-dock-content {
+    width: 100%;
+    transform: none !important;
+    transition: none;
+  }
+
+  .agent-dock-handle {
     display: none;
   }
 

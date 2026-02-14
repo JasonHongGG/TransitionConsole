@@ -118,6 +118,16 @@ export const AgentPanel = ({
 
   return (
     <div className="panel agent-panel">
+      <div className="agent-panel-title">
+        <span className="section-title">
+          <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.6" />
+            <path d="M12 7v5l3 3" fill="none" stroke="currentColor" strokeWidth="1.6" />
+          </svg>
+          Agent Control
+        </span>
+      </div>
+
       <div className="agent-topbar">
         <label className="agent-url-field" aria-label="Target URL">
           <input

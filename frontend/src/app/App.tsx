@@ -14,9 +14,9 @@ function App() {
   const [selectedDiagramId, setSelectedDiagramId] = useState<string>('')
   const [dataSource, setDataSource] = useState<string>('public/data.json')
   const [showGoals, setShowGoals] = useState(false)
-  const [agentOpen, setAgentOpen] = useState(false)
   const [focusDiagramId, setFocusDiagramId] = useState<string | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [agentPanelCollapsed, setAgentPanelCollapsed] = useState(false)
 
   useEffect(() => {
     const loadData = async () => {
@@ -260,7 +260,7 @@ function App() {
         </div>
       </header>
       <main className="main">
-        <div className={`app-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+        <div className={`app-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${agentPanelCollapsed ? 'agent-collapsed' : ''}`}>
           <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
             <button
               type="button"
@@ -468,62 +468,51 @@ function App() {
                   />
                 )}
               </div>
-
-              <div className="agent-overlay">
-                <button
-                  type="button"
-                  className="agent-launcher"
-                  onClick={() => setAgentOpen((open) => !open)}
-                  aria-label="Open agent control"
-                  title="Agent control"
-                >
-                  <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
-                    <rect x="5" y="6" width="14" height="11" rx="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                    <circle cx="9" cy="11.5" r="1.4" fill="currentColor" />
-                    <circle cx="15" cy="11.5" r="1.4" fill="currentColor" />
-                    <path d="M8 17v2" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                    <path d="M16 17v2" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                    <path d="M12 4v2" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                  </svg>
-                </button>
-                {agentOpen ? (
-                  <div className="overlay-card agent-float">
-                    <div className="overlay-header">
-                      <span className="section-title">
-                        <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
-                          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                          <path d="M12 7v5l3 3" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                        </svg>
-                        Agent Control
-                      </span>
-                    </div>
-                    <AgentPanel
-                      diagrams={data.diagrams}
-                      coverage={agentRunner.coverage}
-                      logs={agentRunner.logs}
-                      currentStateId={agentRunner.currentStateId}
-                      latestEvent={agentRunner.latestEvent}
-                      running={agentRunner.running}
-                      isBusy={agentRunner.isBusy}
-                      statusMessage={agentRunner.statusMessage}
-                      statusTone={agentRunner.statusTone}
-                      lastError={agentRunner.lastError}
-                      plannerRound={agentRunner.plannerRound}
-                      completed={agentRunner.completed}
-                      fullCoveragePassed={agentRunner.fullCoveragePassed}
-                      onStart={() => agentRunner.setRunning(true)}
-                      onStop={() => agentRunner.setRunning(false)}
-                      onStep={agentRunner.step}
-                      onReset={agentRunner.reset}
-                      targetUrl={agentRunner.targetUrl}
-                      onTargetUrlChange={agentRunner.setTargetUrl}
-                      plannedStatus={agentRunner.plannedStatus}
-                    />
-                  </div>
-                ) : null}
-              </div>
             </div>
           </section>
+
+          <aside className={`agent-dock ${agentPanelCollapsed ? 'collapsed' : ''}`}>
+            <button
+              type="button"
+              className="agent-dock-handle"
+              aria-label={agentPanelCollapsed ? 'Expand agent panel' : 'Collapse agent panel'}
+              title={agentPanelCollapsed ? 'Expand panel' : 'Collapse panel'}
+              onClick={() => setAgentPanelCollapsed((prev) => !prev)}
+            >
+              <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
+                {agentPanelCollapsed ? (
+                  <path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                ) : (
+                  <path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                )}
+              </svg>
+            </button>
+
+            <div className="agent-dock-content">
+              <AgentPanel
+                diagrams={data.diagrams}
+                coverage={agentRunner.coverage}
+                logs={agentRunner.logs}
+                currentStateId={agentRunner.currentStateId}
+                latestEvent={agentRunner.latestEvent}
+                running={agentRunner.running}
+                isBusy={agentRunner.isBusy}
+                statusMessage={agentRunner.statusMessage}
+                statusTone={agentRunner.statusTone}
+                lastError={agentRunner.lastError}
+                plannerRound={agentRunner.plannerRound}
+                completed={agentRunner.completed}
+                fullCoveragePassed={agentRunner.fullCoveragePassed}
+                onStart={() => agentRunner.setRunning(true)}
+                onStop={() => agentRunner.setRunning(false)}
+                onStep={agentRunner.step}
+                onReset={agentRunner.reset}
+                targetUrl={agentRunner.targetUrl}
+                onTargetUrlChange={agentRunner.setTargetUrl}
+                plannedStatus={agentRunner.plannedStatus}
+              />
+            </div>
+          </aside>
         </div>
       </main>
     </div>
