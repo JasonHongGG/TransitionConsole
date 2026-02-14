@@ -136,7 +136,7 @@ export class CopilotPathPlanner implements PathPlanner {
       await mkdir(this.logDir, { recursive: true })
       const stamp = formatLogFileTimestamp(new Date())
       const suffix = Math.random().toString(36).slice(2, 8)
-      const filePath = path.join(this.logDir, `${stamp}-${suffix}.json`)
+      const filePath = path.join(this.logDir, `${stamp}_${suffix}.json`)
 
       await writeFile(
         filePath,

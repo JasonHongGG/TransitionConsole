@@ -8,7 +8,7 @@ import type {
   PlannedRunnerStatus,
   PlannedStepEvent,
   TransitionResult,
-} from '../types'
+} from '../../../types'
 
 const MAX_LOGS = 120
 

@@ -1,4 +1,4 @@
-import type { Diagram } from '../types'
+import type { Diagram } from '../../../types'
 
 interface DiagramListProps {
   diagrams: Diagram[]

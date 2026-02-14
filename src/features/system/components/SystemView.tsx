@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react'
 import { curveCatmullRom, line, select, zoom, type ZoomBehavior, zoomIdentity } from 'd3'
-import type { CoverageState, Diagram, DiagramConnector, ElementExecutionStatus } from '../types'
-import { computeSystemLayout } from '../utils/systemLayout'
+import type { CoverageState, Diagram, DiagramConnector, ElementExecutionStatus } from '../../../types'
+import { computeSystemLayout } from '../../../shared/utils/systemLayout'
 
 const WHEEL_ZOOM_STEP = Math.log2(1.1)
 

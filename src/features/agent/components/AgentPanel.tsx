@@ -1,4 +1,4 @@
-import type { AgentLogEntry, CoverageState, Diagram, PlannedRunnerStatus, PlannedStepEvent } from '../types'
+import type { AgentLogEntry, CoverageState, Diagram, PlannedRunnerStatus, PlannedStepEvent } from '../../../types'
 
 interface AgentPanelProps {
   diagrams: Diagram[]

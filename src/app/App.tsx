@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
-import './App.css'
-import type { DiagramConnector, GraphData } from './types'
-import { DiagramList } from './components/DiagramList'
-import { DiagramView } from './components/DiagramView'
-import { SystemView } from './components/SystemView'
-import { AgentPanel } from './components/AgentPanel'
-import { useAgentRunner } from './hooks/useAgentRunner'
+import '../App.css'
+import type { DiagramConnector, GraphData } from '../types'
+import { DiagramList, DiagramView } from '../features/diagram'
+import { SystemView } from '../features/system'
+import { AgentPanel, usePlannedRunner } from '../features/agent'
 
 type ViewMode = 'diagram' | 'system'
 
@@ -58,7 +56,7 @@ function App() {
     [connectors],
   )
 
-  const agentRunner = useAgentRunner(data?.diagrams ?? [], visibleConnectors, data?.spec.raw ?? null)
+  const agentRunner = usePlannedRunner(data?.diagrams ?? [], visibleConnectors, data?.spec.raw ?? null)
   const isTestingPhase = agentRunner.running || agentRunner.plannedStatus !== null
 
   const activeStepEdgeId = useMemo(() => {

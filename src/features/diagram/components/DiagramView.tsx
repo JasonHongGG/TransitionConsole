@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useLayoutEffect, useRef, useState } from 'react'
 import { curveCatmullRom, line, select, zoom, type ZoomBehavior, type ZoomTransform, zoomIdentity } from 'd3'
-import type { CoverageState, Diagram, ElementExecutionStatus } from '../types'
-import { layoutDiagram } from '../utils/layout'
+import type { CoverageState, Diagram, ElementExecutionStatus } from '../../../types'
+import { layoutDiagram } from '../../../shared/utils/layout'
 
 interface DiagramViewProps {
   diagram: Diagram
