@@ -16,6 +16,7 @@ function App() {
   const [showGoals, setShowGoals] = useState(false)
   const [agentOpen, setAgentOpen] = useState(false)
   const [focusDiagramId, setFocusDiagramId] = useState<string | null>(null)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
 
   useEffect(() => {
     const loadData = async () => {
@@ -259,8 +260,28 @@ function App() {
         </div>
       </header>
       <main className="main">
-        <div className="app-layout">
-          <aside className="sidebar">
+        <div className={`app-layout ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+          <aside className={`sidebar ${sidebarCollapsed ? 'collapsed' : ''}`}>
+            <button
+              type="button"
+              className="sidebar-handle"
+              aria-label={sidebarCollapsed ? 'Expand left panel' : 'Collapse left panel'}
+              title={sidebarCollapsed ? 'Expand panel' : 'Collapse panel'}
+              onClick={() => {
+                setSidebarCollapsed((prev) => !prev)
+                setShowGoals(false)
+              }}
+            >
+              <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
+                {sidebarCollapsed ? (
+                  <path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                ) : (
+                  <path d="m15 5-7 7 7 7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                )}
+              </svg>
+            </button>
+
+            <div className="sidebar-content">
             <div className="overlay-card">
               <div className="overlay-header">
                 <span className="section-title">
@@ -360,6 +381,7 @@ function App() {
                 </div>
               </div>
             ) : null}
+            </div>
           </aside>
 
           <section className="content">

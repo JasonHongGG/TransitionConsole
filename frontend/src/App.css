@@ -1,4 +1,6 @@
 .app-shell {
+  --app-inline-pad: 32px;
+  --sidebar-handle-visible: 16px;
   height: 100vh;
   min-height: 100vh;
   padding: 72px 32px 12px;
@@ -147,14 +149,76 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  transition: grid-template-columns 320ms ease;
+}
+
+.app-layout.sidebar-collapsed {
+  grid-template-columns: 24px minmax(0, 1fr);
 }
 
 .sidebar {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: visible;
+}
+
+.sidebar-content {
+  width: 280px;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  height: 100%;
-  min-height: 0;
+  transition: transform 320ms ease;
+  will-change: transform;
+}
+
+.sidebar.collapsed .sidebar-content {
+  transform: translateX(calc(-100% - var(--app-inline-pad) + var(--sidebar-handle-visible)));
+}
+
+.sidebar-handle {
+  position: absolute;
+  top: 50%;
+  right: -11px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 74px;
+  border-radius: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(180deg, rgba(27, 36, 64, 0.82), rgba(20, 28, 52, 0.82));
+  color: rgba(226, 234, 248, 0.72);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease, background 160ms ease, color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  z-index: 12;
+}
+
+.sidebar:hover .sidebar-handle {
+  opacity: 0.76;
+  pointer-events: auto;
+}
+
+.sidebar-handle:hover {
+  background: linear-gradient(180deg, rgba(37, 50, 86, 0.9), rgba(25, 36, 66, 0.9));
+  color: var(--text);
+  transform: translateY(-50%);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.26);
+}
+
+.sidebar-handle .icon {
+  width: 12px;
+  height: 12px;
+}
+
+.sidebar.collapsed .sidebar-handle {
+  right: -10px;
+  opacity: 0.82;
+  pointer-events: auto;
 }
 
 .content {
@@ -472,7 +536,7 @@
   box-shadow: var(--shadow-soft);
 }
 
-.sidebar > .overlay-card {
+.sidebar-content > .overlay-card {
   flex: 1;
   min-height: 0;
   display: flex;
@@ -1734,6 +1798,7 @@
 
 @media (max-width: 1200px) {
   .app-shell {
+    --app-inline-pad: 20px;
     padding: 140px 20px 32px;
   }
 
@@ -1752,10 +1817,21 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+    transition: none;
   }
 
   .sidebar {
     width: 100%;
+  }
+
+  .sidebar-content {
+    width: 100%;
+    transform: none !important;
+    transition: none;
+  }
+
+  .sidebar-handle {
+    display: none;
   }
 
   .content {
