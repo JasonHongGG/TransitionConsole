@@ -7,6 +7,13 @@ interface AgentPanelProps {
   currentStateId: string | null
   latestEvent: PlannedStepEvent | null
   running: boolean
+  isBusy: boolean
+  statusMessage: string
+  statusTone: 'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'
+  lastError: string | null
+  plannerRound: number
+  completed: boolean
+  fullCoveragePassed: boolean | null
   onStart: () => void
   onStop: () => void
   onStep: () => void
@@ -25,6 +32,13 @@ export const AgentPanel = ({
   currentStateId,
   latestEvent,
   running,
+  isBusy,
+  statusMessage,
+  statusTone,
+  lastError,
+  plannerRound,
+  completed,
+  fullCoveragePassed,
   onStart,
   onStop,
   onStep,
@@ -61,12 +75,29 @@ export const AgentPanel = ({
   const stepCurrentIndex =
     plannedStatus && (plannedStatus.currentPathStepTotal ?? 0) > 0
       ? Math.min(
-          plannedStatus.currentPathStepTotal ?? 0,
-          plannedStatus.currentStepOrder ?? 0,
+          Math.max(0, (plannedStatus.currentStepOrder ?? 0) - 1),
+          Math.max(0, (plannedStatus.currentPathStepTotal ?? 0) - 1),
         )
       : 0
 
   const stepTotal = plannedStatus?.currentPathStepTotal ?? 0
+  const hasValidationResults = (latestEvent?.validationResults?.length ?? 0) > 0
+  const runModeLabel = running ? 'Auto' : 'Manual'
+  const coverageLabel = completed ? (fullCoveragePassed ? 'Pass' : 'Not Pass') : 'In Progress'
+  const plannerLabel = plannerRound > 0 ? `Round ${plannerRound}` : 'Not Started'
+
+  const toneLabel =
+    statusTone === 'waiting'
+      ? 'Waiting'
+      : statusTone === 'running'
+        ? 'Running'
+        : statusTone === 'paused'
+          ? 'Paused'
+          : statusTone === 'success'
+            ? 'Success'
+            : statusTone === 'error'
+              ? 'Error'
+              : 'Idle'
 
   const edgeToNextStateId = new Map<string, string>()
   diagrams.forEach((diagram) => {
@@ -87,36 +118,83 @@ export const AgentPanel = ({
 
   return (
     <div className="panel agent-panel">
-      <div className="agent-header">
-        <h3>Agent Control (planned)</h3>
-        <span className={`status-pill ${running ? 'running' : ''}`}>
-          {running ? 'Running' : 'Idle'}
-        </span>
+      <div className="agent-topbar">
+        <label className="agent-url-field" aria-label="Target URL">
+          <input
+            type="url"
+            placeholder="https://your-site.example"
+            value={targetUrl}
+            onChange={(event) => onTargetUrlChange(event.target.value)}
+          />
+        </label>
+
+        <div className="agent-icon-controls" role="group" aria-label="Agent run controls">
+          <button
+            type="button"
+            className="agent-icon-btn primary"
+            onClick={running ? onStop : onStart}
+            disabled={isBusy}
+            title={running ? 'Pause' : 'Start'}
+            aria-label={running ? 'Pause' : 'Start'}
+          >
+            {running ? (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <rect x="7" y="6" width="3.6" height="12" rx="1" fill="currentColor" />
+                <rect x="13.4" y="6" width="3.6" height="12" rx="1" fill="currentColor" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M8 6.8v10.4a1 1 0 0 0 1.52.85l8-5.2a1 1 0 0 0 0-1.7l-8-5.2A1 1 0 0 0 8 6.8z" fill="currentColor" />
+              </svg>
+            )}
+          </button>
+          <button
+            type="button"
+            className="agent-icon-btn"
+            onClick={onStep}
+            disabled={isBusy || running}
+            title="Step"
+            aria-label="Step"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6h2.4v12H6z" fill="currentColor" />
+              <path d="M10 7v10a1 1 0 0 0 1.56.83l6.8-4.95a1 1 0 0 0 0-1.66l-6.8-4.95A1 1 0 0 0 10 7z" fill="currentColor" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="agent-icon-btn"
+            onClick={onReset}
+            disabled={isBusy}
+            title="Reset"
+            aria-label="Reset"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 5a7 7 0 1 1-6.2 3.75" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M4.8 5.2v4.2H9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      <label className="agent-url-field">
-        <input
-          type="url"
-          placeholder="https://your-site.example"
-          value={targetUrl}
-          onChange={(event) => onTargetUrlChange(event.target.value)}
-        />
-      </label>
-
-      <div className="agent-controls">
-        <button type="button" onClick={running ? onStop : onStart}>
-          {running ? 'Pause' : 'Start'}
-        </button>
-        <button type="button" onClick={onStep}>
-          Step
-        </button>
-        <button type="button" onClick={onReset}>
-          Reset
-        </button>
+      <div className="agent-status-card">
+        <div className="agent-header">
+          <p className="agent-status-message">{statusMessage}</p>
+          <span className={`status-pill ${statusTone}`}>
+            {statusTone === 'waiting' ? <span className="status-spinner" aria-hidden="true" /> : null}
+            {toneLabel}
+          </span>
+        </div>
+        <div className="agent-status-meta">
+          <span className="agent-meta-chip">Planner {plannerLabel}</span>
+          <span className="agent-meta-chip">Mode {runModeLabel}</span>
+          <span className="agent-meta-chip">Coverage {coverageLabel}</span>
+        </div>
+        {lastError ? <p className="agent-error-banner">{lastError}</p> : null}
       </div>
 
       <div className="agent-summary">
-        <div className="summary-card">
+        <div className="summary-card modern">
           <div className="summary-head">
             <h4>State</h4>
             <span
@@ -131,7 +209,7 @@ export const AgentPanel = ({
           </div>
           <p className="summary-value">{stateSummary}</p>
         </div>
-        <div className="summary-card">
+        <div className="summary-card modern">
           <div className="summary-head">
             <h4>Transition</h4>
             <span
@@ -148,56 +226,84 @@ export const AgentPanel = ({
         </div>
       </div>
 
-      {plannedStatus ? (
-        <div className="agent-planned-progress">
-          <h4>Path Progress</h4>
-          <p>path: {pathCurrentIndex}/{plannedStatus.plannedPaths}</p>
-          <p>step: {stepCurrentIndex}/{stepTotal}</p>
-          <p>current state: {currentStateId ?? 'Awaiting signal'}</p>
-          <p>next state: {nextStateId}</p>
-        </div>
-      ) : null}
+      <div className="agent-card agent-path-card">
+        <h4>Path Progress</h4>
+        {plannedStatus ? (
+          <dl className="agent-keyvals">
+            <div className="agent-keyval-row">
+              <dt>Path</dt>
+              <dd>{pathCurrentIndex}/{plannedStatus.plannedPaths}</dd>
+            </div>
+            <div className="agent-keyval-row">
+              <dt>Step</dt>
+              <dd>{stepCurrentIndex}/{stepTotal}</dd>
+            </div>
+            <div className="agent-keyval-row">
+              <dt>Current State</dt>
+              <dd>{currentStateId ?? 'Awaiting signal'}</dd>
+            </div>
+            <div className="agent-keyval-row">
+              <dt>Next State</dt>
+              <dd>{nextStateId}</dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="muted">No planned path yet. Press Start or Step to initialize planner.</p>
+        )}
+      </div>
 
-      {latestEvent ? (
-        <div className="agent-planned-progress">
-          <h4>Validation Results</h4>
-          <p>
-            {latestEvent.pathName}: {latestEvent.step.label} → {latestEvent.result.toUpperCase()}
-          </p>
-          {latestEvent.blockedReason ? <p>Blocked: {latestEvent.blockedReason}</p> : null}
-          {(latestEvent.validationResults?.length ?? 0) === 0 ? (
-            <p className="muted">No validations for this step.</p>
-          ) : (
-            <div className="agent-logs" style={{ maxHeight: 180, marginTop: 8 }}>
+      <div className="agent-detail-stack">
+        <section className="agent-card agent-scroll-card">
+          <div className="agent-card-header">
+            <h4>Validation Results</h4>
+          </div>
+          <div className="agent-scroll-region agent-validation-list">
+            {latestEvent ? (
+              <>
+                <p className="agent-validation-summary">
+                  {latestEvent.pathName}: {latestEvent.step.label} → {latestEvent.result.toUpperCase()}
+                </p>
+                {latestEvent.blockedReason ? <p className="agent-validation-summary">Blocked: {latestEvent.blockedReason}</p> : null}
+                {hasValidationResults ? (
+                  <ul>
+                    {(latestEvent.validationResults ?? []).map((validation) => (
+                      <li key={validation.id} className={`log ${validation.status === 'pass' ? 'success' : 'error'}`}>
+                        <span>{validation.status.toUpperCase()}</span>
+                        <span>{validation.label}</span>
+                        <span>{validation.reason}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="muted">No validations for this step.</p>
+                )}
+              </>
+            ) : (
+              <p className="muted">No step executed yet.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="agent-card agent-scroll-card">
+          <div className="agent-card-header">
+            <h4>Live Events</h4>
+          </div>
+          <div className="agent-scroll-region agent-logs">
+            {logs.length === 0 ? (
+              <p className="muted">No agent events yet.</p>
+            ) : (
               <ul>
-                {(latestEvent.validationResults ?? []).map((validation) => (
-                  <li key={validation.id} className={`log ${validation.status === 'pass' ? 'success' : 'error'}`} style={{ borderBottom: 'none', paddingBottom: 0 }}>
-                    <span>{validation.status.toUpperCase()}</span>
-                    <span>{validation.label}</span>
-                    <span>{validation.reason}</span>
+                {logs.map((log) => (
+                  <li key={log.id} className={`log ${log.level}`}>
+                    <span>{formatTime(log.timestamp)}</span>
+                    <span>{log.message}</span>
+                    <span>{log.role ?? 'system'}</span>
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      <div className="agent-logs">
-        <h4>Live Events</h4>
-        {logs.length === 0 ? (
-          <p className="muted">No agent events yet.</p>
-        ) : (
-          <ul>
-            {logs.map((log) => (
-              <li key={log.id} className={`log ${log.level}`}>
-                <span>{formatTime(log.timestamp)}</span>
-                <span>{log.message}</span>
-                <span>{log.role ?? 'system'}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+            )}
+          </div>
+        </section>
       </div>
     </div>
   )

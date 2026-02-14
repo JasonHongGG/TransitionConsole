@@ -474,9 +474,6 @@ function App() {
                         </svg>
                         Agent Control
                       </span>
-                      <button type="button" className="icon-button" onClick={() => setAgentOpen(false)}>
-                        <span aria-hidden="true">x</span>
-                      </button>
                     </div>
                     <AgentPanel
                       diagrams={data.diagrams}
@@ -485,6 +482,13 @@ function App() {
                       currentStateId={agentRunner.currentStateId}
                       latestEvent={agentRunner.latestEvent}
                       running={agentRunner.running}
+                      isBusy={agentRunner.isBusy}
+                      statusMessage={agentRunner.statusMessage}
+                      statusTone={agentRunner.statusTone}
+                      lastError={agentRunner.lastError}
+                      plannerRound={agentRunner.plannerRound}
+                      completed={agentRunner.completed}
+                      fullCoveragePassed={agentRunner.fullCoveragePassed}
                       onStart={() => agentRunner.setRunning(true)}
                       onStop={() => agentRunner.setRunning(false)}
                       onStep={agentRunner.step}

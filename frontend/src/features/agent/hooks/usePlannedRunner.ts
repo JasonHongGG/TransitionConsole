@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   AgentLogEntry,
   CoverageState,
@@ -27,6 +27,13 @@ interface PlannedStepResponse {
 
 export interface PlannedRunnerState {
   running: boolean
+  isBusy: boolean
+  statusMessage: string
+  statusTone: 'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'
+  lastError: string | null
+  plannerRound: number
+  completed: boolean
+  fullCoveragePassed: boolean | null
   currentStateId: string | null
   logs: AgentLogEntry[]
   coverage: CoverageState
@@ -59,6 +66,13 @@ export const usePlannedRunner = (
   const endpointBase = `${apiBase}/api/planned`
 
   const [running, setRunningState] = useState(false)
+  const [isBusy, setIsBusy] = useState(false)
+  const [statusMessage, setStatusMessage] = useState('Idle')
+  const [statusTone, setStatusTone] = useState<'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'>('idle')
+  const [lastError, setLastError] = useState<string | null>(null)
+  const [plannerRound, setPlannerRound] = useState(0)
+  const [completed, setCompleted] = useState(false)
+  const [fullCoveragePassed, setFullCoveragePassed] = useState<boolean | null>(null)
   const [currentStateId, setCurrentStateId] = useState<string | null>(null)
   const [targetUrl, setTargetUrl] = useState('')
   const [logs, setLogs] = useState<AgentLogEntry[]>([])
@@ -70,9 +84,17 @@ export const usePlannedRunner = (
     edgeStatuses: {},
   })
   const [plannedStatus, setPlannedStatus] = useState<PlannedRunnerStatus | null>(null)
+  const maxKnownPathCountRef = useRef(0)
 
   const appendLog = useCallback((entry: AgentLogEntry) => {
     setLogs((prev) => [entry, ...prev].slice(0, MAX_LOGS))
+  }, [])
+
+  const formatRequestError = useCallback((error: unknown) => {
+    if (error instanceof Error) {
+      return `Request failed: ${error.message}`
+    }
+    return 'Request failed: unknown error'
   }, [])
 
   const requestPayload = useMemo<PlannedRunnerRequest>(
@@ -85,7 +107,12 @@ export const usePlannedRunner = (
     [diagrams, connectors, specRaw, targetUrl],
   )
 
-  const applySnapshot = useCallback((snapshot: PlannedRunSnapshot) => {
+  const applySnapshot = useCallback((snapshot: PlannedRunSnapshot, source: 'start' | 'step' | 'auto') => {
+    if (snapshot.totalPaths > maxKnownPathCountRef.current) {
+      setPlannerRound((prev) => (prev === 0 ? 1 : prev + 1))
+      maxKnownPathCountRef.current = snapshot.totalPaths
+    }
+
     setCurrentStateId(snapshot.currentStateId)
     setCoverage((prev) => {
       const visitedNodes = new Set(prev.visitedNodes)
@@ -123,64 +150,163 @@ export const usePlannedRunner = (
 
     if (snapshot.completed) {
       setRunningState(false)
+      setCompleted(true)
+      const uncoveredTotal = snapshot.coverage.uncoveredEdgeIds.length + snapshot.coverage.uncoveredNodeIds.length
+      const hasFailure = Object.values(snapshot.edgeStatuses).some((status) => status === 'fail')
+      const passed = uncoveredTotal === 0 && !hasFailure
+      setFullCoveragePassed(passed)
+      setStatusMessage(passed ? 'Full coverage complete: PASS' : 'Run complete: full coverage NOT passed')
+      setStatusTone(passed ? 'success' : 'error')
       appendLog(createLog('success', 'Planned run completed.'))
+      return
     }
-  }, [appendLog])
+
+    setCompleted(false)
+    setFullCoveragePassed(null)
+
+    if (snapshot.currentPathId && snapshot.currentStepId) {
+      setStatusTone(running ? 'running' : 'paused')
+      setStatusMessage(
+        `Ready: ${snapshot.currentPathId} step ${snapshot.currentStepOrder ?? 0}/${snapshot.currentPathStepTotal ?? 0}`,
+      )
+      return
+    }
+
+    if (source === 'start') {
+      setStatusTone('paused')
+      setStatusMessage('Planner ready. Press Step to execute the first action.')
+      return
+    }
+
+    if (source === 'step' && !running) {
+      setStatusTone('paused')
+      setStatusMessage('Path transitioned/replanned. Press Step to continue.')
+      return
+    }
+
+    setStatusTone('running')
+    setStatusMessage('Executing planned paths...')
+  }, [appendLog, running])
 
   const start = useCallback(async (): Promise<boolean> => {
     if (diagrams.length === 0) return false
-    const response = await fetch(`${endpointBase}/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestPayload),
-    })
+    setIsBusy(true)
+    setLastError(null)
+    setStatusTone('waiting')
+    setStatusMessage('Waiting planner...')
+    try {
+      const response = await fetch(`${endpointBase}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestPayload),
+      })
 
-    if (!response.ok) {
-      appendLog(createLog('error', 'Failed to start planned run.'))
+      if (!response.ok) {
+        const failureMessage = `Failed to start planned run (${response.status}).`
+        appendLog(createLog('error', failureMessage))
+        setLastError(failureMessage)
+        setStatusTone('error')
+        setStatusMessage('Start failed.')
+        return false
+      }
+
+      const data = (await response.json()) as PlannedStepResponse
+      applySnapshot(data.snapshot, 'start')
+      setLatestEvent(null)
+      appendLog(createLog('info', 'Planned run started.'))
+      return true
+    } catch (error) {
+      const failureMessage = formatRequestError(error)
+      setLastError(failureMessage)
+      setStatusTone('error')
+      setStatusMessage('Backend unavailable. Please check server connection.')
+      appendLog(createLog('error', failureMessage))
       return false
+    } finally {
+      setIsBusy(false)
     }
-
-    const data = (await response.json()) as PlannedStepResponse
-    applySnapshot(data.snapshot)
-    setLatestEvent(null)
-    appendLog(createLog('info', 'Planned run started.'))
-    return true
-  }, [appendLog, applySnapshot, diagrams.length, endpointBase, requestPayload])
+  }, [appendLog, applySnapshot, diagrams.length, endpointBase, formatRequestError, requestPayload])
 
   const stop = useCallback(async () => {
-    await fetch(`${endpointBase}/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-    setRunningState(false)
-    appendLog(createLog('info', 'Planned run paused.'))
-  }, [appendLog, endpointBase])
+    setIsBusy(true)
+    setLastError(null)
+    setStatusTone('waiting')
+    try {
+      const response = await fetch(`${endpointBase}/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      if (!response.ok) {
+        const failureMessage = `Failed to pause planned run (${response.status}).`
+        setLastError(failureMessage)
+        setStatusTone('error')
+        setStatusMessage('Pause failed.')
+        appendLog(createLog('error', failureMessage))
+        return
+      }
+      setRunningState(false)
+      setStatusTone('paused')
+      setStatusMessage('Paused.')
+      appendLog(createLog('info', 'Planned run paused.'))
+    } catch (error) {
+      const failureMessage = formatRequestError(error)
+      setLastError(failureMessage)
+      setStatusTone('error')
+      setStatusMessage('Pause failed: backend unavailable.')
+      appendLog(createLog('error', failureMessage))
+    } finally {
+      setIsBusy(false)
+    }
+  }, [appendLog, endpointBase, formatRequestError])
 
   const runSingleStep = useCallback(async (): Promise<boolean> => {
-    const response = await fetch(`${endpointBase}/step`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-    if (!response.ok) {
-      appendLog(createLog('error', 'Step request failed.'))
-      setRunningState(false)
-      return false
-    }
-
-    const data = (await response.json()) as PlannedStepResponse
-    applySnapshot(data.snapshot)
-
-    if (data.event) {
-      setLatestEvent({
-        ...data.event,
-        validationResults: data.event.validationResults ?? [],
-      })
-    }
-
-    if (data.event) {
-      const level = data.event.result === 'pass' ? 'success' : 'error'
-      const message = `${data.event.pathName}: ${data.event.step.label} → ${data.event.result.toUpperCase()}`
-      appendLog(createLog(level, message, data.event))
-      if (data.event.blockedReason) {
-        appendLog(createLog('error', `Blocked: ${data.event.blockedReason}`, data.event))
+    setIsBusy(true)
+    setLastError(null)
+    setStatusTone('waiting')
+    setStatusMessage('Waiting planner/step execution...')
+    try {
+      const response = await fetch(`${endpointBase}/step`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      if (!response.ok) {
+        const failureMessage = `Step request failed (${response.status}).`
+        appendLog(createLog('error', failureMessage))
+        setRunningState(false)
+        setLastError(failureMessage)
+        setStatusTone('error')
+        setStatusMessage('Step failed.')
+        return false
       }
+
+      const data = (await response.json()) as PlannedStepResponse
+      applySnapshot(data.snapshot, running ? 'auto' : 'step')
+
+      if (data.event) {
+        setLatestEvent({
+          ...data.event,
+          validationResults: data.event.validationResults ?? [],
+        })
+      }
+
+      if (data.event) {
+        const level = data.event.result === 'pass' ? 'success' : 'error'
+        const message = `${data.event.pathName}: ${data.event.step.label} → ${data.event.result.toUpperCase()}`
+        appendLog(createLog(level, message, data.event))
+        if (data.event.blockedReason) {
+          appendLog(createLog('error', `Blocked: ${data.event.blockedReason}`, data.event))
+        }
+      } else if (!data.snapshot.completed) {
+        appendLog(createLog('info', running ? 'Planner preparing next executable step.' : 'Planner updated. Press Step to continue.'))
+      }
+
+      return !data.snapshot.completed
+    } catch (error) {
+      const failureMessage = formatRequestError(error)
+      setRunningState(false)
+      setLastError(failureMessage)
+      setStatusTone('error')
+      setStatusMessage('Step failed: backend unavailable.')
+      appendLog(createLog('error', failureMessage))
+      return false
+    } finally {
+      setIsBusy(false)
     }
-    return !data.snapshot.completed
-  }, [appendLog, applySnapshot, endpointBase])
+  }, [appendLog, applySnapshot, endpointBase, formatRequestError, running])
 
   const ensureSession = useCallback(async (): Promise<boolean> => {
     const hasActiveSnapshot = plannedStatus !== null
@@ -191,23 +317,52 @@ export const usePlannedRunner = (
   }, [plannedStatus, start])
 
   const reset = useCallback(async () => {
-    if (running) {
-      await fetch(`${endpointBase}/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+    setIsBusy(true)
+    setStatusTone('waiting')
+    setLastError(null)
+    try {
+      if (running) {
+        await fetch(`${endpointBase}/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      }
+      const response = await fetch(`${endpointBase}/reset`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      if (!response.ok) {
+        const failureMessage = `Failed to reset planned run (${response.status}).`
+        setLastError(failureMessage)
+        setStatusTone('error')
+        setStatusMessage('Reset failed.')
+        appendLog(createLog('error', failureMessage))
+        return
+      }
+
+      setRunningState(false)
+      setCompleted(false)
+      setFullCoveragePassed(null)
+      setPlannerRound(0)
+      maxKnownPathCountRef.current = 0
+      setCurrentStateId(null)
+      setPlannedStatus(null)
+      setLogs([])
+      setLatestEvent(null)
+      setStatusTone('idle')
+      setStatusMessage('Idle')
+      setCoverage({
+        visitedNodes: new Set<string>(),
+        transitionResults: {},
+        nodeStatuses: {},
+        edgeStatuses: {},
+      })
+      appendLog(createLog('info', 'Planned run reset.'))
+    } catch (error) {
+      const failureMessage = formatRequestError(error)
+      setLastError(failureMessage)
+      setStatusTone('error')
+      setStatusMessage('Reset failed: backend unavailable.')
+      appendLog(createLog('error', failureMessage))
     }
-    await fetch(`${endpointBase}/reset`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-    setRunningState(false)
-    setCurrentStateId(null)
-    setPlannedStatus(null)
-    setLogs([])
-    setLatestEvent(null)
-    setCoverage({
-      visitedNodes: new Set<string>(),
-      transitionResults: {},
-      nodeStatuses: {},
-      edgeStatuses: {},
-    })
-    appendLog(createLog('info', 'Planned run reset.'))
-  }, [appendLog, endpointBase, running])
+    finally {
+      setIsBusy(false)
+    }
+  }, [appendLog, endpointBase, formatRequestError, running])
 
   useEffect(() => {
     if (!running) return
@@ -242,6 +397,13 @@ export const usePlannedRunner = (
 
   return {
     running,
+    isBusy,
+    statusMessage,
+    statusTone,
+    lastError,
+    plannerRound,
+    completed,
+    fullCoveragePassed,
     currentStateId,
     logs,
     coverage,
@@ -261,7 +423,7 @@ export const usePlannedRunner = (
     },
     step: () => {
       void (async () => {
-        if (running) return
+        if (running || isBusy) return
         if (plannedStatus === null) {
           const started = await start()
           if (!started) return
