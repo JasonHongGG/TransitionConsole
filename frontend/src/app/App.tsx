@@ -326,45 +326,6 @@ function App() {
               </div>
             </div>
 
-            {showGoals ? (
-              <div className="modal-backdrop" role="presentation" onClick={() => setShowGoals(false)}>
-                <div
-                  className="modal"
-                  role="dialog"
-                  aria-modal="true"
-                  aria-label="Coverage goals"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <div className="modal-header">
-                    <div>
-                      <p className="modal-eyebrow">Coverage</p>
-                      <h3 className="section-title">
-                        <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
-                          <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1.6" />
-                          <circle cx="12" cy="12" r="2.5" fill="currentColor" />
-                        </svg>
-                        Coverage Goals
-                      </h3>
-                    </div>
-                    <button type="button" className="icon-button" onClick={() => setShowGoals(false)}>
-                      <span aria-hidden="true">x</span>
-                    </button>
-                  </div>
-                  <div className="modal-body">
-                    <p className="modal-description">
-                      Track scenario coverage targets to validate key flows across the system diagrams.
-                    </p>
-                    <div className="goal-scroll">
-                      <ul className="goal-list">
-                        {data.spec.summary.goals.map((goal) => (
-                          <li key={goal}>{goal}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : null}
             </div>
           </aside>
 
@@ -504,6 +465,46 @@ function App() {
           </aside>
         </div>
       </main>
+
+      {showGoals ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setShowGoals(false)}>
+          <div
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Coverage goals"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <p className="modal-eyebrow">Coverage</p>
+                <h3 className="section-title">
+                  <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
+                    <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                    <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+                  </svg>
+                  Coverage Goals
+                </h3>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setShowGoals(false)}>
+                <span aria-hidden="true">x</span>
+              </button>
+            </div>
+            <div className="modal-body">
+              <p className="modal-description">
+                Track scenario coverage targets to validate key flows across the system diagrams.
+              </p>
+              <div className="goal-scroll">
+                <ul className="goal-list">
+                  {data.spec.summary.goals.map((goal) => (
+                    <li key={goal}>{goal}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
