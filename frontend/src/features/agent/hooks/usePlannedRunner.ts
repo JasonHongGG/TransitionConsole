@@ -117,6 +117,8 @@ export const usePlannedRunner = (
       currentPathName: snapshot.currentPathId,
       currentStepId: snapshot.currentStepId,
       currentStepLabel: snapshot.currentStepId,
+      currentStepOrder: snapshot.currentStepOrder,
+      currentPathStepTotal: snapshot.currentPathStepTotal,
     })
 
     if (snapshot.completed) {
@@ -260,8 +262,11 @@ export const usePlannedRunner = (
     step: () => {
       void (async () => {
         if (running) return
-        const ready = await ensureSession()
-        if (!ready) return
+        if (plannedStatus === null) {
+          const started = await start()
+          if (!started) return
+          return
+        }
         await runSingleStep()
       })()
     },

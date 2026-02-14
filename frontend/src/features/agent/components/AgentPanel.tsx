@@ -58,6 +58,16 @@ export const AgentPanel = ({
         )
       : 0
 
+  const stepCurrentIndex =
+    plannedStatus && (plannedStatus.currentPathStepTotal ?? 0) > 0
+      ? Math.min(
+          plannedStatus.currentPathStepTotal ?? 0,
+          plannedStatus.currentStepOrder ?? 0,
+        )
+      : 0
+
+  const stepTotal = plannedStatus?.currentPathStepTotal ?? 0
+
   const edgeToNextStateId = new Map<string, string>()
   diagrams.forEach((diagram) => {
     diagram.transitions.forEach((transition) => {
@@ -85,7 +95,6 @@ export const AgentPanel = ({
       </div>
 
       <label className="agent-url-field">
-        <span>Target URL</span>
         <input
           type="url"
           placeholder="https://your-site.example"
@@ -143,6 +152,7 @@ export const AgentPanel = ({
         <div className="agent-planned-progress">
           <h4>Path Progress</h4>
           <p>path: {pathCurrentIndex}/{plannedStatus.plannedPaths}</p>
+          <p>step: {stepCurrentIndex}/{stepTotal}</p>
           <p>current state: {currentStateId ?? 'Awaiting signal'}</p>
           <p>next state: {nextStateId}</p>
         </div>

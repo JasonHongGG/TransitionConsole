@@ -93,7 +93,7 @@ export class PlannedRunner {
       completedPathsTotal: 0,
       replanCount: 0,
       completed: false,
-      currentStateId: null,
+      currentStateId: plan.paths[0]?.steps[0]?.fromStateId ?? null,
       nodeStatuses,
       edgeStatuses,
     }
@@ -157,18 +157,13 @@ export class PlannedRunner {
       this.runtime.pathIndex += 1
       this.runtime.stepIndex = 0
       this.runtime.completedPathsTotal += 1
-      return this.step()
-    }
-
-    const existingEdgeStatus = this.runtime.edgeStatuses[step.edgeId]
-    if (existingEdgeStatus === 'pass' || existingEdgeStatus === 'fail') {
-      log.log('step skipped due to existing edge status', {
-        runId: this.runtime.runId,
-        edgeId: step.edgeId,
-        status: existingEdgeStatus,
-      })
-      this.runtime.stepIndex += 1
-      return this.step()
+      const nextPath = this.runtime.plan.paths[this.runtime.pathIndex]
+      this.runtime.currentStateId = nextPath?.steps[0]?.fromStateId ?? this.runtime.currentStateId
+      return {
+        ok: true,
+        event: null,
+        snapshot: buildRuntimeSnapshot(this.runtime),
+      }
     }
 
     this.runtime.edgeStatuses[step.edgeId] = 'running'

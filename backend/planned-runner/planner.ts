@@ -84,6 +84,13 @@ const buildPlannerDiagrams = (
 const resolveGlobalEntryStateId = (sourceDiagrams: DiagramLike[], fallbackEntryStateIds: string[]): string | null => {
   const pageEntryDiagram = sourceDiagrams.find((diagram) => diagram.id === 'page_entry')
   if (pageEntryDiagram?.meta?.entryStateId) return pageEntryDiagram.meta.entryStateId
+
+  const initState = pageEntryDiagram?.states?.find((state) => {
+    const stateId = state.id.toLowerCase()
+    return stateId === 'init' || stateId.endsWith('.init')
+  })
+  if (initState) return initState.id
+
   return fallbackEntryStateIds[0] ?? null
 }
 
@@ -107,7 +114,10 @@ export const generatePlannedPaths = async (
   })
 
   const edgesById = new Map(allEdges.map((edge) => [edge.id, edge]))
-  const entrySet = globalEntryStateId ? new Set([globalEntryStateId]) : new Set(entryStateIds)
+  const requiredEntryStateId = globalEntryStateId ?? entryStateIds[0] ?? null
+  if (!requiredEntryStateId) {
+    throw new Error('Cannot resolve required entry state for page_entry.')
+  }
   const paths: PlannedTransitionPath[] = []
   const seenSignatures = new Set<string>()
 
@@ -121,7 +131,7 @@ export const generatePlannedPaths = async (
     const edges = edgeIds.map((edgeId) => edgesById.get(edgeId)).filter((edge): edge is RuntimeEdge => Boolean(edge))
     if (edges.length !== edgeIds.length) return
     if (edges[0].fromDiagramId !== 'page_entry') return
-    if (!entrySet.has(edges[0].fromStateId)) return
+    if (edges[0].fromStateId !== requiredEntryStateId) return
 
     const pathOrdinal = paths.length + 1
     seenSignatures.add(signature)

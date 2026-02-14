@@ -69,14 +69,14 @@ function App() {
     const map = new Map<string, string>()
     data?.diagrams.forEach((diagram) => {
       diagram.transitions.forEach((transition) => {
-        map.set(transition.id, transition.to)
+        map.set(transition.id, transition.from)
       })
     })
     visibleConnectors
-      .filter((connector) => connector.type === 'invokes' && connector.to.stateId)
+      .filter((connector) => connector.type === 'invokes' && connector.from.stateId)
       .forEach((connector) => {
-        if (connector.to.stateId) {
-          map.set(connector.id, connector.to.stateId)
+        if (connector.from.stateId) {
+          map.set(connector.id, connector.from.stateId)
         }
       })
     return map

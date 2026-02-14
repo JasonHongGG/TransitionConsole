@@ -99,6 +99,8 @@ export interface PlannedRunSnapshot {
   completed: boolean
   currentPathId: string | null
   currentStepId: string | null
+  currentStepOrder: number | null
+  currentPathStepTotal: number | null
   currentStateId: string | null
   totalPaths: number
   completedPaths: number

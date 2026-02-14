@@ -38,6 +38,8 @@ export const buildEmptySnapshot = (): PlannedRunSnapshot => ({
   completed: true,
   currentPathId: null,
   currentStepId: null,
+  currentStepOrder: null,
+  currentPathStepTotal: null,
   currentStateId: null,
   totalPaths: 0,
   completedPaths: 0,
@@ -58,13 +60,18 @@ export const buildRuntimeSnapshot = (runtime: RuntimeState, forceCompleted = fal
   const currentPath = completed ? null : runtime.plan.paths[runtime.pathIndex] ?? null
   const currentStep = currentPath?.steps[runtime.stepIndex] ?? null
   const coverage = computeCoverageSummary(runtime.nodeStatuses, runtime.edgeStatuses)
+  const pendingStateId = currentStep?.fromStateId ?? runtime.currentStateId
+  const currentStepOrder = currentPath && currentStep ? runtime.stepIndex + 1 : null
+  const currentPathStepTotal = currentPath ? currentPath.steps.length : null
 
   return {
     running: !completed,
     completed,
     currentPathId: currentPath?.id ?? null,
     currentStepId: currentStep?.id ?? null,
-    currentStateId: runtime.currentStateId,
+    currentStepOrder,
+    currentPathStepTotal,
+    currentStateId: pendingStateId,
     totalPaths: runtime.totalPlannedPaths,
     completedPaths: Math.min(runtime.completedPathsTotal, runtime.totalPlannedPaths),
     nodeStatuses: runtime.nodeStatuses,
