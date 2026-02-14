@@ -285,7 +285,7 @@ export const usePlannedRunner = (
 
       if (data.event) {
         const level = data.event.result === 'pass' ? 'success' : 'error'
-        const message = `${data.event.pathName}: ${data.event.step.label} → ${data.event.result.toUpperCase()}`
+        const message = `[${data.event.result.toUpperCase()}] ${data.event.step.label} : ${data.event.pathName}`
         appendLog(createLog(level, message, data.event))
         if (data.event.blockedReason) {
           appendLog(createLog('error', `Blocked: ${data.event.blockedReason}`, data.event))

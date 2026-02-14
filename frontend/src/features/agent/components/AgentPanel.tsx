@@ -239,22 +239,27 @@ export const AgentPanel = ({
       <div className="agent-card agent-path-card">
         <h4>Path Progress</h4>
         {plannedStatus ? (
-          <dl className="agent-keyvals">
-            <div className="agent-keyval-row">
-              <dt>Path</dt>
-              <dd>{pathCurrentIndex}/{plannedStatus.plannedPaths}</dd>
+          <dl className="agent-keyvals agent-keyvals-columns">
+            <div className="agent-keyval-column compact">
+              <div className="agent-keyval-row">
+                <dt>Path</dt>
+                <dd>{pathCurrentIndex}/{plannedStatus.plannedPaths}</dd>
+              </div>
+              <div className="agent-keyval-row">
+                <dt>Step</dt>
+                <dd>{stepCurrentIndex}/{stepTotal}</dd>
+              </div>
             </div>
-            <div className="agent-keyval-row">
-              <dt>Step</dt>
-              <dd>{stepCurrentIndex}/{stepTotal}</dd>
-            </div>
-            <div className="agent-keyval-row">
-              <dt>Current State</dt>
-              <dd>{currentStateId ?? 'Awaiting signal'}</dd>
-            </div>
-            <div className="agent-keyval-row">
-              <dt>Next State</dt>
-              <dd>{nextStateId}</dd>
+
+            <div className="agent-keyval-column wide">
+              <div className="agent-keyval-row">
+                <dt>Current State</dt>
+                <dd>{currentStateId ?? 'Awaiting signal'}</dd>
+              </div>
+              <div className="agent-keyval-row">
+                <dt>Next State</dt>
+                <dd>{nextStateId}</dd>
+              </div>
             </div>
           </dl>
         ) : (
@@ -271,16 +276,18 @@ export const AgentPanel = ({
             {latestEvent ? (
               <>
                 <p className="agent-validation-summary">
-                  {latestEvent.pathName}: {latestEvent.step.label} → {latestEvent.result.toUpperCase()}
+                  [{latestEvent.result.toUpperCase()}] {latestEvent.step.label} : {latestEvent.pathName}
                 </p>
                 {latestEvent.blockedReason ? <p className="agent-validation-summary">Blocked: {latestEvent.blockedReason}</p> : null}
                 {hasValidationResults ? (
                   <ul>
                     {(latestEvent.validationResults ?? []).map((validation) => (
-                      <li key={validation.id} className={`log ${validation.status === 'pass' ? 'success' : 'error'}`}>
-                        <span>{validation.status.toUpperCase()}</span>
-                        <span>{validation.label}</span>
-                        <span>{validation.reason}</span>
+                      <li key={validation.id} className="agent-validation-row">
+                        <span className={`validation-status-tag ${validation.status}`}>
+                          {validation.status.toUpperCase()}
+                        </span>
+                        <span className="validation-label">{validation.label}</span>
+                        <span className="validation-reason">{validation.reason}</span>
                       </li>
                     ))}
                   </ul>
