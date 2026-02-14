@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react'
 import { curveCatmullRom, line, select, zoom, type ZoomBehavior, type ZoomTransform, zoomIdentity } from 'd3'
 import type { CoverageState, Diagram, ElementExecutionStatus } from '../../../types'
 import { layoutDiagram } from '../../../shared/utils/layout'
@@ -10,6 +10,7 @@ interface DiagramViewProps {
   isTesting?: boolean
   activeEdgeId?: string | null
   nextStateId?: string | null
+  focusMode?: 'off' | 'current' | 'path'
 }
 
 const EDGE_STATUSES: ElementExecutionStatus[] = ['untested', 'running', 'pass', 'fail']
@@ -25,6 +26,7 @@ export const DiagramView = ({
   isTesting = false,
   activeEdgeId = null,
   nextStateId = null,
+  focusMode = 'path',
 }: DiagramViewProps) => {
   const layout = useMemo(() => layoutDiagram(diagram), [diagram])
   const svgRef = useRef<SVGSVGElement>(null)
@@ -128,6 +130,78 @@ export const DiagramView = ({
     const fitTransform = computeFitTransform()
     select(svgRef.current).call(zoomBehaviorRef.current.transform, fitTransform)
   }, [diagram.id, computeFitTransform])
+
+  useEffect(() => {
+    if (focusMode === 'off') return
+    if (!svgRef.current || !zoomBehaviorRef.current) return
+
+    let minX = Number.POSITIVE_INFINITY
+    let maxX = Number.NEGATIVE_INFINITY
+    let minY = Number.POSITIVE_INFINITY
+    let maxY = Number.NEGATIVE_INFINITY
+
+    const includePoint = (x: number, y: number) => {
+      minX = Math.min(minX, x)
+      maxX = Math.max(maxX, x)
+      minY = Math.min(minY, y)
+      maxY = Math.max(maxY, y)
+    }
+
+    const includeNodeBounds = (node: { x: number; y: number; width: number; height: number }) => {
+      includePoint(node.x - node.width / 2, node.y - node.height / 2)
+      includePoint(node.x + node.width / 2, node.y + node.height / 2)
+    }
+
+    let hasTarget = false
+    const currentNode = currentStateId ? layout.nodes.find((node) => node.id === currentStateId) : null
+    if (currentNode) {
+      includeNodeBounds(currentNode)
+      hasTarget = true
+    }
+
+    if (focusMode === 'path') {
+      const nextNode = nextStateId ? layout.nodes.find((node) => node.id === nextStateId) : null
+      if (nextNode) {
+        includeNodeBounds(nextNode)
+        hasTarget = true
+      }
+
+      const activeEdge = activeEdgeId ? layout.edges.find((edge) => edge.id === activeEdgeId) : null
+      if (activeEdge?.points.length) {
+        const edgeCenter = activeEdge.points[Math.floor(activeEdge.points.length / 2)]
+        includePoint(edgeCenter.x, edgeCenter.y)
+      }
+    }
+
+    if (!hasTarget) return
+
+    const { width: svgW, height: svgH } = svgRef.current.getBoundingClientRect()
+    if (svgW === 0 || svgH === 0) return
+
+    const centerX = (minX + maxX) / 2
+    const centerY = (minY + maxY) / 2
+
+    const targetScale = (() => {
+      if (focusMode === 'current') {
+        return 3.6
+      }
+      const padding = 56
+      const focusW = Math.max(1, maxX - minX + padding * 2)
+      const focusH = Math.max(1, maxY - minY + padding * 2)
+      const fitScale = Math.min(svgW / focusW, svgH / focusH)
+      return Math.min(2.8, fitScale)
+    })()
+
+    const scale = Math.max(0.05, Math.min(5, targetScale))
+    const targetTransform = zoomIdentity
+      .translate(svgW / 2 - centerX * scale, svgH / 2 - centerY * scale)
+      .scale(scale)
+
+    select(svgRef.current)
+      .transition()
+      .duration(280)
+      .call(zoomBehaviorRef.current.transform, targetTransform)
+  }, [focusMode, currentStateId, nextStateId, activeEdgeId, layout.nodes, layout.edges])
 
   return (
     <div className="diagram-canvas" style={{ overflow: 'hidden' }}>

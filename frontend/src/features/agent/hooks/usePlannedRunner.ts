@@ -35,6 +35,8 @@ export interface PlannedRunnerState {
   completed: boolean
   fullCoveragePassed: boolean | null
   currentStateId: string | null
+  nextStateId: string | null
+  activeEdgeId: string | null
   logs: AgentLogEntry[]
   coverage: CoverageState
   plannedStatus: PlannedRunnerStatus | null
@@ -74,6 +76,8 @@ export const usePlannedRunner = (
   const [completed, setCompleted] = useState(false)
   const [fullCoveragePassed, setFullCoveragePassed] = useState<boolean | null>(null)
   const [currentStateId, setCurrentStateId] = useState<string | null>(null)
+  const [nextStateId, setNextStateId] = useState<string | null>(null)
+  const [activeEdgeId, setActiveEdgeId] = useState<string | null>(null)
   const [targetUrl, setTargetUrl] = useState('')
   const [logs, setLogs] = useState<AgentLogEntry[]>([])
   const [latestEvent, setLatestEvent] = useState<PlannedStepEvent | null>(null)
@@ -114,6 +118,8 @@ export const usePlannedRunner = (
     }
 
     setCurrentStateId(snapshot.currentStateId)
+    setNextStateId(snapshot.nextStateId)
+    setActiveEdgeId(snapshot.activeEdgeId)
     setCoverage((prev) => {
       const visitedNodes = new Set(prev.visitedNodes)
       Object.entries(snapshot.nodeStatuses).forEach(([nodeId, status]) => {
@@ -340,6 +346,8 @@ export const usePlannedRunner = (
       setPlannerRound(0)
       maxKnownPathCountRef.current = 0
       setCurrentStateId(null)
+      setNextStateId(null)
+      setActiveEdgeId(null)
       setPlannedStatus(null)
       setLogs([])
       setLatestEvent(null)
@@ -405,6 +413,8 @@ export const usePlannedRunner = (
     completed,
     fullCoveragePassed,
     currentStateId,
+    nextStateId,
+    activeEdgeId,
     logs,
     coverage,
     plannedStatus,

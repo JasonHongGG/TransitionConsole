@@ -6,6 +6,9 @@ import { SystemView } from '../features/system'
 import { AgentPanel, usePlannedRunner } from '../features/agent'
 
 type ViewMode = 'diagram' | 'system'
+type FocusMode = 'off' | 'current' | 'path'
+
+const FOCUS_MODE_ORDER: FocusMode[] = ['off', 'current', 'path']
 
 function App() {
   const [data, setData] = useState<GraphData | null>(null)
@@ -17,6 +20,7 @@ function App() {
   const [focusDiagramId, setFocusDiagramId] = useState<string | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [agentPanelCollapsed, setAgentPanelCollapsed] = useState(false)
+  const [focusMode, setFocusMode] = useState<FocusMode>('path')
 
   useEffect(() => {
     const loadData = async () => {
@@ -60,33 +64,13 @@ function App() {
   const agentRunner = usePlannedRunner(data?.diagrams ?? [], visibleConnectors, data?.spec.raw ?? null)
   const isTestingPhase = agentRunner.running || agentRunner.plannedStatus !== null
 
-  const activeStepEdgeId = useMemo(() => {
-    const rawStepId = agentRunner.plannedStatus?.currentStepId
-    if (!rawStepId) return null
-    return rawStepId.replace(/\.step\.\d+$/, '')
-  }, [agentRunner.plannedStatus?.currentStepId])
-
-  const edgeToNextStateId = useMemo(() => {
-    const map = new Map<string, string>()
-    data?.diagrams.forEach((diagram) => {
-      diagram.transitions.forEach((transition) => {
-        map.set(transition.id, transition.from)
-      })
+  const cycleFocusMode = () => {
+    setFocusMode((prev) => {
+      const index = FOCUS_MODE_ORDER.indexOf(prev)
+      const nextIndex = index === -1 ? 0 : (index + 1) % FOCUS_MODE_ORDER.length
+      return FOCUS_MODE_ORDER[nextIndex]
     })
-    visibleConnectors
-      .filter((connector) => connector.type === 'invokes' && connector.from.stateId)
-      .forEach((connector) => {
-        if (connector.from.stateId) {
-          map.set(connector.id, connector.from.stateId)
-        }
-      })
-    return map
-  }, [data?.diagrams, visibleConnectors])
-
-  const nextStateId = useMemo(() => {
-    if (!activeStepEdgeId) return null
-    return edgeToNextStateId.get(activeStepEdgeId) ?? null
-  }, [activeStepEdgeId, edgeToNextStateId])
+  }
 
   const selectedDiagram = useMemo(
     () => data?.diagrams.find((diagram) => diagram.id === selectedDiagramId) ?? null,
@@ -452,8 +436,9 @@ function App() {
                     coverage={agentRunner.coverage}
                     currentStateId={agentRunner.currentStateId}
                     isTesting={isTestingPhase}
-                    activeEdgeId={activeStepEdgeId}
-                    nextStateId={nextStateId}
+                    activeEdgeId={agentRunner.activeEdgeId}
+                    nextStateId={agentRunner.nextStateId}
+                    focusMode={focusMode}
                   />
                 ) : (
                   <SystemView
@@ -463,8 +448,9 @@ function App() {
                     currentStateId={agentRunner.currentStateId}
                     selectedDiagramId={focusDiagramId ?? undefined}
                     isTesting={isTestingPhase}
-                    activeEdgeId={activeStepEdgeId}
-                    nextStateId={nextStateId}
+                    activeEdgeId={agentRunner.activeEdgeId}
+                    nextStateId={agentRunner.nextStateId}
+                    focusMode={focusMode}
                   />
                 )}
               </div>
@@ -497,6 +483,7 @@ function App() {
                 latestEvent={agentRunner.latestEvent}
                 running={agentRunner.running}
                 isBusy={agentRunner.isBusy}
+                nextStateId={agentRunner.nextStateId}
                 statusMessage={agentRunner.statusMessage}
                 statusTone={agentRunner.statusTone}
                 lastError={agentRunner.lastError}
@@ -510,6 +497,8 @@ function App() {
                 targetUrl={agentRunner.targetUrl}
                 onTargetUrlChange={agentRunner.setTargetUrl}
                 plannedStatus={agentRunner.plannedStatus}
+                focusMode={focusMode}
+                onCycleFocusMode={cycleFocusMode}
               />
             </div>
           </aside>

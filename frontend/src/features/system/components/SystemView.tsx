@@ -14,6 +14,7 @@ interface SystemViewProps {
   isTesting?: boolean
   activeEdgeId?: string | null
   nextStateId?: string | null
+  focusMode?: 'off' | 'current' | 'path'
 }
 
 interface NodeRelationItem {
@@ -35,6 +36,7 @@ export const SystemView = ({
   isTesting = false,
   activeEdgeId = null,
   nextStateId = null,
+  focusMode = 'path',
 }: SystemViewProps) => {
   const systemLayout = useMemo(
     () => computeSystemLayout(diagrams, connectors),
@@ -318,6 +320,88 @@ export const SystemView = ({
       })
     }
   }, [selectedNodeId, nodesById])
+
+  useEffect(() => {
+    if (focusMode === 'off') return
+    if (!svgRef.current || !zoomBehaviorRef.current) return
+
+    let minX = Number.POSITIVE_INFINITY
+    let maxX = Number.NEGATIVE_INFINITY
+    let minY = Number.POSITIVE_INFINITY
+    let maxY = Number.NEGATIVE_INFINITY
+
+    const includePoint = (x: number, y: number) => {
+      minX = Math.min(minX, x)
+      maxX = Math.max(maxX, x)
+      minY = Math.min(minY, y)
+      maxY = Math.max(maxY, y)
+    }
+
+    const includeNodeBounds = (node: { x: number; y: number; width: number; height: number }) => {
+      includePoint(node.x - node.width / 2, node.y - node.height / 2)
+      includePoint(node.x + node.width / 2, node.y + node.height / 2)
+    }
+
+    let hasTarget = false
+    const currentNode = currentStateId ? nodesById.get(currentStateId) : null
+    if (currentNode) {
+      includeNodeBounds(currentNode)
+      hasTarget = true
+    }
+
+    if (focusMode === 'path') {
+      const nextNode = nextStateId ? nodesById.get(nextStateId) : null
+      if (nextNode) {
+        includeNodeBounds(nextNode)
+        hasTarget = true
+      }
+
+      if (activeEdgeId) {
+        const intraEdge = systemLayout.intraEdges.find((edge) => edge.id === activeEdgeId)
+        if (intraEdge?.points.length) {
+          const edgeCenter = intraEdge.points[Math.floor(intraEdge.points.length / 2)]
+          includePoint(edgeCenter.x, edgeCenter.y)
+        }
+        const crossEdge = systemLayout.crossEdges.find((edge) => edge.id === activeEdgeId)
+        if (crossEdge) {
+          includePoint((crossEdge.from.x + crossEdge.to.x) / 2, (crossEdge.from.y + crossEdge.to.y) / 2)
+        }
+        const variantEdge = systemLayout.variantEdges.find((edge) => edge.id === activeEdgeId)
+        if (variantEdge) {
+          includePoint((variantEdge.from.x + variantEdge.to.x) / 2, (variantEdge.from.y + variantEdge.to.y) / 2)
+        }
+      }
+    }
+
+    if (!hasTarget) return
+
+    const { width: svgW, height: svgH } = svgRef.current.getBoundingClientRect()
+    if (svgW === 0 || svgH === 0) return
+
+    const centerX = (minX + maxX) / 2
+    const centerY = (minY + maxY) / 2
+
+    const targetScale = (() => {
+      if (focusMode === 'current') {
+        return 3.2
+      }
+      const padding = 56
+      const focusW = Math.max(1, maxX - minX + padding * 2)
+      const focusH = Math.max(1, maxY - minY + padding * 2)
+      const fitScale = Math.min(svgW / focusW, svgH / focusH)
+      return Math.min(2.5, fitScale)
+    })()
+
+    const scale = Math.max(0.02, Math.min(8, targetScale))
+    const targetTransform = zoomIdentity
+      .translate(svgW / 2 - centerX * scale, svgH / 2 - centerY * scale)
+      .scale(scale)
+
+    select(svgRef.current)
+      .transition()
+      .duration(300)
+      .call(zoomBehaviorRef.current.transform, targetTransform)
+  }, [focusMode, currentStateId, nextStateId, activeEdgeId, nodesById, systemLayout.intraEdges, systemLayout.crossEdges, systemLayout.variantEdges])
 
   const renderRelationSection = (title: string, items: NodeRelationItem[]) => (
     <section className="system-node-info-section">

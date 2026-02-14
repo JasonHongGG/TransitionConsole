@@ -1594,6 +1594,22 @@
   cursor: not-allowed;
 }
 
+.agent-icon-btn.focus-toggle.mode-off {
+  color: var(--muted);
+}
+
+.agent-icon-btn.focus-toggle.mode-current {
+  border-color: rgba(255, 204, 119, 0.45);
+  background: rgba(255, 204, 119, 0.14);
+  color: #ffe0a8;
+}
+
+.agent-icon-btn.focus-toggle.mode-path {
+  border-color: rgba(110, 224, 255, 0.45);
+  background: rgba(110, 224, 255, 0.14);
+  color: var(--accent);
+}
+
 .agent-summary {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

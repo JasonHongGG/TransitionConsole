@@ -50,6 +50,8 @@ export interface PlannedRunSnapshot {
   currentStepOrder: number | null
   currentPathStepTotal: number | null
   currentStateId: string | null
+  nextStateId: string | null
+  activeEdgeId: string | null
   totalPaths: number
   completedPaths: number
   nodeStatuses: Record<string, ElementExecutionStatus>

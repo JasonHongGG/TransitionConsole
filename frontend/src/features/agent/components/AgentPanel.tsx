@@ -5,6 +5,7 @@ interface AgentPanelProps {
   coverage: CoverageState
   logs: AgentLogEntry[]
   currentStateId: string | null
+  nextStateId: string | null
   latestEvent: PlannedStepEvent | null
   running: boolean
   isBusy: boolean
@@ -21,6 +22,8 @@ interface AgentPanelProps {
   targetUrl: string
   onTargetUrlChange: (value: string) => void
   plannedStatus: PlannedRunnerStatus | null
+  focusMode: 'off' | 'current' | 'path'
+  onCycleFocusMode: () => void
 }
 
 const formatTime = (value: string) => new Date(value).toLocaleTimeString()
@@ -30,6 +33,7 @@ export const AgentPanel = ({
   coverage,
   logs,
   currentStateId,
+  nextStateId,
   latestEvent,
   running,
   isBusy,
@@ -46,6 +50,8 @@ export const AgentPanel = ({
   targetUrl,
   onTargetUrlChange,
   plannedStatus,
+  focusMode,
+  onCycleFocusMode,
 }: AgentPanelProps) => {
   const allStates = diagrams.flatMap((diagram) => diagram.states)
   const totalStates = allStates.length
@@ -99,22 +105,10 @@ export const AgentPanel = ({
               ? 'Error'
               : 'Idle'
 
-  const edgeToNextStateId = new Map<string, string>()
-  diagrams.forEach((diagram) => {
-    diagram.transitions.forEach((transition) => {
-      edgeToNextStateId.set(transition.id, transition.to)
-    })
-    diagram.connectors
-      .filter((connector) => connector.type === 'invokes' && connector.to.stateId)
-      .forEach((connector) => {
-        edgeToNextStateId.set(connector.id, connector.to.stateId as string)
-      })
-  })
+  const focusModeLabel =
+    focusMode === 'off' ? 'Focus: Off' : focusMode === 'current' ? 'Focus: Current Node' : 'Focus: Path'
 
-  const currentStepEdgeId = plannedStatus?.currentStepId
-    ? plannedStatus.currentStepId.replace(/\.step\.\d+$/, '')
-    : null
-  const nextStateId = currentStepEdgeId ? (edgeToNextStateId.get(currentStepEdgeId) ?? 'N/A') : 'N/A'
+  const nextStateLabel = nextStateId ?? 'N/A'
 
   return (
     <div className="panel agent-panel">
@@ -182,6 +176,22 @@ export const AgentPanel = ({
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 5a7 7 0 1 1-6.2 3.75" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
               <path d="M4.8 5.2v4.2H9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className={`agent-icon-btn focus-toggle mode-${focusMode}`}
+            onClick={onCycleFocusMode}
+            title={focusModeLabel}
+            aria-label={focusModeLabel}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" strokeWidth="1.7" />
+              <circle cx="12" cy="12" r="2.1" fill="currentColor" />
+              <path d="M12 3v3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              <path d="M12 18v3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              <path d="M3 12h3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+              <path d="M18 12h3" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
             </svg>
           </button>
         </div>
@@ -254,11 +264,11 @@ export const AgentPanel = ({
             <div className="agent-keyval-column wide">
               <div className="agent-keyval-row">
                 <dt>Current State</dt>
-                <dd>{currentStateId ?? 'Awaiting signal'}</dd>
+                <dd>{currentStateId ?? 'N/A'}</dd>
               </div>
               <div className="agent-keyval-row">
                 <dt>Next State</dt>
-                <dd>{nextStateId}</dd>
+                <dd>{nextStateLabel}</dd>
               </div>
             </div>
           </dl>

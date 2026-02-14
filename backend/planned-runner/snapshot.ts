@@ -41,6 +41,8 @@ export const buildEmptySnapshot = (): PlannedRunSnapshot => ({
   currentStepOrder: null,
   currentPathStepTotal: null,
   currentStateId: null,
+  nextStateId: null,
+  activeEdgeId: null,
   totalPaths: 0,
   completedPaths: 0,
   nodeStatuses: {},
@@ -60,9 +62,30 @@ export const buildRuntimeSnapshot = (runtime: RuntimeState, forceCompleted = fal
   const currentPath = completed ? null : runtime.plan.paths[runtime.pathIndex] ?? null
   const currentStep = currentPath?.steps[runtime.stepIndex] ?? null
   const coverage = computeCoverageSummary(runtime.nodeStatuses, runtime.edgeStatuses)
-  const pendingStateId = currentStep?.fromStateId ?? runtime.currentStateId
   const currentStepOrder = currentPath && currentStep ? runtime.stepIndex + 1 : null
   const currentPathStepTotal = currentPath ? currentPath.steps.length : null
+
+  let currentStateId: string | null = null
+  let nextStateId: string | null = null
+  let activeEdgeId: string | null = null
+
+  if (currentPath && currentPath.steps.length > 0) {
+    if (runtime.stepIndex <= 0) {
+      currentStateId = null
+      nextStateId = currentPath.steps[0]?.fromStateId ?? null
+      activeEdgeId = null
+    } else if (runtime.stepIndex < currentPath.steps.length) {
+      const previousStep = currentPath.steps[runtime.stepIndex - 1]
+      currentStateId = previousStep.fromStateId
+      nextStateId = previousStep.toStateId
+      activeEdgeId = previousStep.edgeId
+    } else {
+      const lastStep = currentPath.steps[currentPath.steps.length - 1]
+      currentStateId = lastStep?.toStateId ?? null
+      nextStateId = null
+      activeEdgeId = null
+    }
+  }
 
   return {
     running: !completed,
@@ -71,7 +94,9 @@ export const buildRuntimeSnapshot = (runtime: RuntimeState, forceCompleted = fal
     currentStepId: currentStep?.id ?? null,
     currentStepOrder,
     currentPathStepTotal,
-    currentStateId: pendingStateId,
+    currentStateId,
+    nextStateId,
+    activeEdgeId,
     totalPaths: runtime.totalPlannedPaths,
     completedPaths: Math.min(runtime.completedPathsTotal, runtime.totalPlannedPaths),
     nodeStatuses: runtime.nodeStatuses,
