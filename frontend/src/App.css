@@ -1818,10 +1818,11 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(150px, 1fr) minmax(180px, 1fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
   position: relative;
   z-index: 1;
+  overflow: hidden;
 }
 
 .agent-scroll-card {
@@ -1829,6 +1830,11 @@
   display: flex;
   flex-direction: column;
   padding: 0;
+  overflow: hidden;
+}
+
+.agent-scroll-card.live-events-card {
+  max-height: min(26vh, 220px);
 }
 
 .agent-card-header {

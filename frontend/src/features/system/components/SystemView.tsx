@@ -344,13 +344,17 @@ export const SystemView = ({
 
     let hasTarget = false
     const currentNode = currentStateId ? nodesById.get(currentStateId) : null
+    const nextNode = nextStateId ? nodesById.get(nextStateId) : null
+
     if (currentNode) {
       includeNodeBounds(currentNode)
       hasTarget = true
+    } else if (nextNode) {
+      includeNodeBounds(nextNode)
+      hasTarget = true
     }
 
-    if (focusMode === 'path') {
-      const nextNode = nextStateId ? nodesById.get(nextStateId) : null
+    if (focusMode === 'path' && currentNode) {
       if (nextNode) {
         includeNodeBounds(nextNode)
         hasTarget = true
@@ -383,7 +387,7 @@ export const SystemView = ({
 
     const targetScale = (() => {
       if (focusMode === 'current') {
-        return 3.2
+        return 1.6
       }
       const padding = 56
       const focusW = Math.max(1, maxX - minX + padding * 2)

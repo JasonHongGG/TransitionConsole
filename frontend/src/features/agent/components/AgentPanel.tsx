@@ -81,8 +81,8 @@ export const AgentPanel = ({
   const stepCurrentIndex =
     plannedStatus && (plannedStatus.currentPathStepTotal ?? 0) > 0
       ? Math.min(
-          Math.max(0, (plannedStatus.currentStepOrder ?? 0) - 1),
-          Math.max(0, (plannedStatus.currentPathStepTotal ?? 0) - 1),
+          Math.max(0, plannedStatus.currentStepOrder ?? 0),
+          Math.max(0, plannedStatus.currentPathStepTotal ?? 0),
         )
       : 0
 
@@ -248,33 +248,29 @@ export const AgentPanel = ({
 
       <div className="agent-card agent-path-card">
         <h4>Path Progress</h4>
-        {plannedStatus ? (
-          <dl className="agent-keyvals agent-keyvals-columns">
-            <div className="agent-keyval-column compact">
-              <div className="agent-keyval-row">
-                <dt>Path</dt>
-                <dd>{pathCurrentIndex}/{plannedStatus.plannedPaths}</dd>
-              </div>
-              <div className="agent-keyval-row">
-                <dt>Step</dt>
-                <dd>{stepCurrentIndex}/{stepTotal}</dd>
-              </div>
+        <dl className="agent-keyvals agent-keyvals-columns">
+          <div className="agent-keyval-column compact">
+            <div className="agent-keyval-row">
+              <dt>Path</dt>
+              <dd>{plannedStatus ? `${pathCurrentIndex}/${plannedStatus.plannedPaths}` : 'N/A'}</dd>
             </div>
+            <div className="agent-keyval-row">
+              <dt>Step</dt>
+              <dd>{plannedStatus ? `${stepCurrentIndex}/${stepTotal}` : 'N/A'}</dd>
+            </div>
+          </div>
 
-            <div className="agent-keyval-column wide">
-              <div className="agent-keyval-row">
-                <dt>Current State</dt>
-                <dd>{currentStateId ?? 'N/A'}</dd>
-              </div>
-              <div className="agent-keyval-row">
-                <dt>Next State</dt>
-                <dd>{nextStateLabel}</dd>
-              </div>
+          <div className="agent-keyval-column wide">
+            <div className="agent-keyval-row">
+              <dt>Current State</dt>
+              <dd>{plannedStatus ? (currentStateId ?? 'N/A') : 'N/A'}</dd>
             </div>
-          </dl>
-        ) : (
-          <p className="muted">No planned path yet. Press Start or Step to initialize planner.</p>
-        )}
+            <div className="agent-keyval-row">
+              <dt>Next State</dt>
+              <dd>{plannedStatus ? nextStateLabel : 'N/A'}</dd>
+            </div>
+          </div>
+        </dl>
       </div>
 
       <div className="agent-detail-stack">
@@ -311,7 +307,7 @@ export const AgentPanel = ({
           </div>
         </section>
 
-        <section className="agent-card agent-scroll-card">
+        <section className="agent-card agent-scroll-card live-events-card">
           <div className="agent-card-header">
             <h4>Live Events</h4>
           </div>

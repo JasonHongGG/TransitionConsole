@@ -154,13 +154,17 @@ export const DiagramView = ({
 
     let hasTarget = false
     const currentNode = currentStateId ? layout.nodes.find((node) => node.id === currentStateId) : null
+    const nextNode = nextStateId ? layout.nodes.find((node) => node.id === nextStateId) : null
+
     if (currentNode) {
       includeNodeBounds(currentNode)
       hasTarget = true
+    } else if (nextNode) {
+      includeNodeBounds(nextNode)
+      hasTarget = true
     }
 
-    if (focusMode === 'path') {
-      const nextNode = nextStateId ? layout.nodes.find((node) => node.id === nextStateId) : null
+    if (focusMode === 'path' && currentNode) {
       if (nextNode) {
         includeNodeBounds(nextNode)
         hasTarget = true

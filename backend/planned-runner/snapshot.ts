@@ -62,7 +62,7 @@ export const buildRuntimeSnapshot = (runtime: RuntimeState, forceCompleted = fal
   const currentPath = completed ? null : runtime.plan.paths[runtime.pathIndex] ?? null
   const currentStep = currentPath?.steps[runtime.stepIndex] ?? null
   const coverage = computeCoverageSummary(runtime.nodeStatuses, runtime.edgeStatuses)
-  const currentStepOrder = currentPath && currentStep ? runtime.stepIndex + 1 : null
+  const currentStepOrder = currentPath ? Math.min(runtime.stepIndex, currentPath.steps.length) : null
   const currentPathStepTotal = currentPath ? currentPath.steps.length : null
 
   let currentStateId: string | null = null
