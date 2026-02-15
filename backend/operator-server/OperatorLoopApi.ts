@@ -25,7 +25,7 @@ const postJson = async <TRequest extends object, TResponse>(baseUrl: string, pat
   return payload as TResponse
 }
 
-export class HttpOperatorLoopAgent implements OperatorLoopAgent {
+export class OperatorLoopApi implements OperatorLoopAgent {
   private readonly aiBaseUrl: string
 
   constructor(options?: { aiBaseUrl?: string }) {

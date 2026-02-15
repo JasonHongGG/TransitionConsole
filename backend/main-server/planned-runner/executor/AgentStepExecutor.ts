@@ -1,7 +1,7 @@
 import { createLogger } from '../../common/logger'
 import type { ExecutorContext, PlannedTransitionStep, StepExecutionResult, StepExecutor } from '../types'
 import type { BrowserOperator, InstructionPlanner, StepNarrator } from './contracts'
-import { HttpInstructionPlanner } from '../remote/HttpInstructionPlanner'
+import { InstructionPlannerApi } from '../api/InstructionPlannerApi'
 import { StepNarratorAgent } from './instruction/StepNarratorAgent'
 import { PlaywrightBrowserOperator, SimulatedBrowserOperator } from './operators'
 
@@ -14,7 +14,7 @@ export class AgentStepExecutor implements StepExecutor {
 
   constructor(options?: { narrator?: StepNarrator; planner?: InstructionPlanner; operator?: BrowserOperator }) {
     this.narrator = options?.narrator ?? new StepNarratorAgent()
-    this.planner = options?.planner ?? new HttpInstructionPlanner()
+    this.planner = options?.planner ?? new InstructionPlannerApi()
     const realOperatorEnabled = process.env.PLANNED_RUNNER_REAL_BROWSER === 'true'
     this.operator = options?.operator ?? (realOperatorEnabled ? new PlaywrightBrowserOperator() : new SimulatedBrowserOperator())
   }

@@ -5,10 +5,10 @@ import { PlannedRunner } from './planned-runner'
 import { shouldResetPlannerCursorOnStart } from './planned-runner/planner/plannerProvider/pathPlannerFactory'
 import { createPlannedRoutes } from './routes/plannedRoutes'
 import { AgentStepExecutor } from './planned-runner/executor'
-import { HttpBrowserOperator } from './planned-runner/remote/HttpBrowserOperator'
-import { HttpInstructionPlanner } from './planned-runner/remote/HttpInstructionPlanner'
-import { HttpPathPlanner } from './planned-runner/remote/HttpPathPlanner'
-import { HttpStepNarrator } from './planned-runner/remote/HttpStepNarrator'
+import { BrowserOperatorApi } from './planned-runner/api/BrowserOperatorApi'
+import { InstructionPlannerApi } from './planned-runner/api/InstructionPlannerApi'
+import { PathPlannerApi } from './planned-runner/api/PathPlannerApi'
+import { StepNarratorApi } from './planned-runner/api/StepNarratorApi'
 
 const log = createLogger('main-server')
 
@@ -20,15 +20,15 @@ export const startMainServer = (): void => {
   const port = Number(process.env.PORT ?? 7070)
 
   const plannedRunner = new PlannedRunner({
-    pathPlanner: new HttpPathPlanner({
+    pathPlanner: new PathPlannerApi({
       aiBaseUrl: process.env.AI_SERVER_BASE_URL,
     }),
     resetPlannerCursorOnStart: shouldResetPlannerCursorOnStart(),
     executor: new AgentStepExecutor({
-      narrator: new HttpStepNarrator({ aiBaseUrl: process.env.AI_SERVER_BASE_URL }),
-      planner: new HttpInstructionPlanner({ aiBaseUrl: process.env.AI_SERVER_BASE_URL }),
+      narrator: new StepNarratorApi({ aiBaseUrl: process.env.AI_SERVER_BASE_URL }),
+      planner: new InstructionPlannerApi({ aiBaseUrl: process.env.AI_SERVER_BASE_URL }),
       operator: process.env.PLANNED_RUNNER_REAL_BROWSER === 'true'
-        ? new HttpBrowserOperator({ operatorBaseUrl: process.env.OPERATOR_SERVER_BASE_URL })
+        ? new BrowserOperatorApi({ operatorBaseUrl: process.env.OPERATOR_SERVER_BASE_URL })
         : undefined,
     }),
   })

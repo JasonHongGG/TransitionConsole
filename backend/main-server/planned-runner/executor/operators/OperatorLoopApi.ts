@@ -7,9 +7,9 @@ import type {
   OperatorLoopDecideRequest,
   OperatorLoopDecideResponse,
 } from '../../../shared/contracts'
-import { postJson } from '../../remote/httpClient'
+import { postApiJson } from '../../api/apiClient'
 
-export class RemoteOperatorLoopAgent implements OperatorLoopAgent {
+export class OperatorLoopApi implements OperatorLoopAgent {
   private readonly aiBaseUrl: string
   private readonly timeoutMs: number
 
@@ -19,7 +19,7 @@ export class RemoteOperatorLoopAgent implements OperatorLoopAgent {
   }
 
   async decide(input: LoopDecisionInput): Promise<LoopDecision> {
-    return postJson<OperatorLoopDecideRequest, OperatorLoopDecideResponse>(
+    return postApiJson<OperatorLoopDecideRequest, OperatorLoopDecideResponse>(
       this.aiBaseUrl,
       '/api/ai/agents/operator-loop/decide',
       input,
@@ -28,7 +28,7 @@ export class RemoteOperatorLoopAgent implements OperatorLoopAgent {
   }
 
   async appendFunctionResponses(runId: string, pathId: string, responses: LoopFunctionResponse[]): Promise<void> {
-    await postJson<OperatorLoopAppendFunctionResponsesRequest, OperatorLoopAppendFunctionResponsesResponse>(
+    await postApiJson<OperatorLoopAppendFunctionResponsesRequest, OperatorLoopAppendFunctionResponsesResponse>(
       this.aiBaseUrl,
       '/api/ai/agents/operator-loop/append-function-responses',
       { runId, pathId, responses },
@@ -37,7 +37,7 @@ export class RemoteOperatorLoopAgent implements OperatorLoopAgent {
   }
 
   async cleanupRun(runId: string): Promise<void> {
-    await postJson<OperatorLoopCleanupRunRequest, OperatorLoopCleanupRunResponse>(
+    await postApiJson<OperatorLoopCleanupRunRequest, OperatorLoopCleanupRunResponse>(
       this.aiBaseUrl,
       '/api/ai/agents/operator-loop/cleanup-run',
       { runId },

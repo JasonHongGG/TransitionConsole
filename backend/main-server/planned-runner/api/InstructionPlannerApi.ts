@@ -1,9 +1,9 @@
 import type { ExecutorContext, PlannedTransitionStep, StepAssertionSpec, StepInstruction } from '../types'
 import type { InstructionPlanner } from '../executor/contracts'
 import type { InstructionPlannerBuildRequest, InstructionPlannerBuildResponse } from '../../shared/contracts'
-import { postJson } from './httpClient'
+import { postApiJson } from './apiClient'
 
-export class HttpInstructionPlanner implements InstructionPlanner {
+export class InstructionPlannerApi implements InstructionPlanner {
   private readonly aiBaseUrl: string
   private readonly timeoutMs: number
 
@@ -16,7 +16,7 @@ export class HttpInstructionPlanner implements InstructionPlanner {
     step: PlannedTransitionStep,
     context: ExecutorContext,
   ): Promise<{ instruction: StepInstruction; assertions: StepAssertionSpec[] }> {
-    return postJson<InstructionPlannerBuildRequest, InstructionPlannerBuildResponse>(
+    return postApiJson<InstructionPlannerBuildRequest, InstructionPlannerBuildResponse>(
       this.aiBaseUrl,
       '/api/ai/agents/instruction-planner/build',
       { step, context },

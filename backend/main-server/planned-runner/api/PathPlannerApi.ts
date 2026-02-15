@@ -1,8 +1,8 @@
 import type { PathPlanner, PathPlannerContext, PlannedPathDraft } from '../planner/plannerProvider/types'
 import type { PathPlannerGenerateRequest, PathPlannerGenerateResponse, PathPlannerResetResponse } from '../../shared/contracts'
-import { postJson } from './httpClient'
+import { postApiJson } from './apiClient'
 
-export class HttpPathPlanner implements PathPlanner {
+export class PathPlannerApi implements PathPlanner {
   private readonly aiBaseUrl: string
   private readonly timeoutMs: number
 
@@ -12,7 +12,7 @@ export class HttpPathPlanner implements PathPlanner {
   }
 
   async generatePaths(context: PathPlannerContext): Promise<PlannedPathDraft[]> {
-    const response = await postJson<PathPlannerGenerateRequest, PathPlannerGenerateResponse>(
+    const response = await postApiJson<PathPlannerGenerateRequest, PathPlannerGenerateResponse>(
       this.aiBaseUrl,
       '/api/ai/path-planner/generate',
       { context },
@@ -23,6 +23,6 @@ export class HttpPathPlanner implements PathPlanner {
   }
 
   async resetRoundCursor(): Promise<void> {
-    await postJson<Record<string, never>, PathPlannerResetResponse>(this.aiBaseUrl, '/api/ai/path-planner/reset', {}, this.timeoutMs)
+    await postApiJson<Record<string, never>, PathPlannerResetResponse>(this.aiBaseUrl, '/api/ai/path-planner/reset', {}, this.timeoutMs)
   }
 }

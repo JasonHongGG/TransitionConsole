@@ -7,9 +7,9 @@ import type {
 } from '../types'
 import type { BrowserOperator } from '../executor/contracts'
 import type { OperatorCleanupRunRequest, OperatorStepRunRequest, OperatorStepRunResponse } from '../../shared/contracts'
-import { postJson } from './httpClient'
+import { postApiJson } from './apiClient'
 
-export class HttpBrowserOperator implements BrowserOperator {
+export class BrowserOperatorApi implements BrowserOperator {
   private readonly operatorBaseUrl: string
   private readonly timeoutMs: number
 
@@ -25,7 +25,7 @@ export class HttpBrowserOperator implements BrowserOperator {
     instruction: StepInstruction,
     assertions: StepAssertionSpec[],
   ): Promise<OperatorStepRunResponse> {
-    return postJson<OperatorStepRunRequest, OperatorStepRunResponse>(
+    return postApiJson<OperatorStepRunRequest, OperatorStepRunResponse>(
       this.operatorBaseUrl,
       '/api/operator/step-executor/run',
       {
@@ -40,7 +40,7 @@ export class HttpBrowserOperator implements BrowserOperator {
   }
 
   async cleanupRun(runId: string): Promise<void> {
-    await postJson<OperatorCleanupRunRequest, { ok: boolean }>(
+    await postApiJson<OperatorCleanupRunRequest, { ok: boolean }>(
       this.operatorBaseUrl,
       '/api/operator/step-executor/cleanup-run',
       { runId },

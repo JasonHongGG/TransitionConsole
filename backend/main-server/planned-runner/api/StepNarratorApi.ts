@@ -1,9 +1,9 @@
 import type { ExecutorContext, PlannedTransitionStep, StepNarrativeInstruction } from '../types'
 import type { StepNarrator } from '../executor/contracts'
 import type { StepNarratorGenerateRequest, StepNarratorGenerateResponse } from '../../shared/contracts'
-import { postJson } from './httpClient'
+import { postApiJson } from './apiClient'
 
-export class HttpStepNarrator implements StepNarrator {
+export class StepNarratorApi implements StepNarrator {
   private readonly aiBaseUrl: string
   private readonly timeoutMs: number
 
@@ -13,7 +13,7 @@ export class HttpStepNarrator implements StepNarrator {
   }
 
   async generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction> {
-    const response = await postJson<StepNarratorGenerateRequest, StepNarratorGenerateResponse>(
+    const response = await postApiJson<StepNarratorGenerateRequest, StepNarratorGenerateResponse>(
       this.aiBaseUrl,
       '/api/ai/agents/step-narrator/generate',
       { step, context },
