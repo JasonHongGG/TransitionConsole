@@ -4,7 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx index.ts",
+    "dev": "npm run dev:main",
+    "dev:main": "tsx main-server/index.ts",
+    "dev:ai": "tsx ai-server/index.ts",
+    "dev:operator": "tsx operator-server/index.ts",
+    "dev:all": "npm run dev:main",
     "lint": "eslint ."
   },
   "dependencies": {

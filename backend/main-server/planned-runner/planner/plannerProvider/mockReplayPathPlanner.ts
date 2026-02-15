@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { createLogger } from '../common/logger'
+import { createLogger } from '../../../common/logger'
 import { loadMockReplayItems, type MockReplayItem } from './mockReplayLogReader'
 import type { PathPlanner, PathPlannerContext, PlannedPathDraft } from './types'
 
@@ -17,7 +17,7 @@ export class MockReplayPathPlanner implements PathPlanner {
   private items: MockReplayItem[] = []
 
   constructor(options: MockReplayOptions = {}) {
-    this.mockDir = path.resolve(process.cwd(), options.mockDir ?? path.join('mock-data', 'path-planner'))
+    this.mockDir = path.resolve(process.cwd(), options.mockDir ?? path.join('ai-server', 'mock-data', 'path-planner'))
     this.loop = options.loop ?? true
 
     log.log('initialized', {

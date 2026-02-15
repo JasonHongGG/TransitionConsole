@@ -9,7 +9,7 @@ import type {
   StepValidationResult,
 } from '../../types'
 import type { BrowserOperator, BrowserPage, BrowserSession, LoopFunctionCall, LoopFunctionResponse, OperatorLoopAgent } from '../contracts'
-import { CopilotOperatorLoopAgent } from './CopilotOperatorLoopAgent'
+import { RemoteOperatorLoopAgent } from './RemoteOperatorLoopAgent'
 
 type ToolPayload = Record<string, unknown>
 
@@ -68,7 +68,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
   private playwrightModulePromise: Promise<{ chromium: { launch: (options?: Record<string, unknown>) => Promise<unknown> } }> | null = null
 
   constructor(options?: { loopAgent?: OperatorLoopAgent }) {
-    this.loopAgent = options?.loopAgent ?? new CopilotOperatorLoopAgent()
+    this.loopAgent = options?.loopAgent ?? new RemoteOperatorLoopAgent()
   }
 
   private async getPlaywrightModule(): Promise<{ chromium: { launch: (options?: Record<string, unknown>) => Promise<unknown> } }> {

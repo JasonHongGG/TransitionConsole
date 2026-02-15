@@ -5,12 +5,26 @@ Frontend console for visualizing hierarchical transition diagrams from JSON and 
 ## Project structure
 
 - `frontend/`: React + Vite client app
-- `backend/`: Express planned-runner server
+- `backend/`: split backend services
+	- `main-server/`: planned-runner orchestration API
+	- `ai-server/`: AI runtime provider + agent factory + prompt modules
+	- `operator-server/`: browser operator execution API
 
 ## Environment files
 
 - `frontend/.env` and `frontend/.env.example`
 - `backend/.env` and `backend/.env.example`
+
+Backend split-service defaults:
+
+- `PORT=7070` (main orchestrator)
+- `AI_SERVER_PORT=7081`
+- `OPERATOR_SERVER_PORT=7082`
+- `AI_SERVER_BASE_URL=http://localhost:7081`
+- `OPERATOR_SERVER_BASE_URL=http://localhost:7082`
+- `AI_PROVIDER=copilot-sdk`
+- `AI_RUNTIME_MODEL=gpt-5.2`
+- `AI_RUNTIME_TIMEOUT_MS=180000`
 
 ## Lint config
 
@@ -32,7 +46,11 @@ The app loads data from `frontend/public/data.json`. Replace that file with the 
 - Backend:
 	- `cd backend`
 	- `npm install`
-	- `npm run dev`
+	- `npm run dev:main`
+	- `npm run dev:ai`
+	- `npm run dev:operator`
+
+Recommended during development: use VSCode task `dev: all` to start frontend + all backend services in parallel.
 
 ## Key features
 
@@ -45,10 +63,10 @@ The app loads data from `frontend/public/data.json`. Replace that file with the 
 
 To avoid Copilot cost during testing, backend supports replaying historical planner JSON logs by round.
 
-- Put JSON files into `backend/mock-data/path-planner/`
+- Put JSON files into `backend/ai-server/mock-data/path-planner/`
 - Enable in `backend/.env`:
 	- `PATH_PLANNER_PROVIDER=mock-replay`
-	- `PATH_PLANNER_MOCK_DIR=mock-data/path-planner`
+	- `PATH_PLANNER_MOCK_DIR=ai-server/mock-data/path-planner`
 	- `PATH_PLANNER_MOCK_LOOP=true`
 	- `PATH_PLANNER_MOCK_RESET_ON_START=true`
 
