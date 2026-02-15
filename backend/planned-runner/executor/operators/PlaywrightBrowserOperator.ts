@@ -1,13 +1,15 @@
 import type {
   ExecutorContext,
   OperatorTraceItem,
+  StepNarrativeInstruction,
   PlannedTransitionStep,
   StepAssertionSpec,
   StepExecutionResult,
   StepInstruction,
   StepValidationResult,
 } from '../../types'
-import type { BrowserOperator, BrowserPage, BrowserSession } from '../contracts'
+import type { BrowserOperator, BrowserPage, BrowserSession, LoopFunctionCall, LoopFunctionResponse, OperatorLoopAgent } from '../contracts'
+import { CopilotOperatorLoopAgent } from './CopilotOperatorLoopAgent'
 
 type ToolPayload = Record<string, unknown>
 
@@ -62,7 +64,12 @@ const PLAYWRIGHT_KEY_MAP: Record<string, string> = {
 export class PlaywrightBrowserOperator implements BrowserOperator {
   private readonly sessions = new Map<string, BrowserSession>()
   private readonly highlightMouseEnabled = process.env.PLANNED_RUNNER_HIGHLIGHT_MOUSE === 'true'
+  private readonly loopAgent: OperatorLoopAgent
   private playwrightModulePromise: Promise<{ chromium: { launch: (options?: Record<string, unknown>) => Promise<unknown> } }> | null = null
+
+  constructor(options?: { loopAgent?: OperatorLoopAgent }) {
+    this.loopAgent = options?.loopAgent ?? new CopilotOperatorLoopAgent()
+  }
 
   private async getPlaywrightModule(): Promise<{ chromium: { launch: (options?: Record<string, unknown>) => Promise<unknown> } }> {
     if (!this.playwrightModulePromise) {
@@ -101,17 +108,6 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     return session
   }
 
-  private parseToolPayload(action: StepInstruction['actions'][number]): ToolPayload {
-    if (!action.value) return {}
-    try {
-      const parsed = JSON.parse(action.value) as unknown
-      if (parsed && typeof parsed === 'object') return parsed as ToolPayload
-      throw new Error('action value must be a JSON object')
-    } catch (error) {
-      throw new Error(`invalid action.value JSON for ${action.action}: ${error instanceof Error ? error.message : 'parse failed'}`)
-    }
-  }
-
   private readNumber(payload: ToolPayload, key: string): number {
     const value = payload[key]
     if (typeof value !== 'number' || Number.isNaN(value)) {
@@ -139,23 +135,6 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
       throw new Error(`tool payload missing string[] field: ${key}`)
     }
     return value as string[]
-  }
-
-  private normalizeToolName(action: StepInstruction['actions'][number], payload: ToolPayload): string {
-    const explicitTool = payload.tool
-    if (typeof explicitTool === 'string' && explicitTool.trim().length > 0) return explicitTool.trim().toLowerCase()
-
-    const byAction: Record<string, string> = {
-      goto: 'navigate',
-      click: 'click_at',
-      type: 'type_text_at',
-      press: 'key_combination',
-      wait: 'wait_5_seconds',
-      scroll: 'scroll_document',
-      select: 'click_at',
-    }
-
-    return byAction[action.action] ?? 'custom'
   }
 
   private normalizeKeys(keys: string[]): string[] {
@@ -399,94 +378,40 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     }
   }
 
-  private async evaluateAssertion(assertion: StepAssertionSpec, page: BrowserPage): Promise<StepValidationResult> {
-    try {
-      const currentUrl = page.url()
+  private buildValidationResultsFromDecision(
+    assertions: StepAssertionSpec[],
+    decision: 'complete' | 'fail',
+    reason: string,
+  ): StepValidationResult[] {
+    return assertions.map((assertion) => ({
+      id: assertion.id,
+      label: assertion.description,
+      assertionType: assertion.type,
+      status: decision === 'complete' ? 'pass' : 'fail',
+      reason: `copilot-decision:${reason}`,
+      expected: assertion.expected,
+      actual: 'decided-by-copilot',
+    }))
+  }
 
-      if (assertion.type === 'url-equals') {
-        const pass = currentUrl === (assertion.expected ?? '')
-        return {
-          id: assertion.id,
-          label: assertion.description,
-          assertionType: assertion.type,
-          status: pass ? 'pass' : 'fail',
-          reason: pass ? 'URL equals expected' : 'URL mismatch',
-          expected: assertion.expected,
-          actual: currentUrl,
-        }
-      }
-
-      if (assertion.type === 'url-includes') {
-        const expected = assertion.expected ?? ''
-        const pass = currentUrl.includes(expected)
-        return {
-          id: assertion.id,
-          label: assertion.description,
-          assertionType: assertion.type,
-          status: pass ? 'pass' : 'fail',
-          reason: pass ? 'URL includes expected text' : 'URL missing expected text',
-          expected,
-          actual: currentUrl,
-        }
-      }
-
-      if ((assertion.type === 'element-visible' || assertion.type === 'element-not-visible') && assertion.selector) {
-        const visible = await page.locator(assertion.selector).first().isVisible({ timeout: assertion.timeoutMs ?? 5000 }).catch(() => false)
-        const pass = assertion.type === 'element-visible' ? visible : !visible
-        return {
-          id: assertion.id,
-          label: assertion.description,
-          assertionType: assertion.type,
-          status: pass ? 'pass' : 'fail',
-          reason: pass ? 'Element visibility matched expected state' : 'Element visibility did not match expected state',
-          expected: assertion.selector,
-          actual: visible ? 'visible' : 'not-visible',
-        }
-      }
-
-      if (assertion.type === 'text-visible' || assertion.type === 'text-not-visible') {
-        const text = assertion.expected || assertion.description
-        const count = await page.locator(`text=${text}`).count()
-        const visible = count > 0
-        const pass = assertion.type === 'text-visible' ? visible : !visible
-        return {
-          id: assertion.id,
-          label: assertion.description,
-          assertionType: assertion.type,
-          status: pass ? 'pass' : 'fail',
-          reason: pass ? 'Text visibility matched expected state' : 'Text visibility did not match expected state',
-          expected: text,
-          actual: visible ? 'visible' : 'not-visible',
-        }
-      }
-
-      return {
-        id: assertion.id,
-        label: assertion.description,
-        assertionType: assertion.type,
-        status: 'pass',
-        reason: 'Assertion type not implemented in tool operator; treated as pass',
-      }
-    } catch (error) {
-      return {
-        id: assertion.id,
-        label: assertion.description,
-        assertionType: assertion.type,
-        status: 'fail',
-        reason: error instanceof Error ? error.message : 'assertion evaluation failed',
-      }
+  private normalizeFunctionCallsFromDecision(decision: { functionCalls?: LoopFunctionCall[] }): LoopFunctionCall[] {
+    if (decision.functionCalls && decision.functionCalls.length > 0) {
+      return decision.functionCalls
     }
+    return []
   }
 
   async run(
     _step: PlannedTransitionStep,
     context: ExecutorContext,
+    narrative: StepNarrativeInstruction,
     instruction: StepInstruction,
     assertions: StepAssertionSpec[],
   ): Promise<{
     result: 'pass' | 'fail'
     blockedReason?: string
     failureCode?: StepExecutionResult['failureCode']
+    terminationReason?: StepExecutionResult['terminationReason']
     validationResults: StepValidationResult[]
     trace: OperatorTraceItem[]
     evidence: StepExecutionResult['evidence']
@@ -494,28 +419,144 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     const session = await this.getOrCreateSession(context)
     const page = session.page
     const trace: OperatorTraceItem[] = []
-
     let lastState: CurrentState | null = await this.currentState(page)
+    const maxIterations = Math.min(Math.max(narrative.maxIterations || 1, 1), 30)
+    let actionCursor = 0
 
-    for (let index = 0; index < instruction.actions.length; index += 1) {
-      const action = instruction.actions[index]
-      const payload = this.parseToolPayload(action)
-      const toolName = this.normalizeToolName(action, payload)
+    for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+      const stateSummary = `url=${page.url()}; iteration=${iteration}; actionCursor=${actionCursor}`
+
+      const decision = await this.loopAgent.decide({
+        runId: context.runId,
+        pathId: context.pathId,
+        iteration,
+        currentUrl: page.url(),
+        stateSummary,
+        screenshotBase64: lastState.screenshot.toString('base64'),
+        actionCursor,
+        narrative,
+        instruction,
+        assertions,
+      })
+
+      if (decision.kind === 'complete') {
+        const validationResults = this.buildValidationResultsFromDecision(assertions, 'complete', decision.reason)
+        trace.push({
+          iteration,
+          observation: stateSummary,
+          action: 'function_call:complete',
+          outcome: 'success',
+          detail: decision.reason,
+        })
+
+        return {
+          result: 'pass',
+          validationResults,
+          trace,
+          evidence: {
+            domSummary: `current_url=${page.url()}`,
+          },
+        }
+      }
+
+      if (decision.kind === 'fail') {
+        const failureCode = decision.failureCode ?? 'operator-no-progress'
+        const validationResults = this.buildValidationResultsFromDecision(assertions, 'fail', decision.reason)
+        return {
+          result: 'fail',
+          blockedReason: decision.reason,
+          failureCode,
+          terminationReason: decision.terminationReason ?? 'criteria-unmet',
+          validationResults,
+          trace,
+          evidence: {
+            domSummary: `current_url=${page.url()}`,
+          },
+        }
+      }
+
+      const nextFunctionCalls = this.normalizeFunctionCallsFromDecision(decision)
+      if (nextFunctionCalls.length === 0) {
+        const validationResults = this.buildValidationResultsFromDecision(assertions, 'fail', 'loop agent returned act without action payload')
+        return {
+          result: 'fail',
+          blockedReason: 'loop agent returned act without action payload',
+          failureCode: 'operator-no-progress',
+          terminationReason: 'criteria-unmet',
+          validationResults,
+          trace,
+          evidence: {
+            domSummary: `current_url=${page.url()}`,
+          },
+        }
+      }
+
+      const functionResponses: LoopFunctionResponse[] = []
+      let activeFunctionCall: LoopFunctionCall | null = null
 
       try {
-        lastState = await this.executeTool(page, toolName, payload)
-        trace.push({
-          iteration: index + 1,
-          observation: `url=${lastState.url}`,
-          action: `${toolName}:${action.description}`,
-          outcome: 'success',
-        })
+        for (const functionCall of nextFunctionCalls) {
+          activeFunctionCall = functionCall
+          const toolName = functionCall.name.trim().toLowerCase()
+          const payload = functionCall.args
+          lastState = await this.executeTool(page, toolName, payload)
+
+          functionResponses.push({
+            name: toolName,
+            arguments: payload,
+            response: {
+              url: lastState.url,
+              status: 'success',
+              message: functionCall.description,
+            },
+            screenshotBase64: lastState.screenshot.toString('base64'),
+          })
+
+          trace.push({
+            iteration,
+            observation: `url=${lastState.url}; iteration=${iteration}; actionCursor=${actionCursor}`,
+            action: `function_call:${toolName}`,
+            functionCall: {
+              name: functionCall.name,
+              args: functionCall.args,
+              description: functionCall.description,
+            },
+            outcome: 'success',
+            detail: decision.reason,
+          })
+          actionCursor += 1
+        }
+
+        if (this.loopAgent.appendFunctionResponses) {
+          await this.loopAgent.appendFunctionResponses(context.runId, context.pathId, functionResponses)
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'tool execution failed'
+        const validationResults = this.buildValidationResultsFromDecision(assertions, 'fail', message)
+        if (this.loopAgent.appendFunctionResponses) {
+          const failedResponse: LoopFunctionResponse = {
+            name: activeFunctionCall?.name ?? 'unknown_tool',
+            arguments: activeFunctionCall?.args ?? {},
+            response: {
+              url: lastState?.url ?? page.url(),
+              status: 'failed',
+              message,
+            },
+            screenshotBase64: lastState?.screenshot?.toString('base64'),
+          }
+          await this.loopAgent.appendFunctionResponses(context.runId, context.pathId, [...functionResponses, failedResponse])
+        }
         trace.push({
-          iteration: index + 1,
+          iteration,
           observation: `url=${lastState?.url ?? page.url()}`,
-          action: `${toolName}:${action.description}`,
+          action: `function_call:${activeFunctionCall?.name ?? 'unknown_tool'}`,
+          functionCall: activeFunctionCall
+            ? {
+                name: activeFunctionCall.name,
+                args: activeFunctionCall.args,
+                description: activeFunctionCall.description,
+              }
+            : undefined,
           outcome: 'failed',
           detail: message,
         })
@@ -524,7 +565,8 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           result: 'fail',
           blockedReason: message,
           failureCode: 'operator-action-failed',
-          validationResults: [],
+          terminationReason: 'operator-error',
+          validationResults,
           trace,
           evidence: {
             domSummary: `current_url=${lastState?.url ?? page.url()}`,
@@ -533,18 +575,13 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
       }
     }
 
-    const validationResults: StepValidationResult[] = []
-    for (const assertion of assertions) {
-      validationResults.push(await this.evaluateAssertion(assertion, page))
-    }
-
-    const hasFailedAssertion = validationResults.some((item) => item.status === 'fail')
-
+    const finalValidationResults = this.buildValidationResultsFromDecision(assertions, 'fail', 'max iterations reached')
     return {
-      result: hasFailedAssertion ? 'fail' : 'pass',
-      blockedReason: hasFailedAssertion ? 'Assertions failed after tool execution' : undefined,
-      failureCode: hasFailedAssertion ? 'assertion-failed' : undefined,
-      validationResults,
+      result: 'fail',
+      blockedReason: 'Max iterations reached before Copilot completed the step',
+      failureCode: 'operator-timeout',
+      terminationReason: 'max-iterations',
+      validationResults: finalValidationResults,
       trace,
       evidence: {
         domSummary: `current_url=${lastState?.url ?? page.url()}`,
@@ -553,6 +590,10 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
   }
 
   async cleanupRun(runId: string): Promise<void> {
+    if (this.loopAgent.cleanupRun) {
+      await this.loopAgent.cleanupRun(runId)
+    }
+
     const entries = Array.from(this.sessions.entries()).filter(([key]) => key.startsWith(`${runId}:`))
     await Promise.all(
       entries.map(async ([key, session]) => {

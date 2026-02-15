@@ -1,16 +1,18 @@
-import type { ExecutorContext, OperatorTraceItem, PlannedTransitionStep, StepAssertionSpec, StepExecutionResult, StepInstruction, StepValidationResult } from '../../types'
+import type { ExecutorContext, OperatorTraceItem, PlannedTransitionStep, StepAssertionSpec, StepExecutionResult, StepInstruction, StepNarrativeInstruction, StepValidationResult } from '../../types'
 import type { BrowserOperator } from '../contracts'
 
 export class SimulatedBrowserOperator implements BrowserOperator {
   async run(
     step: PlannedTransitionStep,
     context: ExecutorContext,
+    _narrative: StepNarrativeInstruction,
     instruction: StepInstruction,
     assertions: StepAssertionSpec[],
   ): Promise<{
     result: 'pass' | 'fail'
     blockedReason?: string
     failureCode?: StepExecutionResult['failureCode']
+    terminationReason?: StepExecutionResult['terminationReason']
     validationResults: StepValidationResult[]
     trace: OperatorTraceItem[]
     evidence: StepExecutionResult['evidence']
@@ -20,7 +22,7 @@ export class SimulatedBrowserOperator implements BrowserOperator {
       trace.push({
         iteration: i,
         observation: `targetUrl=${context.targetUrl}`,
-        action: instruction.actions[Math.min(i - 1, instruction.actions.length - 1)]?.description ?? 'no-op',
+        action: 'function_call:simulated',
         outcome: 'success',
         detail: `simulated-operator iteration ${i}`,
       })

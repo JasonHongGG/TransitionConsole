@@ -216,6 +216,11 @@ export class PlannedRunner {
           semanticGoal: currentPath.semanticGoal,
           targetUrl: requestTargetUrl(this.runtime),
           stepValidations: step.validations,
+          currentPathStepIndex: this.runtime.stepIndex,
+          currentPathStepTotal: currentPath.steps.length,
+          pathEdgeIds: currentPath.steps.map((item) => item.edgeId),
+          systemDiagrams: this.runtime.sourceDiagrams,
+          systemConnectors: this.runtime.sourceConnectors,
         })),
       }
     } catch (error) {

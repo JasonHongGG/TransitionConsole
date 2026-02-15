@@ -1,6 +1,9 @@
 import type {
+  ExecutionFailureCode,
   ExecutorContext,
+  StepNarrativeInstruction,
   OperatorTraceItem,
+  OperatorTerminationReason,
   PlannedTransitionStep,
   StepAssertionSpec,
   StepExecutionResult,
@@ -12,16 +15,66 @@ export interface InstructionPlanner {
   build(step: PlannedTransitionStep, context: ExecutorContext): Promise<{ instruction: StepInstruction; assertions: StepAssertionSpec[] }>
 }
 
+export interface StepNarrator {
+  generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction>
+}
+
+export interface LoopDecisionInput {
+  runId: string
+  pathId: string
+  iteration: number
+  currentUrl: string
+  stateSummary: string
+  screenshotBase64: string
+  actionCursor: number
+  narrative: StepNarrativeInstruction
+  instruction: StepInstruction
+  assertions: StepAssertionSpec[]
+}
+
+export interface LoopFunctionCall {
+  name: string
+  args: Record<string, unknown>
+  description?: string
+}
+
+export interface LoopDecision {
+  kind: 'complete' | 'act' | 'fail'
+  reason: string
+  functionCalls?: LoopFunctionCall[]
+  failureCode?: ExecutionFailureCode
+  terminationReason?: OperatorTerminationReason
+}
+
+export interface LoopFunctionResponse {
+  name: string
+  arguments: Record<string, unknown>
+  response: {
+    url?: string
+    status: 'success' | 'failed'
+    message?: string
+  }
+  screenshotBase64?: string
+}
+
+export interface OperatorLoopAgent {
+  decide(input: LoopDecisionInput): Promise<LoopDecision>
+  appendFunctionResponses?(runId: string, pathId: string, responses: LoopFunctionResponse[]): Promise<void>
+  cleanupRun?(runId: string): Promise<void>
+}
+
 export interface BrowserOperator {
   run(
     step: PlannedTransitionStep,
     context: ExecutorContext,
+    narrative: StepNarrativeInstruction,
     instruction: StepInstruction,
     assertions: StepAssertionSpec[],
   ): Promise<{
     result: 'pass' | 'fail'
     blockedReason?: string
     failureCode?: StepExecutionResult['failureCode']
+    terminationReason?: StepExecutionResult['terminationReason']
     validationResults: StepValidationResult[]
     trace: OperatorTraceItem[]
     evidence: StepExecutionResult['evidence']

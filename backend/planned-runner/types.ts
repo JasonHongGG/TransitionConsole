@@ -29,11 +29,47 @@ export type OperatorActionType =
 
 export type ExecutionFailureCode =
   | 'instruction-planner-failed'
+  | 'narrative-planner-failed'
   | 'operator-timeout'
   | 'operator-no-progress'
   | 'operator-action-failed'
   | 'assertion-failed'
   | 'unexpected-error'
+
+export type CompletionCheckType = 'url-equals' | 'url-includes' | 'text-visible' | 'element-visible' | 'semantic-check'
+
+export interface StepCompletionCriterion {
+  id: string
+  type: CompletionCheckType
+  description: string
+  expected?: string
+  selector?: string
+}
+
+export interface StepNarrativeInstruction {
+  summary: string
+  taskDescription: string
+  completionCriteria: StepCompletionCriterion[]
+  maxIterations: number
+}
+
+export type OperatorTerminationReason = 'completed' | 'max-iterations' | 'operator-error' | 'assertion-failed' | 'criteria-unmet'
+
+export interface OperatorFunctionCallTrace {
+  name: string
+  args: Record<string, unknown>
+  description?: string
+}
+
+export interface OperatorLoopIteration {
+  iteration: number
+  url: string
+  stateSummary: string
+  action: string
+  functionCall?: OperatorFunctionCallTrace
+  outcome: 'success' | 'failed' | 'skipped'
+  detail?: string
+}
 
 export interface StepValidationResult {
   id: string
@@ -80,6 +116,7 @@ export interface OperatorTraceItem {
   iteration: number
   observation: string
   action: string
+  functionCall?: OperatorFunctionCallTrace
   outcome: 'success' | 'failed' | 'skipped'
   detail?: string
 }
@@ -258,14 +295,22 @@ export interface ExecutorContext {
   semanticGoal: string
   targetUrl: string
   stepValidations: string[]
+  currentPathStepIndex: number
+  currentPathStepTotal: number
+  pathEdgeIds: string[]
+  systemDiagrams: DiagramLike[]
+  systemConnectors: DiagramConnector[]
 }
 
 export interface StepExecutionResult {
   result: TransitionResult
   blockedReason?: string
   validationResults: StepValidationResult[]
+  narrative?: StepNarrativeInstruction
   instruction?: StepInstruction
   assertions?: StepAssertionSpec[]
+  loopIterations?: OperatorLoopIteration[]
+  terminationReason?: OperatorTerminationReason
   evidence?: StepEvidence
   trace?: OperatorTraceItem[]
   failureCode?: ExecutionFailureCode
