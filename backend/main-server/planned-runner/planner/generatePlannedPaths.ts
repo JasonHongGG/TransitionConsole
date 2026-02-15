@@ -12,10 +12,12 @@ import { selectPlannedPaths } from './pathCandidates'
 
 export const generatePlannedPaths = async (
   planner: PathPlanner,
+  runId: string,
   sourceDiagrams: DiagramLike[],
   sourceConnectors: DiagramConnector[],
   allEdges: RuntimeEdge[],
   entryStateIds: string[],
+  targetUrl: string,
   specRaw: string | null,
   nodeStatuses: Record<string, ElementExecutionStatus>,
   edgeStatuses: Record<string, ElementExecutionStatus>,
@@ -26,8 +28,14 @@ export const generatePlannedPaths = async (
 
   const draftedPaths = await planner.generatePaths({
     maxPaths: 16,
-    specRaw,
-    diagrams: plannerDiagrams,
+    context: {
+      runId,
+      pathId: undefined,
+      stepId: null,
+      targetUrl,
+      specRaw,
+      diagrams: plannerDiagrams,
+    },
     previouslyPlannedPaths,
   })
 

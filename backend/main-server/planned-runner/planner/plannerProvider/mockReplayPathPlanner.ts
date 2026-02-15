@@ -73,8 +73,9 @@ export class MockReplayPathPlanner implements PathPlanner {
       cursor: this.cursor,
       totalMockFiles: this.items.length,
       requestedMaxPaths: context.maxPaths,
-      diagrams: context.diagrams.length,
-      hasSpec: Boolean(context.specRaw),
+      diagrams: context.context.diagrams.length,
+      hasSpec: Boolean(context.context.specRaw),
+      targetUrl: context.context.targetUrl,
     })
 
     return item.drafts.slice(0, context.maxPaths)

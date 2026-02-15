@@ -35,8 +35,8 @@ app.post('/api/ai/path-planner/generate', async (req, res) => {
       return
     }
     log.log('path planner generate request', {
-      diagrams: context.diagrams.length,
-      targetUrl: context.diagrams.find((item) => item.id === 'page_entry')?.meta?.pageName ?? null,
+      diagrams: context.context.diagrams.length,
+      targetUrl: context.context.targetUrl,
     })
     const paths = await agents.pathPlanner.generate(context)
     log.log('path planner generate completed', {

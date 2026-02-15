@@ -53,8 +53,14 @@ export interface PlannerDiagramPayload {
 
 export interface PathPlannerContext {
   maxPaths: number
-  specRaw: string | null
-  diagrams: PlannerDiagramPayload[]
+  context: {
+    runId?: string
+    pathId?: string
+    stepId?: string | null
+    targetUrl: string | null
+    specRaw: string | null
+    diagrams: PlannerDiagramPayload[]
+  }
   previouslyPlannedPaths: PlannerHistoryPath[]
 }
 

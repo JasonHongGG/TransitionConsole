@@ -214,7 +214,7 @@
         },
         {
           "id": "c.page_entry.contains.page_adminregistrationspage",
-          "type": "contains",
+          "type": "contains", 
           "from": {"diagramId": "page_entry", "stateId": null},
           "to": {"diagramId": "page_adminregistrationspage", "stateId": null},
           "meta": {"reason": "derived from parentDiagramId"}

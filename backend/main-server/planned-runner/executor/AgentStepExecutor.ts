@@ -25,14 +25,8 @@ export class AgentStepExecutor implements StepExecutor {
     try {
       const narrative = await this.narrator.generate(step, context)
       const assertions =
-        narrative.completionCriteria.length > 0
-          ? narrative.completionCriteria.map((criterion) => ({
-              id: criterion.id,
-              type: criterion.type,
-              description: criterion.description,
-              expected: criterion.expected,
-              selector: criterion.selector,
-            }))
+        narrative.assertions.length > 0
+          ? narrative.assertions
           : context.stepValidations.map((validation, index) => ({
               id: `${step.edgeId}.assertion.${index + 1}`,
               type: 'semantic-check' as const,

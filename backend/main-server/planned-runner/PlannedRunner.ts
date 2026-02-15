@@ -85,10 +85,12 @@ export class PlannedRunner {
 
     const plan = await generatePlannedPaths(
       this.pathPlanner,
+      runId,
       request.diagrams,
       request.connectors,
       graph.edges,
       graph.entryStateIds,
+      request.targetUrl,
       request.specRaw,
       nodeStatuses,
       edgeStatuses,
@@ -369,10 +371,12 @@ export class PlannedRunner {
 
     const plan = await generatePlannedPaths(
       this.pathPlanner,
+      this.runtime.runId,
       this.runtime.sourceDiagrams,
       this.runtime.sourceConnectors,
       this.runtime.allEdges,
       this.runtime.entryStateIds,
+      this.runtime.targetUrl,
       this.runtime.specRaw,
       this.runtime.nodeStatuses,
       this.runtime.edgeStatuses,

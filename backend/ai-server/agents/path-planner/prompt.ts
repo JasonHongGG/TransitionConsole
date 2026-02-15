@@ -26,11 +26,70 @@ export const PATH_PLANNER_SYSTEM_PROMPT = `【系統角色】
 Format:
 {
 	"maxPaths": "number 表示最多可回傳幾條 path",
-	"specRaw": "string 表示原始規格內容，用於推導語意與測試重點",
 	"context": {
 		"runId": "string 表示執行批次 id（可選）",
 		"pathId": "string 表示目前路徑 id（可選）",
-		"stepId": "string|null 表示目前步驟 id（可選；通常為 null）"
+		"stepId": "string|null 表示目前步驟 id（可選；通常為 null）",
+		"targetUrl": "string 表示此次規劃的目標網址（可選）",
+		"specRaw": "string 表示原始規格內容，用於推導語意與測試重點",
+		"diagrams": [
+			{
+				"id": "string 表示 diagram 唯一識別",
+				"name": "string 表示 diagram 顯示名稱",
+				"level": "string 表示層級，例如 page/flow/component",
+				"parentDiagramId": "string|null 表示父 diagram，若無則為 null",
+				"roles": ["string 表示此 diagram 適用角色"],
+				"variant": {
+					"kind": "string 表示變體型別，例如 standalone/base/delta",
+					"baseDiagramId": "string|null 表示來源 base diagram",
+					"deltaDiagramIdsByRole": "object 表示各角色對應的 delta diagram id",
+					"appliesToRoles": ["string 表示此變體適用角色"]
+				},
+				"states": [
+					{
+						"id": "string 表示 state 唯一識別",
+						"walked": "boolean 表示此 state 是否已經走過"
+					}
+				],
+				"transitions": [
+					{
+						"id": "string 表示 transition 唯一識別（輸出 edgeIds 必須使用這個值）",
+						"from": "string 表示起始 state id",
+						"to": "string 表示目標 state id",
+						"walked": "boolean 表示此 transition 是否已經走過（包含 invokes 合併進來的 transition）",
+						"validations": ["string 表示此 transition 的驗證條件敘述（可選）"],
+						"intent": {
+							"summary": "string|null 表示此 transition 的語意意圖摘要（可選）"
+						}
+					}
+				],
+				"connectors": [
+					{
+						"id": "string 表示 connector 唯一識別",
+						"type": "contains|invokes",
+						"from": {
+							"diagramId": "string 表示來源 diagram id",
+							"stateId": "string|null 表示來源 state id（可為 null）"
+						},
+						"to": {
+							"diagramId": "string 表示目標 diagram id",
+							"stateId": "string|null 表示目標 state id（可為 null）"
+						},
+						"meta": {
+							"reason": "string|null 表示 connector 連結原因（可選）",
+							"action": "string|null 表示 connector 觸發動作（可選）",
+							"validations": ["string 表示 connector 驗證條件（可選）"]
+						}
+					}
+				],
+				"meta": {
+					"pageName": "string|null 表示 diagram 若為 page 時的頁面名稱",
+					"featureName": "string|null 表示功能名稱，若無則為 null",
+					"entryStateId": "string|null 表示此 diagram 的入口 state id；全域起點請使用 page_entry 的 entryStateId",
+					"entryValidations": ["string 表示入口條件或驗證敘述"]
+				}
+			}
+		]
 	},
 	"previouslyPlannedPaths": [
 		{
@@ -41,41 +100,6 @@ Format:
 			"plannedRound": "number 表示該路徑屬於第幾輪規劃（可為空）"
 		}
 	],
-	"diagrams": [
-		{
-			"id": "string 表示 diagram 唯一識別",
-			"name": "string 表示 diagram 顯示名稱",
-			"level": "string 表示層級，例如 page/flow/component",
-			"parentDiagramId": "string|null 表示父 diagram，若無則為 null",
-			"roles": ["string 表示此 diagram 適用角色"],
-			"variant": {
-				"kind": "string 表示變體型別，例如 standalone/base/delta",
-				"baseDiagramId": "string|null 表示來源 base diagram",
-				"deltaDiagramIdsByRole": "object 表示各角色對應的 delta diagram id",
-				"appliesToRoles": ["string 表示此變體適用角色"]
-			},
-			"states": [
-				{
-					"id": "string 表示 state 唯一識別",
-					"walked": "boolean 表示此 state 是否已經走過"
-				}
-			],
-			"transitions": [
-				{
-					"id": "string 表示 transition 唯一識別（輸出 edgeIds 必須使用這個值）",
-					"from": "string 表示起始 state id",
-					"to": "string 表示目標 state id",
-					"walked": "boolean 表示此 transition 是否已經走過（包含 invokes 合併進來的 transition）"
-				}
-			],
-			"meta": {
-				"pageName": "string|null 表示 diagram 若為 page 時的頁面名稱",
-				"featureName": "string|null 表示功能名稱，若無則為 null",
-				"entryStateId": "string|null 表示此 diagram 的入口 state id；全域起點請使用 page_entry 的 entryStateId",
-				"entryValidations": ["string 表示入口條件或驗證敘述"]
-			}
-		}
-	]
 }
 
 【結構化輸出 JSON Schema】

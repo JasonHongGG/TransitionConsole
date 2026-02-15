@@ -35,20 +35,10 @@ export type ExecutionFailureCode =
   | 'assertion-failed'
   | 'unexpected-error'
 
-export type CompletionCheckType = 'url-equals' | 'url-includes' | 'text-visible' | 'element-visible' | 'semantic-check'
-
-export interface StepCompletionCriterion {
-  id: string
-  type: CompletionCheckType
-  description: string
-  expected?: string
-  selector?: string
-}
-
 export interface StepNarrativeInstruction {
   summary: string
   taskDescription: string
-  completionCriteria: StepCompletionCriterion[]
+  assertions: StepAssertionSpec[]
 }
 
 export type OperatorTerminationReason = 'completed' | 'max-iterations' | 'operator-error' | 'assertion-failed' | 'criteria-unmet'

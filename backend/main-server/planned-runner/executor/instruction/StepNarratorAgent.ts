@@ -3,7 +3,7 @@ import { createLogger } from '../../../common/logger'
 import type {
   ExecutorContext,
   PlannedTransitionStep,
-  StepCompletionCriterion,
+  StepAssertionSpec,
   StepNarrativeInstruction,
 } from '../../types'
 import type { StepNarrator } from '../contracts'
@@ -16,20 +16,25 @@ type NarrativeEnvelope = {
     summary?: string
     taskDescription?: string
   }
-  completionCriteria?: Array<{
+  assertions?: Array<{
     id?: string
     type?: string
     description?: string
     expected?: string
     selector?: string
+    timeoutMs?: number
   }>
 }
 
-const allowedTypes = new Set<StepCompletionCriterion['type']>([
+const allowedTypes = new Set<StepAssertionSpec['type']>([
   'url-equals',
   'url-includes',
   'text-visible',
+  'text-not-visible',
   'element-visible',
+  'element-not-visible',
+  'network-success',
+  'network-failed',
   'semantic-check',
 ])
 
@@ -49,18 +54,74 @@ export class StepNarratorAgent implements StepNarrator {
     this.timeoutMs = Number.isFinite(timeout) && timeout > 0 ? timeout : 120000
   }
 
-  private buildFallback(step: PlannedTransitionStep, context: ExecutorContext): StepNarrativeInstruction {
-    const completionCriteria: StepCompletionCriterion[] = context.stepValidations.map((validation, index) => ({
-      id: `${step.edgeId}.criteria.${index + 1}`,
+  private collectValidationHints(step: PlannedTransitionStep, context: ExecutorContext): string[] {
+    const hints = new Set<string>()
+
+    step.validations.forEach((item) => {
+      const text = item.trim()
+      if (text) hints.add(text)
+    })
+
+    context.stepValidations.forEach((item) => {
+      const text = item.trim()
+      if (text) hints.add(text)
+    })
+
+    context.systemDiagrams.forEach((diagram) => {
+      diagram.transitions
+        .filter((transition) => transition.id === step.edgeId)
+        .forEach((transition) => {
+          ;(transition.validations ?? []).forEach((item) => {
+            const text = item.trim()
+            if (text) hints.add(text)
+          })
+          const intentSummary = transition.intent?.summary?.trim()
+          if (intentSummary) {
+            hints.add(`符合 transition intent：${intentSummary}`)
+          }
+        })
+    })
+
+    context.systemConnectors
+      .filter((connector) => {
+        const fromMatches =
+          connector.from.diagramId === step.fromDiagramId
+          && (connector.from.stateId === null || connector.from.stateId === step.fromStateId)
+        const toMatches =
+          connector.to.diagramId === step.toDiagramId
+          && (connector.to.stateId === null || connector.to.stateId === step.toStateId)
+        return fromMatches && toMatches
+      })
+      .forEach((connector) => {
+        ;(connector.meta?.validations ?? []).forEach((item) => {
+          const text = item.trim()
+          if (text) hints.add(text)
+        })
+      })
+
+    return Array.from(hints)
+  }
+
+  private buildAssertionsFromHints(step: PlannedTransitionStep, hints: string[]): StepAssertionSpec[] {
+    return hints.map((hint, index) => ({
+      id: `${step.edgeId}.assertion.${index + 1}`,
       type: 'semantic-check',
-      description: validation,
-      expected: validation,
+      description: hint,
+      expected: hint,
     }))
+  }
+
+  private buildFallback(step: PlannedTransitionStep, context: ExecutorContext): StepNarrativeInstruction {
+    const hints = this.collectValidationHints(step, context)
+    const assertions = this.buildAssertionsFromHints(
+      step,
+      hints.length > 0 ? hints : [`完成狀態轉換：${step.label}`],
+    )
 
     return {
       summary: `${step.fromStateId} -> ${step.toStateId}`,
       taskDescription: `完成狀態轉換：${step.label}`,
-      completionCriteria,
+      assertions,
     }
   }
 
@@ -75,10 +136,10 @@ export class StepNarratorAgent implements StepNarrator {
     "summary": "string",
     "taskDescription": "string"
   },
-  "completionCriteria": [
+  "assertions": [
     {
       "id": "string",
-      "type": "url-equals|url-includes|text-visible|element-visible|semantic-check",
+      "type": "url-equals|url-includes|text-visible|text-not-visible|element-visible|element-not-visible|network-success|network-failed|semantic-check",
       "description": "string",
       "expected": "string 可選",
       "selector": "string 可選"
@@ -88,7 +149,7 @@ export class StepNarratorAgent implements StepNarrator {
 
 規則：
 1) taskDescription 要具體且可執行，描述這一步在頁面上要達成的目標。
-2) completionCriteria 要可驗證，優先使用 url/text/element，不足時才 semantic-check。`
+2) assertions 要可驗證，且優先由本步 transition/connector validations 推導，不足時才 semantic-check。`
   }
 
   async generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction> {
@@ -137,33 +198,33 @@ export class StepNarratorAgent implements StepNarrator {
       await client.stop()
 
       const parsed = extractJsonPayload(finalEvent?.data?.content ?? '') as NarrativeEnvelope | null
-      const rawCriteria = parsed?.completionCriteria ?? []
+      const assertionFallbackHints = this.collectValidationHints(step, context)
+      const rawAssertions = parsed?.assertions ?? []
 
-      const completionCriteria: StepCompletionCriterion[] = rawCriteria
-        .map((criterion, index) => {
-          const normalizedType = (criterion.type?.trim() || 'semantic-check') as StepCompletionCriterion['type']
+      const assertions: StepAssertionSpec[] = rawAssertions
+        .map((assertion, index) => {
+          const normalizedType = (assertion.type?.trim() || 'semantic-check') as StepAssertionSpec['type']
           return {
-            id: criterion.id?.trim() || `${step.edgeId}.criteria.${index + 1}`,
+            id: assertion.id?.trim() || `${step.edgeId}.assertion.${index + 1}`,
             type: allowedTypes.has(normalizedType) ? normalizedType : 'semantic-check',
-            description: criterion.description?.trim() || context.stepValidations[index] || `criteria ${index + 1}`,
-            expected: criterion.expected?.trim() || undefined,
-            selector: criterion.selector?.trim() || undefined,
+            description: assertion.description?.trim() || assertionFallbackHints[index] || `assertion ${index + 1}`,
+            expected: assertion.expected?.trim() || undefined,
+            selector: assertion.selector?.trim() || undefined,
+            timeoutMs: assertion.timeoutMs && assertion.timeoutMs > 0 ? assertion.timeoutMs : undefined,
           }
         })
-        .filter((criterion) => criterion.description.length > 0)
+        .filter((assertion) => assertion.description.length > 0)
 
       return {
         summary: parsed?.narrative?.summary?.trim() || `${step.fromStateId} -> ${step.toStateId}`,
         taskDescription: parsed?.narrative?.taskDescription?.trim() || `完成狀態轉換：${step.label}`,
-        completionCriteria:
-          completionCriteria.length > 0
-            ? completionCriteria
-            : context.stepValidations.map((validation, index) => ({
-                id: `${step.edgeId}.criteria.${index + 1}`,
-                type: 'semantic-check',
-                description: validation,
-                expected: validation,
-              })),
+        assertions:
+          assertions.length > 0
+            ? assertions
+            : this.buildAssertionsFromHints(
+                step,
+                assertionFallbackHints.length > 0 ? assertionFallbackHints : [`完成狀態轉換：${step.label}`],
+              ),
       }
     } catch (error) {
       log.log('step narrator failed; using fallback', {

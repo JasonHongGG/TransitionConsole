@@ -40,9 +40,15 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
 
     const payload = {
       maxPaths: context.maxPaths,
-      specRaw: context.specRaw ?? '',
+      context: {
+        runId: context.context.runId,
+        pathId: context.context.pathId,
+        stepId: context.context.stepId ?? null,
+        targetUrl: context.context.targetUrl ?? '',
+        specRaw: context.context.specRaw ?? '',
+        diagrams: context.context.diagrams,
+      },
       previouslyPlannedPaths: context.previouslyPlannedPaths,
-      diagrams: context.diagrams,
     }
 
     const content = await this.runtime.generate({

@@ -68,7 +68,30 @@ Format:
             "id": "string 表示 transition 唯一識別",
             "from": "string 表示起始 state id",
             "to": "string 表示目標 state id",
-            "walked": "boolean 表示此 transition 是否已經走過"
+            "walked": "boolean 表示此 transition 是否已經走過",
+            "validations": ["string 表示此 transition 的驗證條件敘述（可選）"],
+            "intent": {
+              "summary": "string|null 表示此 transition 的語意意圖摘要（可選）"
+            }
+          }
+        ],
+        "connectors": [
+          {
+            "id": "string 表示 connector 唯一識別",
+            "type": "contains|invokes",
+            "from": {
+              "diagramId": "string 表示來源 diagram id",
+              "stateId": "string|null 表示來源 state id（可為 null）"
+            },
+            "to": {
+              "diagramId": "string 表示目標 diagram id",
+              "stateId": "string|null 表示目標 state id（可為 null）"
+            },
+            "meta": {
+              "reason": "string|null 表示 connector 連結原因（可選）",
+              "action": "string|null 表示 connector 觸發動作（可選）",
+              "validations": ["string 表示 connector 驗證條件（可選）"]
+            }
           }
         ],
         "meta": {
