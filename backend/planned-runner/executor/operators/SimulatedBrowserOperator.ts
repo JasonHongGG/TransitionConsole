@@ -1,0 +1,49 @@
+import type { ExecutorContext, OperatorTraceItem, PlannedTransitionStep, StepAssertionSpec, StepExecutionResult, StepInstruction, StepValidationResult } from '../../types'
+import type { BrowserOperator } from '../contracts'
+
+export class SimulatedBrowserOperator implements BrowserOperator {
+  async run(
+    step: PlannedTransitionStep,
+    context: ExecutorContext,
+    instruction: StepInstruction,
+    assertions: StepAssertionSpec[],
+  ): Promise<{
+    result: 'pass' | 'fail'
+    blockedReason?: string
+    failureCode?: StepExecutionResult['failureCode']
+    validationResults: StepValidationResult[]
+    trace: OperatorTraceItem[]
+    evidence: StepExecutionResult['evidence']
+  }> {
+    const trace: OperatorTraceItem[] = []
+    for (let i = 1; i <= instruction.maxIterations; i += 1) {
+      trace.push({
+        iteration: i,
+        observation: `targetUrl=${context.targetUrl}`,
+        action: instruction.actions[Math.min(i - 1, instruction.actions.length - 1)]?.description ?? 'no-op',
+        outcome: 'success',
+        detail: `simulated-operator iteration ${i}`,
+      })
+    }
+
+    const validationResults: StepValidationResult[] = assertions.map((assertion) => ({
+      id: assertion.id,
+      label: assertion.description,
+      status: 'pass',
+      reason: 'simulated operator assumed pass',
+      assertionType: assertion.type,
+      expected: assertion.expected,
+      actual: 'observed (simulated)',
+    }))
+
+    return {
+      result: 'pass',
+      validationResults,
+      trace,
+      evidence: {
+        domSummary: `simulated-dom: reached ${step.toStateId}`,
+        networkSummary: 'simulated-network: no captured requests',
+      },
+    }
+  }
+}

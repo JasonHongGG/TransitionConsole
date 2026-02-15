@@ -3,7 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import { createLogger } from './common/logger'
 import { PlannedRunner } from './planned-runner'
-import { createPathPlanner, shouldResetPlannerCursorOnStart } from './pathPlanner/pathPlannerFactory'
+import { createPathPlanner, shouldResetPlannerCursorOnStart } from './planned-runner/planner/plannerProvider/pathPlannerFactory'
 import { createPlannedRoutes } from './routes/plannedRoutes'
 
 const app = express()

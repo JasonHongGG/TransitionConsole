@@ -1,5 +1,5 @@
 import { createLogger } from '../common/logger'
-import type { PathPlanner } from '../pathPlanner/types'
+import type { PathPlanner } from './planner/plannerProvider/types'
 import { StubStepExecutor } from './executor'
 import { buildRuntimeGraph } from './graph'
 import { generatePlannedPaths, withReindexedPaths } from './planner'
@@ -77,6 +77,10 @@ export class PlannedRunner {
     if (this.resetPlannerCursorOnStart && this.pathPlanner.resetRoundCursor) {
       await this.pathPlanner.resetRoundCursor()
       log.log('planner cursor reset before start', { runId })
+    }
+
+    if (this.executor.onRunStart) {
+      await this.executor.onRunStart(runId)
     }
 
     const plan = await generatePlannedPaths(
@@ -204,7 +208,15 @@ export class PlannedRunner {
     let exec: StepExecutionResult
     try {
       exec = {
-        ...(await this.executor.execute(step, { targetUrl: requestTargetUrl(this.runtime) })),
+        ...(await this.executor.execute(step, {
+          runId: this.runtime.runId,
+          pathId: currentPath.id,
+          pathName: currentPath.name,
+          stepId: step.id,
+          semanticGoal: currentPath.semanticGoal,
+          targetUrl: requestTargetUrl(this.runtime),
+          stepValidations: step.validations,
+        })),
       }
     } catch (error) {
       log.log('step execution threw error', {
@@ -224,8 +236,10 @@ export class PlannedRunner {
     const result = exec.result
 
     this.runtime.edgeStatuses[step.edgeId] = result
-    this.runtime.nodeStatuses[step.toStateId] = 'pass'
-    this.runtime.currentStateId = step.toStateId
+    if (result === 'pass') {
+      this.runtime.nodeStatuses[step.toStateId] = 'pass'
+      this.runtime.currentStateId = step.toStateId
+    }
 
     log.log('step execution completed', {
       runId: this.runtime.runId,
@@ -257,11 +271,16 @@ export class PlannedRunner {
   }
 
   stop(): PlannedStepResponse {
+    const runId = this.runtime?.runId ?? null
     log.log('stop requested', {
-      runId: this.runtime?.runId ?? null,
+      runId,
       hasRuntime: Boolean(this.runtime),
       completed: this.runtime?.completed ?? true,
     })
+
+    if (runId && this.executor.onRunStop) {
+      void this.executor.onRunStop(runId)
+    }
 
     return {
       ok: true,
@@ -271,10 +290,15 @@ export class PlannedRunner {
   }
 
   reset(): PlannedStepResponse {
+    const runId = this.runtime?.runId ?? null
     log.log('reset requested', {
-      runId: this.runtime?.runId ?? null,
+      runId,
       hadRuntime: Boolean(this.runtime),
     })
+
+    if (runId && this.executor.onRunStop) {
+      void this.executor.onRunStop(runId)
+    }
 
     this.runtime = null
 
@@ -300,6 +324,9 @@ export class PlannedRunner {
     if (coverage.uncoveredEdgeIds.length === 0 && coverage.uncoveredNodeIds.length === 0) {
       this.runtime.completed = true
       log.log('run completed: full coverage reached', { runId: this.runtime.runId })
+      if (this.executor.onRunStop) {
+        await this.executor.onRunStop(this.runtime.runId)
+      }
       return
     }
 
@@ -309,6 +336,9 @@ export class PlannedRunner {
         runId: this.runtime.runId,
         replanCount: this.runtime.replanCount,
       })
+      if (this.executor.onRunStop) {
+        await this.executor.onRunStop(this.runtime.runId)
+      }
       return
     }
 

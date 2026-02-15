@@ -6,11 +6,82 @@ export type PlannedStepKind = 'transition' | 'connector'
 
 export type ValidationStatus = 'pass' | 'fail'
 
+export type AssertionType =
+  | 'url-equals'
+  | 'url-includes'
+  | 'text-visible'
+  | 'text-not-visible'
+  | 'element-visible'
+  | 'element-not-visible'
+  | 'network-success'
+  | 'network-failed'
+  | 'semantic-check'
+
+export type OperatorActionType =
+  | 'goto'
+  | 'click'
+  | 'type'
+  | 'press'
+  | 'select'
+  | 'wait'
+  | 'scroll'
+  | 'custom'
+
+export type ExecutionFailureCode =
+  | 'instruction-planner-failed'
+  | 'operator-timeout'
+  | 'operator-no-progress'
+  | 'operator-action-failed'
+  | 'assertion-failed'
+  | 'unexpected-error'
+
 export interface StepValidationResult {
   id: string
   label: string
   status: ValidationStatus
   reason: string
+  assertionType?: AssertionType
+  actual?: string
+  expected?: string
+}
+
+export interface StepAssertionSpec {
+  id: string
+  type: AssertionType
+  description: string
+  expected?: string
+  selector?: string
+  timeoutMs?: number
+}
+
+export interface InstructionAction {
+  action: OperatorActionType
+  description: string
+  target?: string
+  value?: string
+}
+
+export interface StepInstruction {
+  summary: string
+  intent: string
+  actions: InstructionAction[]
+  successCriteria: string[]
+  maxIterations: number
+}
+
+export interface StepEvidence {
+  beforeScreenshotPath?: string
+  afterScreenshotPath?: string
+  domSummary?: string
+  networkSummary?: string
+}
+
+export interface OperatorTraceItem {
+  iteration: number
+  observation: string
+  action: string
+  outcome: 'success' | 'failed' | 'skipped'
+  detail?: string
 }
 
 export interface DiagramState {
@@ -180,15 +251,28 @@ export interface RuntimeState {
 }
 
 export interface ExecutorContext {
+  runId: string
+  pathId: string
+  pathName: string
+  stepId: string
+  semanticGoal: string
   targetUrl: string
+  stepValidations: string[]
 }
 
 export interface StepExecutionResult {
   result: TransitionResult
   blockedReason?: string
   validationResults: StepValidationResult[]
+  instruction?: StepInstruction
+  assertions?: StepAssertionSpec[]
+  evidence?: StepEvidence
+  trace?: OperatorTraceItem[]
+  failureCode?: ExecutionFailureCode
 }
 
 export interface StepExecutor {
   execute(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepExecutionResult>
+  onRunStart?(runId: string): Promise<void> | void
+  onRunStop?(runId: string): Promise<void> | void
 }
