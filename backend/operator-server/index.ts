@@ -27,7 +27,6 @@ app.post('/api/operator/step-executor/run', async (req, res) => {
     const step = body.step
     const context = body.context
     const narrative = body.narrative
-    const instruction = body.instruction
     const assertions = body.assertions
 
     log.log('operator run request', {
@@ -38,7 +37,7 @@ app.post('/api/operator/step-executor/run', async (req, res) => {
       targetUrl: context.targetUrl,
     })
 
-    const output = await operator.run(step, context, narrative, instruction, assertions)
+    const output = await operator.run(step, context, narrative, assertions)
     log.log('operator run completed', {
       runId: context.runId,
       pathId: context.pathId,

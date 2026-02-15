@@ -5,7 +5,6 @@ import type {
   PlannedTransitionStep,
   StepAssertionSpec,
   StepExecutionResult,
-  StepInstruction,
   StepValidationResult,
 } from '../../types'
 import type { BrowserOperator, BrowserPage, BrowserSession, LoopFunctionCall, LoopFunctionResponse, OperatorLoopAgent } from '../contracts'
@@ -402,10 +401,9 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
   }
 
   async run(
-    _step: PlannedTransitionStep,
+    step: PlannedTransitionStep,
     context: ExecutorContext,
     narrative: StepNarrativeInstruction,
-    instruction: StepInstruction,
     assertions: StepAssertionSpec[],
   ): Promise<{
     result: 'pass' | 'fail'
@@ -420,22 +418,40 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     const page = session.page
     const trace: OperatorTraceItem[] = []
     let lastState: CurrentState | null = await this.currentState(page)
-    const maxIterations = Math.min(Math.max(narrative.maxIterations || 1, 1), 30)
+    const maxLoopRounds = 12
     let actionCursor = 0
 
-    for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
+    for (let iteration = 1; iteration <= maxLoopRounds; iteration += 1) {
       const stateSummary = `url=${page.url()}; iteration=${iteration}; actionCursor=${actionCursor}`
 
       const decision = await this.loopAgent.decide({
-        runId: context.runId,
-        pathId: context.pathId,
+        context: {
+          runId: context.runId,
+          pathId: context.pathId,
+          stepId: context.stepId,
+          targetUrl: context.targetUrl,
+          specRaw: context.specRaw,
+          diagrams: context.systemDiagrams,
+        },
+        step: {
+          edgeId: step.edgeId,
+          from: {
+            stateId: step.fromStateId,
+            diagramId: step.fromDiagramId,
+          },
+          to: {
+            stateId: step.toStateId,
+            diagramId: step.toDiagramId,
+          },
+          summary: step.label,
+          semanticGoal: step.semantic,
+        },
         iteration,
         currentUrl: page.url(),
         stateSummary,
         screenshotBase64: lastState.screenshot.toString('base64'),
         actionCursor,
         narrative,
-        instruction,
         assertions,
       })
 

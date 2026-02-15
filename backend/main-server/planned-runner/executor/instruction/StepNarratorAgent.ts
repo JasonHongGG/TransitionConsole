@@ -15,7 +15,6 @@ type NarrativeEnvelope = {
   narrative?: {
     summary?: string
     taskDescription?: string
-    maxIterations?: number
   }
   completionCriteria?: Array<{
     id?: string
@@ -62,7 +61,6 @@ export class StepNarratorAgent implements StepNarrator {
       summary: `${step.fromStateId} -> ${step.toStateId}`,
       taskDescription: `完成狀態轉換：${step.label}`,
       completionCriteria,
-      maxIterations: 6,
     }
   }
 
@@ -75,8 +73,7 @@ export class StepNarratorAgent implements StepNarrator {
 {
   "narrative": {
     "summary": "string",
-    "taskDescription": "string",
-    "maxIterations": number
+    "taskDescription": "string"
   },
   "completionCriteria": [
     {
@@ -91,8 +88,7 @@ export class StepNarratorAgent implements StepNarrator {
 
 規則：
 1) taskDescription 要具體且可執行，描述這一步在頁面上要達成的目標。
-2) completionCriteria 要可驗證，優先使用 url/text/element，不足時才 semantic-check。
-3) maxIterations 建議 4~12。`
+2) completionCriteria 要可驗證，優先使用 url/text/element，不足時才 semantic-check。`
   }
 
   async generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction> {
@@ -168,10 +164,6 @@ export class StepNarratorAgent implements StepNarrator {
                 description: validation,
                 expected: validation,
               })),
-        maxIterations:
-          parsed?.narrative?.maxIterations && parsed.narrative.maxIterations > 0
-            ? Math.min(Math.max(parsed.narrative.maxIterations, 1), 20)
-            : 8,
       }
     } catch (error) {
       log.log('step narrator failed; using fallback', {

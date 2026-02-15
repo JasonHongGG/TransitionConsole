@@ -28,7 +28,6 @@ export type OperatorActionType =
   | 'custom'
 
 export type ExecutionFailureCode =
-  | 'instruction-planner-failed'
   | 'narrative-planner-failed'
   | 'operator-timeout'
   | 'operator-no-progress'
@@ -50,7 +49,6 @@ export interface StepNarrativeInstruction {
   summary: string
   taskDescription: string
   completionCriteria: StepCompletionCriterion[]
-  maxIterations: number
 }
 
 export type OperatorTerminationReason = 'completed' | 'max-iterations' | 'operator-error' | 'assertion-failed' | 'criteria-unmet'
@@ -88,21 +86,6 @@ export interface StepAssertionSpec {
   expected?: string
   selector?: string
   timeoutMs?: number
-}
-
-export interface InstructionAction {
-  action: OperatorActionType
-  description: string
-  target?: string
-  value?: string
-}
-
-export interface StepInstruction {
-  summary: string
-  intent: string
-  actions: InstructionAction[]
-  successCriteria: string[]
-  maxIterations: number
 }
 
 export interface StepEvidence {
@@ -294,6 +277,7 @@ export interface ExecutorContext {
   stepId: string
   semanticGoal: string
   targetUrl: string
+  specRaw: string | null
   stepValidations: string[]
   currentPathStepIndex: number
   currentPathStepTotal: number
@@ -307,7 +291,6 @@ export interface StepExecutionResult {
   blockedReason?: string
   validationResults: StepValidationResult[]
   narrative?: StepNarrativeInstruction
-  instruction?: StepInstruction
   assertions?: StepAssertionSpec[]
   loopIterations?: OperatorLoopIteration[]
   terminationReason?: OperatorTerminationReason

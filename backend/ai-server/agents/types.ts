@@ -1,8 +1,6 @@
 import type {
   ExecutorContext,
   PlannedTransitionStep,
-  StepAssertionSpec,
-  StepInstruction,
   StepNarrativeInstruction,
 } from '../../main-server/planned-runner/types'
 import type { LoopDecision, LoopDecisionInput, LoopFunctionResponse } from '../../main-server/planned-runner/executor/contracts'
@@ -17,10 +15,6 @@ export interface StepNarratorAgent {
   generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction>
 }
 
-export interface InstructionPlannerAgent {
-  build(step: PlannedTransitionStep, context: ExecutorContext): Promise<{ instruction: StepInstruction; assertions: StepAssertionSpec[] }>
-}
-
 export interface OperatorLoopDecisionAgent {
   decide(input: LoopDecisionInput): Promise<LoopDecision>
   appendFunctionResponses(runId: string, pathId: string, responses: LoopFunctionResponse[]): Promise<void>
@@ -30,6 +24,5 @@ export interface OperatorLoopDecisionAgent {
 export interface AiAgents {
   pathPlanner: PathPlannerAgent
   stepNarrator: StepNarratorAgent
-  instructionPlanner: InstructionPlannerAgent
   operatorLoop: OperatorLoopDecisionAgent
 }

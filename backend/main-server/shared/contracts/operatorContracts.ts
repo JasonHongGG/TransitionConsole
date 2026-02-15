@@ -4,7 +4,6 @@ import type {
   PlannedTransitionStep,
   StepAssertionSpec,
   StepExecutionResult,
-  StepInstruction,
   StepNarrativeInstruction,
   StepValidationResult,
 } from '../../planned-runner/types'
@@ -13,7 +12,6 @@ export interface OperatorStepRunRequest {
   step: PlannedTransitionStep
   context: ExecutorContext
   narrative: StepNarrativeInstruction
-  instruction: StepInstruction
   assertions: StepAssertionSpec[]
 }
 

@@ -1,2 +1,2 @@
 export { AgentStepExecutor, StubStepExecutor } from './AgentStepExecutor'
-export type { BrowserOperator, InstructionPlanner } from './contracts'
+export type { BrowserOperator } from './contracts'

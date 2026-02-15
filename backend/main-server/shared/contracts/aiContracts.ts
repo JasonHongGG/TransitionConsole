@@ -1,4 +1,4 @@
-import type { ExecutorContext, PlannedTransitionStep, StepAssertionSpec, StepInstruction, StepNarrativeInstruction } from '../../planned-runner/types'
+import type { ExecutorContext, PlannedTransitionStep, StepNarrativeInstruction } from '../../planned-runner/types'
 import type { LoopDecision, LoopDecisionInput, LoopFunctionResponse } from '../../planned-runner/executor/contracts'
 import type { PathPlannerContext, PlannedPathDraft } from '../../planned-runner/planner/plannerProvider/types'
 
@@ -23,16 +23,6 @@ export interface StepNarratorGenerateRequest {
 
 export interface StepNarratorGenerateResponse {
   narrative: StepNarrativeInstruction
-}
-
-export interface InstructionPlannerBuildRequest {
-  step: PlannedTransitionStep
-  context: ExecutorContext
-}
-
-export interface InstructionPlannerBuildResponse {
-  instruction: StepInstruction
-  assertions: StepAssertionSpec[]
 }
 
 export type OperatorLoopDecideRequest = LoopDecisionInput

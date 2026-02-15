@@ -1,4 +1,4 @@
-import type { ExecutorContext, OperatorTraceItem, PlannedTransitionStep, StepAssertionSpec, StepExecutionResult, StepInstruction, StepNarrativeInstruction, StepValidationResult } from '../../types'
+import type { ExecutorContext, OperatorTraceItem, PlannedTransitionStep, StepAssertionSpec, StepExecutionResult, StepNarrativeInstruction, StepValidationResult } from '../../types'
 import type { BrowserOperator } from '../contracts'
 
 export class SimulatedBrowserOperator implements BrowserOperator {
@@ -6,7 +6,6 @@ export class SimulatedBrowserOperator implements BrowserOperator {
     step: PlannedTransitionStep,
     context: ExecutorContext,
     _narrative: StepNarrativeInstruction,
-    instruction: StepInstruction,
     assertions: StepAssertionSpec[],
   ): Promise<{
     result: 'pass' | 'fail'
@@ -18,7 +17,7 @@ export class SimulatedBrowserOperator implements BrowserOperator {
     evidence: StepExecutionResult['evidence']
   }> {
     const trace: OperatorTraceItem[] = []
-    for (let i = 1; i <= instruction.maxIterations; i += 1) {
+    for (let i = 1; i <= 3; i += 1) {
       trace.push({
         iteration: i,
         observation: `targetUrl=${context.targetUrl}`,

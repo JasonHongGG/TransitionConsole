@@ -17,11 +17,21 @@ export const PATH_PLANNER_SYSTEM_PROMPT = `【系統角色】
 【目標】
 在 maxPaths 限制內，回傳多條語意合理的測試路徑；每條路徑都應有明確名稱(name)與測試意圖(semanticGoal)，並盡可能補足未走過區域。
 
+【跨 Agent 命名對齊規範】
+- 執行識別欄位一律使用：runId、pathId、stepId（camelCase）。
+- 若某 agent 不需要 step 粒度，stepId 仍可保留為 null 或省略，但不得改名為 step_id / stepID / step。
+- 本 agent 為路徑規劃層，輸出不包含 terminationReason；terminationReason 僅由 operator-loop 決策輸出。
+
 【結構化輸入 JSON Schema】
 Format:
 {
 	"maxPaths": "number 表示最多可回傳幾條 path",
 	"specRaw": "string 表示原始規格內容，用於推導語意與測試重點",
+	"context": {
+		"runId": "string 表示執行批次 id（可選）",
+		"pathId": "string 表示目前路徑 id（可選）",
+		"stepId": "string|null 表示目前步驟 id（可選；通常為 null）"
+	},
 	"previouslyPlannedPaths": [
 		{
 			"pathId": "string 表示歷史路徑 id（可為空）",

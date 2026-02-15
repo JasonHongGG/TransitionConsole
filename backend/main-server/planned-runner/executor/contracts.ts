@@ -7,28 +7,41 @@ import type {
   PlannedTransitionStep,
   StepAssertionSpec,
   StepExecutionResult,
-  StepInstruction,
   StepValidationResult,
 } from '../types'
-
-export interface InstructionPlanner {
-  build(step: PlannedTransitionStep, context: ExecutorContext): Promise<{ instruction: StepInstruction; assertions: StepAssertionSpec[] }>
-}
 
 export interface StepNarrator {
   generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction>
 }
 
 export interface LoopDecisionInput {
-  runId: string
-  pathId: string
+  context: {
+    runId: string
+    pathId: string
+    stepId: string
+    targetUrl: string
+    specRaw: string | null
+    diagrams: ExecutorContext['systemDiagrams']
+  }
+  step: {
+    edgeId: string
+    from: {
+      stateId: string
+      diagramId: string
+    }
+    to: {
+      stateId: string
+      diagramId: string
+    }
+    summary?: string
+    semanticGoal?: string
+  }
   iteration: number
   currentUrl: string
   stateSummary: string
   screenshotBase64: string
   actionCursor: number
   narrative: StepNarrativeInstruction
-  instruction: StepInstruction
   assertions: StepAssertionSpec[]
 }
 
@@ -68,7 +81,6 @@ export interface BrowserOperator {
     step: PlannedTransitionStep,
     context: ExecutorContext,
     narrative: StepNarrativeInstruction,
-    instruction: StepInstruction,
     assertions: StepAssertionSpec[],
   ): Promise<{
     result: 'pass' | 'fail'
@@ -80,29 +92,6 @@ export interface BrowserOperator {
     evidence: StepExecutionResult['evidence']
   }>
   cleanupRun?(runId: string): Promise<void>
-}
-
-export interface CopilotInstructionEnvelope {
-  instruction?: {
-    summary?: string
-    intent?: string
-    maxIterations?: number
-    actions?: Array<{
-      action?: string
-      description?: string
-      target?: string
-      value?: string
-    }>
-    successCriteria?: string[]
-  }
-  assertions?: Array<{
-    id?: string
-    type?: string
-    description?: string
-    expected?: string
-    selector?: string
-    timeoutMs?: number
-  }>
 }
 
 export type NetworkRecord = { method: string; url: string; status: number | null }

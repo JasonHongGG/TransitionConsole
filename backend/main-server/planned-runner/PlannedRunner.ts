@@ -215,6 +215,7 @@ export class PlannedRunner {
           stepId: step.id,
           semanticGoal: currentPath.semanticGoal,
           targetUrl: requestTargetUrl(this.runtime),
+          specRaw: this.runtime.specRaw,
           stepValidations: step.validations,
           currentPathStepIndex: this.runtime.stepIndex,
           currentPathStepTotal: currentPath.steps.length,

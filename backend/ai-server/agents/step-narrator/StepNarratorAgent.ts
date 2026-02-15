@@ -8,7 +8,6 @@ type NarrativeEnvelope = {
   narrative?: {
     summary?: string
     taskDescription?: string
-    maxIterations?: number
   }
   completionCriteria?: Array<{
     id?: string
@@ -68,10 +67,6 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
       summary: parsed?.narrative?.summary?.trim() || `${step.fromStateId} -> ${step.toStateId}`,
       taskDescription: parsed?.narrative?.taskDescription?.trim() || `完成狀態轉換：${step.label}`,
       completionCriteria,
-      maxIterations:
-        parsed?.narrative?.maxIterations && parsed.narrative.maxIterations > 0
-          ? Math.min(Math.max(parsed.narrative.maxIterations, 1), 20)
-          : 8,
     }
   }
 }

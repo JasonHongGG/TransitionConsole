@@ -6,7 +6,6 @@ import { shouldResetPlannerCursorOnStart } from './planned-runner/planner/planne
 import { createPlannedRoutes } from './routes/plannedRoutes'
 import { AgentStepExecutor } from './planned-runner/executor'
 import { BrowserOperatorApi } from './planned-runner/api/BrowserOperatorApi'
-import { InstructionPlannerApi } from './planned-runner/api/InstructionPlannerApi'
 import { PathPlannerApi } from './planned-runner/api/PathPlannerApi'
 import { StepNarratorApi } from './planned-runner/api/StepNarratorApi'
 
@@ -26,7 +25,6 @@ export const startMainServer = (): void => {
     resetPlannerCursorOnStart: shouldResetPlannerCursorOnStart(),
     executor: new AgentStepExecutor({
       narrator: new StepNarratorApi({ aiBaseUrl: process.env.AI_SERVER_BASE_URL }),
-      planner: new InstructionPlannerApi({ aiBaseUrl: process.env.AI_SERVER_BASE_URL }),
       operator: process.env.PLANNED_RUNNER_REAL_BROWSER === 'true'
         ? new BrowserOperatorApi({ operatorBaseUrl: process.env.OPERATOR_SERVER_BASE_URL })
         : undefined,

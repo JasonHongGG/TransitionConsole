@@ -96,7 +96,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
   }
 
   async decide(input: LoopDecisionInput): Promise<LoopDecision> {
-    const key = this.sessionKey(input.runId, input.pathId)
+    const key = this.sessionKey(input.context.runId, input.context.pathId)
     const screenshotBase64 =
       input.screenshotBase64.length > this.maxScreenshotBase64Chars
         ? input.screenshotBase64.slice(0, this.maxScreenshotBase64Chars)

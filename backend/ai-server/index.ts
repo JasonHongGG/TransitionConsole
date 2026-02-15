@@ -4,7 +4,6 @@ import cors from 'cors'
 import { createLogger } from '../common/logger'
 import type { ExecutorContext, PlannedTransitionStep } from '../main-server/planned-runner/types'
 import type {
-  InstructionPlannerBuildRequest,
   OperatorLoopAppendFunctionResponsesRequest,
   OperatorLoopCleanupRunRequest,
   OperatorLoopDecideRequest,
@@ -101,47 +100,20 @@ app.post('/api/ai/agents/step-narrator/generate', async (req, res) => {
   }
 })
 
-app.post('/api/ai/agents/instruction-planner/build', async (req, res) => {
-  try {
-    const body = req.body as InstructionPlannerBuildRequest
-    const step = body.step as PlannedTransitionStep
-    const context = body.context as ExecutorContext
-    log.log('instruction planner request', {
-      runId: context.runId,
-      pathId: context.pathId,
-      stepId: context.stepId,
-      edgeId: step.edgeId,
-    })
-    const output = await agents.instructionPlanner.build(step, context)
-    log.log('instruction planner completed', {
-      runId: context.runId,
-      pathId: context.pathId,
-      stepId: context.stepId,
-      assertions: output.assertions.length,
-    })
-    res.json(output)
-  } catch (error) {
-    log.log('instruction planner failed', {
-      error: error instanceof Error ? error.message : 'instruction planner failed',
-    })
-    res.status(500).json({
-      ok: false,
-      error: error instanceof Error ? error.message : 'instruction planner failed',
-    })
-  }
-})
-
 app.post('/api/ai/agents/operator-loop/decide', async (req, res) => {
   try {
     const body = req.body as OperatorLoopDecideRequest
+    const requestContext = body.context
     log.log('operator loop decide request', {
-      runId: body.runId,
-      pathId: body.pathId,
+      runId: requestContext.runId,
+      pathId: requestContext.pathId,
+      stepId: requestContext.stepId,
     })
     const decision = await agents.operatorLoop.decide(body)
     log.log('operator loop decide completed', {
-      runId: body.runId,
-      pathId: body.pathId,
+      runId: requestContext.runId,
+      pathId: requestContext.pathId,
+      stepId: requestContext.stepId,
       result: decision.kind,
     })
     res.json(decision)
