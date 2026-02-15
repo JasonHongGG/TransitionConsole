@@ -1,4 +1,5 @@
 import type { AiRuntime } from '../../runtime/types'
+import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
 import type { LoopDecision, LoopDecisionInput, LoopFunctionCall, LoopFunctionResponse } from '../../../main-server/planned-runner/executor/contracts'
 import type { OperatorLoopDecisionAgent as OperatorLoopDecisionAgentContract } from '../types'
@@ -120,6 +121,29 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     })
 
     const parsed = extractJsonPayload<LoopDecisionEnvelope>(content)
+
+    await writeAgentResponseLog({
+      agent: 'operator-loop',
+      model: this.model,
+      runId: input.context.runId,
+      pathId: input.context.pathId,
+      stepId: input.context.stepId,
+      request: {
+        context: input.context,
+        step: input.step,
+        iteration: input.iteration,
+        currentUrl: input.currentUrl,
+        stateSummary: input.stateSummary,
+        actionCursor: input.actionCursor,
+        assertions: input.assertions,
+        narrative: input.narrative,
+        conversationHistoryTurns: this.getHistory(key).length,
+        screenshotBase64Chars: screenshotBase64.length,
+      },
+      rawResponse: content,
+      parsedResponse: parsed,
+    })
+
     if (!parsed?.decision?.kind || !parsed.decision.reason) {
       return {
         kind: 'fail',

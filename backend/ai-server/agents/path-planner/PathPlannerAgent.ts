@@ -1,6 +1,7 @@
 import type { PathPlannerContext, PlannedPathDraft } from '../../../main-server/planned-runner/planner/plannerProvider/types'
 import { MockReplayPathPlanner } from '../../../main-server/planned-runner/planner/plannerProvider/mockReplayPathPlanner'
 import type { AiRuntime } from '../../runtime/types'
+import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
 import type { PathPlannerAgent } from '../types'
 import { PATH_PLANNER_SYSTEM_PROMPT, PATH_PLANNER_USER_INSTRUCTION } from './prompt'
@@ -35,7 +36,18 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
 
   async generate(context: PathPlannerContext): Promise<PlannedPathDraft[]> {
     if (this.useMockReplay) {
-      return this.mockReplayPlanner.generatePaths(context)
+      const drafts = await this.mockReplayPlanner.generatePaths(context)
+      await writeAgentResponseLog({
+        agent: 'path-planner',
+        model: this.model,
+        mode: 'mock-replay',
+        runId: context.context.runId,
+        pathId: context.context.pathId,
+        stepId: context.context.stepId ?? undefined,
+        request: context,
+        parsedResponse: { paths: drafts },
+      })
+      return drafts
     }
 
     const payload = {
@@ -61,7 +73,7 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
     const parsed = extractJsonPayload<PathPlannerEnvelope>(content)
     const drafts = parsed?.paths ?? []
 
-    return drafts
+    const normalizedDrafts = drafts
       .map((draft) => ({
         pathId: draft.pathId?.trim() || undefined,
         name: draft.pathName?.trim() || draft.name?.trim() || undefined,
@@ -70,6 +82,22 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
       }))
       .filter((draft) => draft.edgeIds.length > 0)
       .slice(0, context.maxPaths)
+
+    await writeAgentResponseLog({
+      agent: 'path-planner',
+      model: this.model,
+      runId: context.context.runId,
+      pathId: context.context.pathId,
+      stepId: context.context.stepId ?? undefined,
+      request: payload,
+      rawResponse: content,
+      parsedResponse: {
+        envelope: parsed,
+        paths: normalizedDrafts,
+      },
+    })
+
+    return normalizedDrafts
   }
 
   async reset(): Promise<void> {

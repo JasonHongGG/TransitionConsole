@@ -1,5 +1,6 @@
 import type { AiRuntime } from '../../runtime/types'
 import type { ExecutorContext, PlannedTransitionStep, StepAssertionSpec, StepNarrativeInstruction } from '../../../main-server/planned-runner/types'
+import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
 import type { StepNarratorAgent as StepNarratorAgentContract } from '../types'
 import { STEP_NARRATOR_PROMPT } from './prompt'
@@ -128,7 +129,7 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
       })
       .filter((assertion) => assertion.description.length > 0)
 
-    return {
+    const output = {
       summary: parsed?.narrative?.summary?.trim() || `${step.fromStateId} -> ${step.toStateId}`,
       taskDescription: parsed?.narrative?.taskDescription?.trim() || `完成狀態轉換：${step.label}`,
       assertions:
@@ -139,5 +140,21 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
               assertionFallbackHints.length > 0 ? assertionFallbackHints : [`完成狀態轉換：${step.label}`],
             ),
     }
+
+    await writeAgentResponseLog({
+      agent: 'step-narrator',
+      model: this.model,
+      runId: context.runId,
+      pathId: context.pathId,
+      stepId: context.stepId,
+      request: payload,
+      rawResponse: content,
+      parsedResponse: {
+        envelope: parsed,
+        narrative: output,
+      },
+    })
+
+    return output
   }
 }
