@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { PlannedPathDraft } from './types'
 
-interface CopilotPathEnvelope {
+type ParsedResponseShape = {
   paths?: Array<{
     pathId?: string
     name?: string
@@ -20,20 +20,9 @@ export interface MockReplayItem {
   parsedPathsCount: number
 }
 
-const extractJsonPayload = (rawContent: string): CopilotPathEnvelope | null => {
-  const trimmed = rawContent.trim()
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i)
-  const candidate = fenced?.[1]?.trim() || trimmed
-  try {
-    return JSON.parse(candidate) as CopilotPathEnvelope
-  } catch {
-    return null
-  }
-}
-
-const parseDrafts = (envelope: CopilotPathEnvelope | null): PlannedPathDraft[] => {
-  const drafts = envelope?.paths ?? []
-  return drafts
+const parseDrafts = (drafts: ParsedResponseShape['paths']): PlannedPathDraft[] => {
+  const source = drafts ?? []
+  return source
     .map((draft) => ({
       pathId: draft.pathId?.trim() || undefined,
       name: draft.pathName?.trim() || draft.name?.trim() || undefined,
@@ -74,12 +63,8 @@ export const loadMockReplayItems = async (mockDir: string): Promise<MockReplayIt
       const content = await readFile(filePath, 'utf-8')
       const raw = JSON.parse(content) as Record<string, unknown>
 
-      const assistantPayload = raw.assistantPayload as CopilotPathEnvelope | undefined
-      const responseJson = raw.responseJson as { content?: string } | undefined
-      const parsedFromResponse = typeof responseJson?.content === 'string' ? extractJsonPayload(responseJson.content) : null
-      const fallbackEnvelope = Array.isArray(raw.paths) ? ({ paths: raw.paths } as CopilotPathEnvelope) : null
-      const envelope = assistantPayload ?? parsedFromResponse ?? fallbackEnvelope
-      const drafts = parseDrafts(envelope)
+      const parsedResponse = raw.parsedResponse as ParsedResponseShape | undefined
+      const drafts = parseDrafts(parsedResponse?.paths)
 
       return {
         fileName,

@@ -91,10 +91,7 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
       stepId: context.context.stepId ?? undefined,
       request: payload,
       rawResponse: content,
-      parsedResponse: {
-        envelope: parsed,
-        paths: normalizedDrafts,
-      },
+      parsedResponse: { paths: normalizedDrafts },
     })
 
     return normalizedDrafts
