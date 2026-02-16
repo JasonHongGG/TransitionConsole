@@ -1,5 +1,5 @@
 import type { StepAssertionSpec, StepNarrativeInstruction } from '../../../../../main-server/planned-runner/types'
-import { loadSortedMockJsonFiles } from '../../../common/mockReplayFileLoader'
+import { loadSortedMockJsonFiles } from '../../common/mockReplayFileLoader'
 
 type ParsedNarrativeShape = {
   summary?: string
