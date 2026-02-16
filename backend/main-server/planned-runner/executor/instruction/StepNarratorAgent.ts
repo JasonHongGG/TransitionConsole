@@ -50,8 +50,7 @@ export class StepNarratorAgent implements StepNarrator {
     this.token = process.env.GITHUB_TOKEN ?? null
     this.cliPath = process.env.AI_RUNTIME_CLI_PATH || undefined
     this.cliUrl = process.env.AI_RUNTIME_CLI_URL || undefined
-    const timeout = Number(process.env.PLANNED_RUNNER_NARRATIVE_TIMEOUT_MS ?? 120000)
-    this.timeoutMs = Number.isFinite(timeout) && timeout > 0 ? timeout : 120000
+    this.timeoutMs = Number(process.env.PLANNED_RUNNER_NARRATIVE_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
   }
 
   private collectValidationHints(step: PlannedTransitionStep, context: ExecutorContext): string[] {

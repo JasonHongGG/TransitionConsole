@@ -14,7 +14,7 @@ export class BrowserOperatorApi implements BrowserOperator {
 
   constructor(options?: { operatorBaseUrl?: string; timeoutMs?: number }) {
     this.operatorBaseUrl = options?.operatorBaseUrl ?? process.env.OPERATOR_SERVER_BASE_URL ?? 'http://localhost:7082'
-    this.timeoutMs = options?.timeoutMs ?? Number(process.env.OPERATOR_SERVER_TIMEOUT_MS ?? 120000)
+    this.timeoutMs = options?.timeoutMs ?? Number(process.env.PLANNED_RUNNER_OPERATOR_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
   }
 
   async run(

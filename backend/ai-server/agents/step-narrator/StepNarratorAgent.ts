@@ -40,7 +40,7 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
   constructor(runtime: AiRuntime) {
     this.runtime = runtime
     this.model = process.env.PLANNED_RUNNER_NARRATIVE_MODEL ?? process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
-    this.timeoutMs = Number(process.env.PLANNED_RUNNER_NARRATIVE_TIMEOUT_MS ?? 120000)
+    this.timeoutMs = Number(process.env.PLANNED_RUNNER_NARRATIVE_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
   }
 
   private collectValidationHints(step: PlannedTransitionStep, context: ExecutorContext): string[] {

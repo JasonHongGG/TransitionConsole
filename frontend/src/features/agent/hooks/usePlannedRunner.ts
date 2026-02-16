@@ -133,6 +133,19 @@ export const usePlannedRunner = (
     return 'Request failed: unknown error'
   }, [])
 
+  const formatHttpFailure = useCallback(async (response: Response, fallback: string) => {
+    try {
+      const payload = (await response.json()) as { error?: unknown; message?: unknown } | null
+      const reason =
+        (typeof payload?.error === 'string' && payload.error.trim()) ||
+        (typeof payload?.message === 'string' && payload.message.trim()) ||
+        ''
+      return reason ? `${fallback} ${reason}` : fallback
+    } catch {
+      return fallback
+    }
+  }, [])
+
   const requestPayload = useMemo<PlannedRunnerRequest>(() => {
     const trimmedNotes = testingNotes.trim()
     const normalizedAccounts = testAccounts
@@ -258,7 +271,10 @@ export const usePlannedRunner = (
       })
 
       if (!response.ok) {
-        const failureMessage = `Failed to start planned run (${response.status}).`
+        const failureMessage = await formatHttpFailure(
+          response,
+          `Failed to start planned run (${response.status}).`,
+        )
         appendLog(createLog('error', failureMessage))
         setLastError(failureMessage)
         setStatusTone('error')
@@ -281,7 +297,7 @@ export const usePlannedRunner = (
     } finally {
       setIsBusy(false)
     }
-  }, [appendLog, applySnapshot, diagrams.length, endpointBase, formatRequestError, requestPayload])
+  }, [appendLog, applySnapshot, diagrams.length, endpointBase, formatHttpFailure, formatRequestError, requestPayload])
 
   const stop = useCallback(async () => {
     setIsBusy(true)
@@ -320,7 +336,7 @@ export const usePlannedRunner = (
     try {
       const response = await fetch(`${endpointBase}/step`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
       if (!response.ok) {
-        const failureMessage = `Step request failed (${response.status}).`
+        const failureMessage = await formatHttpFailure(response, `Step request failed (${response.status}).`)
         appendLog(createLog('error', failureMessage))
         setRunningState(false)
         setLastError(failureMessage)
@@ -362,7 +378,7 @@ export const usePlannedRunner = (
     } finally {
       setIsBusy(false)
     }
-  }, [appendLog, applySnapshot, endpointBase, formatRequestError, running])
+  }, [appendLog, applySnapshot, endpointBase, formatHttpFailure, formatRequestError, running])
 
   const ensureSession = useCallback(async (): Promise<boolean> => {
     const hasActiveSnapshot = plannedStatus !== null

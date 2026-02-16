@@ -37,7 +37,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
   constructor(runtime: AiRuntime) {
     this.runtime = runtime
     this.model = process.env.PLANNED_RUNNER_OPERATOR_MODEL ?? process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
-    this.timeoutMs = Number(process.env.PLANNED_RUNNER_OPERATOR_TIMEOUT_MS ?? 120000)
+    this.timeoutMs = Number(process.env.PLANNED_RUNNER_OPERATOR_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
     this.maxScreenshotBase64Chars = Number(process.env.PLANNED_RUNNER_OPERATOR_SCREENSHOT_B64_MAX ?? 200000)
     this.maxFunctionResponseScreenshotTurns = Number(process.env.PLANNED_RUNNER_OPERATOR_MAX_RECENT_SCREENSHOT_TURNS ?? 3)
   }

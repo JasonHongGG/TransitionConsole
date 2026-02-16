@@ -23,6 +23,8 @@ export const generatePlannedPaths = async (
   edgeStatuses: Record<string, ElementExecutionStatus>,
   previouslyPlannedPaths: PlannerHistoryPath[] = [],
 ): Promise<PlannedRunPlan> => {
+  const normalizeId = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '')
+
   const plannerDiagrams = buildPlannerDiagrams(sourceDiagrams, sourceConnectors, nodeStatuses, edgeStatuses)
   const globalEntryStateId = resolveGlobalEntryStateId(sourceDiagrams, entryStateIds)
 
@@ -39,12 +41,35 @@ export const generatePlannedPaths = async (
     previouslyPlannedPaths,
   })
 
-  const requiredEntryStateId = globalEntryStateId ?? entryStateIds[0] ?? null
-  if (!requiredEntryStateId) {
-    throw new Error('Cannot resolve required entry state for page_entry.')
+  const edgesById = new Map(allEdges.map((edge) => [edge.id, edge]))
+  const pageEntryFromStateIds = Array.from(
+    new Set(allEdges.filter((edge) => edge.fromDiagramId === 'page_entry').map((edge) => edge.fromStateId)),
+  )
+
+  const resolveEntryState = (candidate: string | null): string | null => {
+    if (!candidate) return null
+    if (pageEntryFromStateIds.includes(candidate)) return candidate
+
+    const normalizedCandidate = normalizeId(candidate)
+    return pageEntryFromStateIds.find((id) => normalizeId(id) === normalizedCandidate) ?? null
   }
 
-  const edgesById = new Map(allEdges.map((edge) => [edge.id, edge]))
+  const inferredEntryFromDrafts = draftedPaths
+    .map((draft) => draft.edgeIds?.[0])
+    .map((edgeId) => (edgeId ? edgesById.get(edgeId) : undefined))
+    .find((edge) => edge?.fromDiagramId === 'page_entry')?.fromStateId ?? null
+
+  const requiredEntryStateId =
+    resolveEntryState(inferredEntryFromDrafts) ??
+    resolveEntryState(globalEntryStateId) ??
+    resolveEntryState(entryStateIds[0] ?? null) ??
+    pageEntryFromStateIds[0] ??
+    null
+
+  if (!requiredEntryStateId) {
+    throw new Error('Cannot resolve required entry state for page_entry from runtime graph.')
+  }
+
   const historicalSignatures = new Set(
     previouslyPlannedPaths
       .map((path) => (path.edgeIds ?? []).join('>'))

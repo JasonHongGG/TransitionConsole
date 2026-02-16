@@ -1,77 +1,110 @@
 # TransitionConsole
 
-Frontend console for visualizing hierarchical transition diagrams from JSON and planned-runner coverage.
+TransitionConsole is a local development workspace for:
+- visualizing transition diagrams,
+- planning execution paths with AI,
+- running step-by-step browser/operator execution.
 
-## Project structure
+## Architecture
 
-- `frontend/`: React + Vite client app
-- `backend/`: split backend services
-	- `main-server/`: planned-runner orchestration API
-	- `ai-server/`: AI runtime provider + agent factory + prompt modules
-	- `operator-server/`: browser operator execution API
+- `frontend/`: React + Vite UI
+- `backend/main-server/`: planned-runner orchestration (`/api/planned/*`)
+- `backend/ai-server/`: path-planner / step-narrator / operator-loop agents
+- `backend/operator-server/`: Playwright-based browser operator
 
-## Environment files
+## Quick start
 
-- `frontend/.env` and `frontend/.env.example`
-- `backend/.env` and `backend/.env.example`
+1. Install dependencies
 
-Backend split-service defaults:
+```bash
+cd frontend && npm install
+cd ../backend && npm install
+```
 
-- `PORT=7070` (main orchestrator)
-- `AI_SERVER_PORT=7081`
-- `OPERATOR_SERVER_PORT=7082`
-- `AI_SERVER_BASE_URL=http://localhost:7081`
-- `OPERATOR_SERVER_BASE_URL=http://localhost:7082`
-- `AI_PROVIDER=copilot-sdk`
-- `AI_RUNTIME_MODEL=gpt-5.2`
-- `AI_RUNTIME_TIMEOUT_MS=180000`
+2. Prepare env files
 
-## Lint config
+- Create `frontend/.env` from `frontend/.env.example`
+- Create `backend/.env` from `backend/.env.example`
+- Set `GITHUB_TOKEN` in `backend/.env`
 
-- `frontend/eslint.config.js`
-- `backend/eslint.config.js`
+3. Install Playwright browser runtime (required)
 
-## Data input
+```bash
+cd backend
+npx playwright install chromium
+```
 
-The app loads data from `frontend/public/data.json`. Replace that file with the latest export generated from your spec workflow.
+4. Start services
 
-## Scripts
+- VS Code Task (recommended): `workspace:dev:all`
+- Or run manually:
 
-- Frontend:
-	- `cd frontend`
-	- `npm install`
-	- `npm run dev`
-	- `npm run build`
-	- `npm run preview`
-- Backend:
-	- `cd backend`
-	- `npm install`
-	- `npm run dev:main`
-	- `npm run dev:ai`
-	- `npm run dev:operator`
+```bash
+cd backend
+npm run dev:main
+npm run dev:ai
+npm run dev:operator
 
-Recommended during development: use VSCode task `dev: all` to start frontend + all backend services in parallel.
+cd ../frontend
+npm run dev
+```
 
-## Key features
+## Health checks
 
-- Diagram view for individual state machines
-- System view that links all diagrams with connectors
-- Planned runner execution via `/api/planned/*`
-- Status panel with pass/fail validation results
+- Main server: `http://localhost:7070/health`
+- AI server: `http://localhost:7081/health`
+- Operator server: `http://localhost:7082/health`
+- Frontend (default): `http://localhost:5173`
 
-## Mock planner replay (test-only)
+## Required env highlights
 
-To avoid Copilot cost during testing, backend supports replaying historical planner JSON logs by round.
+### frontend/.env
 
-- Put JSON files into `backend/ai-server/mock-data/path-planner/`
-- Enable in `backend/.env`:
+- `VITE_PORT` (default `5173`)
+- `VITE_AGENT_API_BASE` (default `http://localhost:7070`)
+
+### backend/.env
+
+- Service ports:
+	- `MAIN_SERVER_PORT`
+	- `AI_SERVER_PORT`
+	- `OPERATOR_SERVER_PORT`
+- Internal URLs:
+	- `AI_SERVER_BASE_URL`
+	- `OPERATOR_SERVER_BASE_URL`
+- AI runtime:
+	- `AI_PROVIDER`
+	- `GITHUB_TOKEN`
+	- `AI_RUNTIME_MODEL`
+	- `AI_RUNTIME_TIMEOUT_MS`
+- Agent-specific timeouts (fallback to `AI_RUNTIME_TIMEOUT_MS`):
+	- `PATH_PLANNER_TIMEOUT_MS`
+	- `PLANNED_RUNNER_NARRATIVE_TIMEOUT_MS`
+	- `PLANNED_RUNNER_OPERATOR_TIMEOUT_MS`
+
+## Input data
+
+The frontend reads transition data from:
+
+- `frontend/public/data.json`
+
+Replace this file with your latest exported diagram data before running plans.
+
+## Mock planner replay (optional)
+
+Use historical planner logs instead of live LLM planning:
+
+- Put planner JSON files in `backend/ai-server/mock-data/path-planner/`
+- Set in `backend/.env`:
 	- `PATH_PLANNER_PROVIDER=mock-replay`
 	- `PATH_PLANNER_MOCK_DIR=ai-server/mock-data/path-planner`
 	- `PATH_PLANNER_MOCK_LOOP=true`
 	- `PATH_PLANNER_MOCK_RESET_ON_START=true`
 
-Behavior:
+## Troubleshooting
 
-- Files are consumed in chronological order (timestamp in filename first, then `createdAt` fallback)
-- One file = one planning round
-- If files run out and loop is enabled, replay restarts from the first file
+- Error: `browserType.launch: Executable doesn't exist ... ms-playwright ...`
+	- Run: `cd backend && npx playwright install chromium`
+- Start/step returns 500
+	- Check `/health` endpoints above
+	- Verify `GITHUB_TOKEN` and timeout values in `backend/.env`

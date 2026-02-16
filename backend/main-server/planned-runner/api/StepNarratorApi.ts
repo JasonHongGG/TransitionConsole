@@ -9,7 +9,7 @@ export class StepNarratorApi implements StepNarrator {
 
   constructor(options?: { aiBaseUrl?: string; timeoutMs?: number }) {
     this.aiBaseUrl = options?.aiBaseUrl ?? process.env.AI_SERVER_BASE_URL ?? 'http://localhost:7081'
-    this.timeoutMs = options?.timeoutMs ?? Number(process.env.AI_SERVER_TIMEOUT_MS ?? 120000)
+    this.timeoutMs = options?.timeoutMs ?? Number(process.env.PLANNED_RUNNER_NARRATIVE_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
   }
 
   async generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction> {

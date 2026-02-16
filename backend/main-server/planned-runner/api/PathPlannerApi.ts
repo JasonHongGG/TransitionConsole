@@ -8,7 +8,7 @@ export class PathPlannerApi implements PathPlanner {
 
   constructor(options?: { aiBaseUrl?: string; timeoutMs?: number }) {
     this.aiBaseUrl = options?.aiBaseUrl ?? process.env.AI_SERVER_BASE_URL ?? 'http://localhost:7081'
-    this.timeoutMs = options?.timeoutMs ?? Number(process.env.AI_SERVER_TIMEOUT_MS ?? 120000)
+    this.timeoutMs = options?.timeoutMs ?? Number(process.env.PATH_PLANNER_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
   }
 
   async generatePaths(context: PathPlannerContext): Promise<PlannedPathDraft[]> {
