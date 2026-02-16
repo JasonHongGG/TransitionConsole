@@ -214,11 +214,24 @@ export interface PlannedRunPlan {
   paths: PlannedTransitionPath[]
 }
 
+export interface TestingAccount {
+  role?: string
+  username?: string
+  password?: string
+  description?: string
+}
+
+export interface UserTestingInfo {
+  notes?: string
+  accounts?: TestingAccount[]
+}
+
 export interface PlannedRunnerRequest {
   diagrams: DiagramLike[]
   connectors: DiagramConnector[]
   specRaw: string | null
   targetUrl: string
+  userTestingInfo?: UserTestingInfo
 }
 
 export interface PlannedStepResponse {
@@ -249,6 +262,7 @@ export interface RuntimeState {
   entryStateIds: string[]
   specRaw: string | null
   targetUrl: string
+  userTestingInfo?: UserTestingInfo
   pathIndex: number
   stepIndex: number
   totalPlannedPaths: number
@@ -268,6 +282,7 @@ export interface ExecutorContext {
   semanticGoal: string
   targetUrl: string
   specRaw: string | null
+  userTestingInfo?: UserTestingInfo
   stepValidations: string[]
   currentPathStepIndex: number
   currentPathStepTotal: number

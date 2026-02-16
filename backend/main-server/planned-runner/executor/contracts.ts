@@ -21,6 +21,7 @@ export interface LoopDecisionInput {
     stepId: string
     targetUrl: string
     specRaw: string | null
+    userTestingInfo?: ExecutorContext['userTestingInfo']
     diagrams: ExecutorContext['systemDiagrams']
   }
   step: {
@@ -76,25 +77,41 @@ export interface OperatorLoopAgent {
   cleanupRun?(runId: string): Promise<void>
 }
 
+export interface BrowserOperatorRunResult {
+  result: 'pass' | 'fail'
+  blockedReason?: string
+  failureCode?: StepExecutionResult['failureCode']
+  terminationReason?: StepExecutionResult['terminationReason']
+  validationResults: StepValidationResult[]
+  trace: OperatorTraceItem[]
+  evidence: StepExecutionResult['evidence']
+}
+
 export interface BrowserOperator {
   run(
     step: PlannedTransitionStep,
     context: ExecutorContext,
     narrative: StepNarrativeInstruction,
     assertions: StepAssertionSpec[],
-  ): Promise<{
-    result: 'pass' | 'fail'
-    blockedReason?: string
-    failureCode?: StepExecutionResult['failureCode']
-    terminationReason?: StepExecutionResult['terminationReason']
-    validationResults: StepValidationResult[]
-    trace: OperatorTraceItem[]
-    evidence: StepExecutionResult['evidence']
-  }>
+  ): Promise<BrowserOperatorRunResult>
   cleanupRun?(runId: string): Promise<void>
 }
 
 export type NetworkRecord = { method: string; url: string; status: number | null }
+
+export interface OverlayElement {
+  id: string
+  hidden: boolean
+  style: Record<string, string>
+}
+
+export interface DocumentLike {
+  getElementById: (id: string) => OverlayElement | null
+  createElement: (tagName: string) => OverlayElement
+  body: {
+    appendChild: (node: OverlayElement) => void
+  }
+}
 
 export interface BrowserPage {
   goto: (url: string, options?: { waitUntil?: 'domcontentloaded' | 'load'; timeout?: number }) => Promise<unknown>

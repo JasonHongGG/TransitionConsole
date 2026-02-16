@@ -1,5 +1,6 @@
 export const OPERATOR_LOOP_PROMPT = `【系統角色】
 你是 Browser Operator Loop Agent。你在每一輪根據當前觀測（screenshot、url、observation、前輪 trace、assertions）決定下一步：繼續操作、完成、或失敗。
+若 context.userTestingInfo 存在，必須優先參考其中的測試帳號與備註來完成登入或權限相關流程。
 
 【核心原則】
 1. 僅可輸出 JSON，不可輸出 markdown、敘述文字、註解、code fence。
@@ -44,6 +45,17 @@ Format:
     "stepId": "string 表示步驟 id",
     "targetUrl": "string 表示本步預期操作頁面（可選）",
     "specRaw": "string 表示原始規格內容，用於推導語意與測試重點",
+    "userTestingInfo": {
+      "notes": "string 表示使用者附加測試資訊（可選）",
+      "accounts": [
+        {
+          "role": "string 表示帳號角色（可選）",
+          "username": "string 表示帳號（可選）",
+          "password": "string 表示密碼（可選）",
+          "description": "string 表示帳號用途備註（可選）"
+        }
+      ]
+    },
     "diagrams": [
       {
         "id": "string 表示 diagram 唯一識別",

@@ -4,10 +4,18 @@ import type {
   StepNarrativeInstruction,
   PlannedTransitionStep,
   StepAssertionSpec,
-  StepExecutionResult,
   StepValidationResult,
 } from '../../types'
-import type { BrowserOperator, BrowserPage, BrowserSession, LoopFunctionCall, LoopFunctionResponse, OperatorLoopAgent } from '../contracts'
+import type {
+  BrowserOperator,
+  BrowserOperatorRunResult,
+  BrowserPage,
+  BrowserSession,
+  DocumentLike,
+  LoopFunctionCall,
+  LoopFunctionResponse,
+  OperatorLoopAgent,
+} from '../contracts'
 import { OperatorLoopApi } from './OperatorLoopApi'
 
 type ToolPayload = Record<string, unknown>
@@ -160,9 +168,14 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     await page.evaluate(
       ({ mouseX, mouseY }) => {
         const elementId = 'playwright-feedback-circle'
-        let div = document.getElementById(elementId) as HTMLDivElement | null
+        const doc = (globalThis as { document?: DocumentLike }).document
+        if (!doc) {
+          return
+        }
+
+        let div = doc.getElementById(elementId)
         if (!div) {
-          div = document.createElement('div')
+          div = doc.createElement('div')
           div.id = elementId
           div.style.pointerEvents = 'none'
           div.style.border = '4px solid red'
@@ -171,7 +184,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           div.style.height = '20px'
           div.style.position = 'fixed'
           div.style.zIndex = '9999'
-          document.body.appendChild(div)
+          doc.body.appendChild(div)
         }
 
         div.hidden = false
@@ -405,15 +418,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     context: ExecutorContext,
     narrative: StepNarrativeInstruction,
     assertions: StepAssertionSpec[],
-  ): Promise<{
-    result: 'pass' | 'fail'
-    blockedReason?: string
-    failureCode?: StepExecutionResult['failureCode']
-    terminationReason?: StepExecutionResult['terminationReason']
-    validationResults: StepValidationResult[]
-    trace: OperatorTraceItem[]
-    evidence: StepExecutionResult['evidence']
-  }> {
+  ): Promise<BrowserOperatorRunResult> {
     const session = await this.getOrCreateSession(context)
     const page = session.page
     const trace: OperatorTraceItem[] = []
@@ -431,6 +436,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           stepId: context.stepId,
           targetUrl: context.targetUrl,
           specRaw: context.specRaw,
+          userTestingInfo: context.userTestingInfo,
           diagrams: context.systemDiagrams,
         },
         step: {

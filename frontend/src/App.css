@@ -1730,11 +1730,89 @@
   box-sizing: border-box;
 }
 
+.agent-url-field textarea {
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  padding: 10px 12px;
+  font-size: 12px;
+  width: 100%;
+  min-width: 0;
+  min-height: 72px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
 .agent-url-field input::placeholder {
   color: rgba(207, 214, 230, 0.62);
 }
 
 .agent-url-field input:focus-visible {
+  outline: 2px solid rgba(255, 204, 119, 0.45);
+  outline-offset: 1px;
+}
+
+.agent-url-field textarea::placeholder {
+  color: rgba(207, 214, 230, 0.62);
+}
+
+.agent-url-field textarea:focus-visible {
+  outline: 2px solid rgba(255, 204, 119, 0.45);
+  outline-offset: 1px;
+}
+
+.agent-testing-info {
+  display: grid;
+  gap: 10px;
+}
+
+.agent-mini-btn {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.agent-mini-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.agent-mini-btn.danger {
+  border-color: rgba(240, 82, 82, 0.45);
+  color: #f4b1b1;
+}
+
+.agent-test-accounts {
+  display: grid;
+  gap: 8px;
+}
+
+.agent-test-account-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+  gap: 6px;
+}
+
+.agent-test-account-row input {
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.agent-test-account-row input::placeholder {
+  color: rgba(207, 214, 230, 0.62);
+}
+
+.agent-test-account-row input:focus-visible {
   outline: 2px solid rgba(255, 204, 119, 0.45);
   outline-offset: 1px;
 }
@@ -2096,6 +2174,14 @@
   .agent-keyval-pair-row {
     grid-template-columns: 1fr;
     gap: 6px;
+  }
+
+  .agent-test-account-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .agent-test-account-row .agent-mini-btn {
+    grid-column: 1 / -1;
   }
 
   .agent-keyvals-columns {

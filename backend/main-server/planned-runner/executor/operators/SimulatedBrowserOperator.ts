@@ -1,5 +1,5 @@
 import type { ExecutorContext, OperatorTraceItem, PlannedTransitionStep, StepAssertionSpec, StepExecutionResult, StepNarrativeInstruction, StepValidationResult } from '../../types'
-import type { BrowserOperator } from '../contracts'
+import type { BrowserOperator, BrowserOperatorRunResult } from '../contracts'
 
 export class SimulatedBrowserOperator implements BrowserOperator {
   async run(
@@ -7,15 +7,7 @@ export class SimulatedBrowserOperator implements BrowserOperator {
     context: ExecutorContext,
     _narrative: StepNarrativeInstruction,
     assertions: StepAssertionSpec[],
-  ): Promise<{
-    result: 'pass' | 'fail'
-    blockedReason?: string
-    failureCode?: StepExecutionResult['failureCode']
-    terminationReason?: StepExecutionResult['terminationReason']
-    validationResults: StepValidationResult[]
-    trace: OperatorTraceItem[]
-    evidence: StepExecutionResult['evidence']
-  }> {
+  ): Promise<BrowserOperatorRunResult> {
     const trace: OperatorTraceItem[] = []
     for (let i = 1; i <= 3; i += 1) {
       trace.push({

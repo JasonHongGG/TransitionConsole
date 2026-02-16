@@ -7,7 +7,9 @@ import type {
   PlannedRunSnapshot,
   PlannedRunnerStatus,
   PlannedStepEvent,
+  TestingAccount,
   TransitionResult,
+  UserTestingInfo,
 } from '../../../types'
 
 const MAX_LOGS = 120
@@ -17,6 +19,7 @@ interface PlannedRunnerRequest {
   connectors: DiagramConnector[]
   specRaw: string | null
   targetUrl: string
+  userTestingInfo?: UserTestingInfo
 }
 
 interface PlannedStepResponse {
@@ -42,11 +45,24 @@ export interface PlannedRunnerState {
   plannedStatus: PlannedRunnerStatus | null
   latestEvent: PlannedStepEvent | null
   targetUrl: string
+  testingNotes: string
+  testAccounts: TestingAccount[]
   setTargetUrl: (url: string) => void
+  setTestingNotes: (value: string) => void
+  setTestAccountField: (index: number, field: keyof TestingAccount, value: string) => void
+  addTestAccount: () => void
+  removeTestAccount: (index: number) => void
   setRunning: (next: boolean) => void
   reset: () => void
   step: () => void
 }
+
+const createEmptyTestAccount = (): TestingAccount => ({
+  role: '',
+  username: '',
+  password: '',
+  description: '',
+})
 
 const nowIso = () => new Date().toISOString()
 
@@ -79,6 +95,8 @@ export const usePlannedRunner = (
   const [nextStateId, setNextStateId] = useState<string | null>(null)
   const [activeEdgeId, setActiveEdgeId] = useState<string | null>(null)
   const [targetUrl, setTargetUrl] = useState('')
+  const [testingNotes, setTestingNotes] = useState('')
+  const [testAccounts, setTestAccounts] = useState<TestingAccount[]>([])
   const [logs, setLogs] = useState<AgentLogEntry[]>([])
   const [latestEvent, setLatestEvent] = useState<PlannedStepEvent | null>(null)
   const [coverage, setCoverage] = useState<CoverageState>({
@@ -94,6 +112,20 @@ export const usePlannedRunner = (
     setLogs((prev) => [entry, ...prev].slice(0, MAX_LOGS))
   }, [])
 
+  const setTestAccountField = useCallback((index: number, field: keyof TestingAccount, value: string) => {
+    setTestAccounts((prev) =>
+      prev.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)),
+    )
+  }, [])
+
+  const addTestAccount = useCallback(() => {
+    setTestAccounts((prev) => [...prev, createEmptyTestAccount()])
+  }, [])
+
+  const removeTestAccount = useCallback((index: number) => {
+    setTestAccounts((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+  }, [])
+
   const formatRequestError = useCallback((error: unknown) => {
     if (error instanceof Error) {
       return `Request failed: ${error.message}`
@@ -101,15 +133,33 @@ export const usePlannedRunner = (
     return 'Request failed: unknown error'
   }, [])
 
-  const requestPayload = useMemo<PlannedRunnerRequest>(
-    () => ({
+  const requestPayload = useMemo<PlannedRunnerRequest>(() => {
+    const trimmedNotes = testingNotes.trim()
+    const normalizedAccounts = testAccounts
+      .map((account) => ({
+        role: account.role?.trim(),
+        username: account.username?.trim(),
+        password: account.password?.trim(),
+        description: account.description?.trim(),
+      }))
+      .filter((account) => account.role || account.username || account.password || account.description)
+
+    const userTestingInfo =
+      trimmedNotes || normalizedAccounts.length > 0
+        ? {
+            notes: trimmedNotes || undefined,
+            accounts: normalizedAccounts,
+          }
+        : undefined
+
+    return {
       diagrams,
       connectors,
       specRaw,
       targetUrl,
-    }),
-    [diagrams, connectors, specRaw, targetUrl],
-  )
+      userTestingInfo,
+    }
+  }, [diagrams, connectors, specRaw, targetUrl, testAccounts, testingNotes])
 
   const applySnapshot = useCallback((snapshot: PlannedRunSnapshot, source: 'start' | 'step' | 'auto') => {
     if (snapshot.totalPaths > maxKnownPathCountRef.current) {
@@ -420,7 +470,13 @@ export const usePlannedRunner = (
     plannedStatus,
     latestEvent,
     targetUrl,
+    testingNotes,
+    testAccounts,
     setTargetUrl,
+    setTestingNotes,
+    setTestAccountField,
+    addTestAccount,
+    removeTestAccount,
     setRunning: (next) => {
       if (next) {
         setRunningState(true)

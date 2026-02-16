@@ -101,3 +101,15 @@ export interface AgentLogEntry {
   stateId?: string
   transitionId?: string
 }
+
+export interface TestingAccount {
+  role?: string
+  username?: string
+  password?: string
+  description?: string
+}
+
+export interface UserTestingInfo {
+  notes?: string
+  accounts?: TestingAccount[]
+}

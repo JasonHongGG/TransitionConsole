@@ -457,6 +457,12 @@ function App() {
                 onReset={agentRunner.reset}
                 targetUrl={agentRunner.targetUrl}
                 onTargetUrlChange={agentRunner.setTargetUrl}
+                testingNotes={agentRunner.testingNotes}
+                onTestingNotesChange={agentRunner.setTestingNotes}
+                testAccounts={agentRunner.testAccounts}
+                onTestAccountFieldChange={agentRunner.setTestAccountField}
+                onAddTestAccount={agentRunner.addTestAccount}
+                onRemoveTestAccount={agentRunner.removeTestAccount}
                 plannedStatus={agentRunner.plannedStatus}
                 focusMode={focusMode}
                 onCycleFocusMode={cycleFocusMode}

@@ -1,4 +1,4 @@
-import type { AgentLogEntry, CoverageState, Diagram, PlannedRunnerStatus, PlannedStepEvent } from '../../../types'
+import type { AgentLogEntry, CoverageState, Diagram, PlannedRunnerStatus, PlannedStepEvent, TestingAccount } from '../../../types'
 
 interface AgentPanelProps {
   diagrams: Diagram[]
@@ -21,6 +21,12 @@ interface AgentPanelProps {
   onReset: () => void
   targetUrl: string
   onTargetUrlChange: (value: string) => void
+  testingNotes: string
+  onTestingNotesChange: (value: string) => void
+  testAccounts: TestingAccount[]
+  onTestAccountFieldChange: (index: number, field: keyof TestingAccount, value: string) => void
+  onAddTestAccount: () => void
+  onRemoveTestAccount: (index: number) => void
   plannedStatus: PlannedRunnerStatus | null
   focusMode: 'off' | 'current' | 'path'
   onCycleFocusMode: () => void
@@ -49,6 +55,12 @@ export const AgentPanel = ({
   onReset,
   targetUrl,
   onTargetUrlChange,
+  testingNotes,
+  onTestingNotesChange,
+  testAccounts,
+  onTestAccountFieldChange,
+  onAddTestAccount,
+  onRemoveTestAccount,
   plannedStatus,
   focusMode,
   onCycleFocusMode,
@@ -196,6 +208,64 @@ export const AgentPanel = ({
           </button>
         </div>
       </div>
+
+      <section className="agent-card agent-testing-info">
+        <div className="agent-card-header">
+          <h4>Testing Info</h4>
+          <button type="button" className="agent-mini-btn" onClick={onAddTestAccount}>
+            + Account
+          </button>
+        </div>
+        <label className="agent-url-field" aria-label="Testing notes">
+          <textarea
+            placeholder="Additional notes (example: login route, OTP handling notes, prerequisites...)"
+            value={testingNotes}
+            onChange={(event) => onTestingNotesChange(event.target.value)}
+            rows={3}
+          />
+        </label>
+        <div className="agent-test-accounts">
+          {testAccounts.length === 0 ? (
+            <p className="muted">No test accounts yet.</p>
+          ) : (
+            testAccounts.map((account, index) => (
+              <div key={`test-account-${index}`} className="agent-test-account-row">
+                <input
+                  type="text"
+                  placeholder="role"
+                  value={account.role ?? ''}
+                  onChange={(event) => onTestAccountFieldChange(index, 'role', event.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="username"
+                  value={account.username ?? ''}
+                  onChange={(event) => onTestAccountFieldChange(index, 'username', event.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="password"
+                  value={account.password ?? ''}
+                  onChange={(event) => onTestAccountFieldChange(index, 'password', event.target.value)}
+                />
+                <input
+                  type="text"
+                  placeholder="description"
+                  value={account.description ?? ''}
+                  onChange={(event) => onTestAccountFieldChange(index, 'description', event.target.value)}
+                />
+                <button
+                  type="button"
+                  className="agent-mini-btn danger"
+                  onClick={() => onRemoveTestAccount(index)}
+                >
+                  Remove
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </section>
 
       <div className="agent-status-card">
         <div className="agent-header">
