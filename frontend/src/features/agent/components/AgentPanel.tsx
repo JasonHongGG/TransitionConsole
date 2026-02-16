@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { AgentLogEntry, CoverageState, Diagram, PlannedRunnerStatus, PlannedStepEvent, TestingAccount } from '../../../types'
 
 interface AgentPanelProps {
@@ -65,6 +67,7 @@ export const AgentPanel = ({
   focusMode,
   onCycleFocusMode,
 }: AgentPanelProps) => {
+  const [showTestingInfoModal, setShowTestingInfoModal] = useState(false)
   const allStates = diagrams.flatMap((diagram) => diagram.states)
   const totalStates = allStates.length
   const visitedStates = coverage.visitedNodes.size
@@ -121,6 +124,148 @@ export const AgentPanel = ({
     focusMode === 'off' ? 'Focus: Off' : focusMode === 'current' ? 'Focus: Current Node' : 'Focus: Path'
 
   const nextStateLabel = nextStateId ?? 'N/A'
+
+  const testingInfoModal =
+    showTestingInfoModal && typeof document !== 'undefined'
+      ? createPortal(
+          <div className="modal-backdrop testing-info-backdrop" role="presentation" onClick={() => setShowTestingInfoModal(false)}>
+            <div
+              className="modal testing-info-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Testing Info"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="modal-header testing-info-modal-header">
+                <div className="testing-info-title-wrap">
+                  <h3 className="section-title testing-info-modal-title">
+                    <span className="testing-info-title-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                        <rect x="4" y="4" width="16" height="16" rx="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                        <path d="M8 9h8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                        <path d="M8 13h8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    Testing Info
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  className="icon-button testing-info-close"
+                  onClick={() => setShowTestingInfoModal(false)}
+                  aria-label="Close testing info"
+                >
+                  <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
+                    <path d="M7 7 17 17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <path d="M17 7 7 17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="modal-body testing-info-modal-body">
+                <section className="agent-card agent-testing-info testing-info-section">
+                  <div className="agent-card-header testing-info-section-header">
+                    <h4>
+                      <span className="testing-info-section-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24">
+                          <circle cx="12" cy="8" r="3.2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                          <path d="M5.5 18.5c1.5-3.1 4-4.7 6.5-4.7s5 1.6 6.5 4.7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                        </svg>
+                      </span>
+                      Accounts
+                    </h4>
+                    <button type="button" className="agent-mini-btn testing-info-add-btn" onClick={onAddTestAccount}>
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M12 5v14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                        <path d="M5 12h14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                      </svg>
+                      Add Account
+                    </button>
+                  </div>
+
+                  <div className="agent-test-accounts">
+                    {testAccounts.length === 0 ? (
+                      <p className="muted">No test accounts yet.</p>
+                    ) : (
+                      testAccounts.map((account, index) => (
+                        <div key={`test-account-${index}`} className="agent-account-card">
+                          <div className="agent-account-inline">
+                            <span className="agent-account-order" aria-label={`Account ${index + 1}`}>
+                              {index + 1}.
+                            </span>
+                            <input
+                              type="text"
+                              placeholder="Role"
+                              value={account.role ?? ''}
+                              onChange={(event) => onTestAccountFieldChange(index, 'role', event.target.value)}
+                            />
+                            <input
+                              type="text"
+                              placeholder="Username"
+                              value={account.username ?? ''}
+                              onChange={(event) => onTestAccountFieldChange(index, 'username', event.target.value)}
+                            />
+                            <input
+                              type="text"
+                              placeholder="Password"
+                              value={account.password ?? ''}
+                              onChange={(event) => onTestAccountFieldChange(index, 'password', event.target.value)}
+                            />
+                            <input
+                              type="text"
+                              placeholder="Description"
+                              value={account.description ?? ''}
+                              onChange={(event) => onTestAccountFieldChange(index, 'description', event.target.value)}
+                            />
+                            <button
+                              type="button"
+                              className="agent-account-remove"
+                              onClick={() => onRemoveTestAccount(index)}
+                              aria-label={`Remove account ${index + 1}`}
+                              title="Remove account"
+                            >
+                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M4.5 7h15" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                                <path d="M9.5 7V5.8c0-.7.6-1.3 1.3-1.3h2.4c.7 0 1.3.6 1.3 1.3V7" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                                <path d="M6.8 7.8h10.4l-.7 10.1a1.8 1.8 0 0 1-1.8 1.6H9.3a1.8 1.8 0 0 1-1.8-1.6L6.8 7.8z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                                <path d="M10 11v5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                                <path d="M14 11v5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+
+                <section className="agent-card agent-testing-info testing-info-section">
+                  <div className="agent-card-header testing-info-section-header">
+                    <h4>
+                      <span className="testing-info-section-icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24">
+                          <path d="M6 5.5h9.5L19 9v9.5a1.5 1.5 0 0 1-1.5 1.5H6a1.5 1.5 0 0 1-1.5-1.5V7A1.5 1.5 0 0 1 6 5.5z" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                          <path d="M15.5 5.5V9H19" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                        </svg>
+                      </span>
+                      Notes
+                    </h4>
+                  </div>
+                  <label className="agent-url-field" aria-label="Testing notes">
+                    <textarea
+                      placeholder="Additional notes (example: login route, OTP handling notes, prerequisites...)"
+                      value={testingNotes}
+                      onChange={(event) => onTestingNotesChange(event.target.value)}
+                      rows={6}
+                    />
+                  </label>
+                </section>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null
 
   return (
     <div className="panel agent-panel">
@@ -192,6 +337,19 @@ export const AgentPanel = ({
           </button>
           <button
             type="button"
+            className="agent-icon-btn"
+            onClick={() => setShowTestingInfoModal(true)}
+            title="Testing Info"
+            aria-label="Testing Info"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M8 9h8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="M8 13h5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button
+            type="button"
             className={`agent-icon-btn focus-toggle mode-${focusMode}`}
             onClick={onCycleFocusMode}
             title={focusModeLabel}
@@ -208,64 +366,6 @@ export const AgentPanel = ({
           </button>
         </div>
       </div>
-
-      <section className="agent-card agent-testing-info">
-        <div className="agent-card-header">
-          <h4>Testing Info</h4>
-          <button type="button" className="agent-mini-btn" onClick={onAddTestAccount}>
-            + Account
-          </button>
-        </div>
-        <label className="agent-url-field" aria-label="Testing notes">
-          <textarea
-            placeholder="Additional notes (example: login route, OTP handling notes, prerequisites...)"
-            value={testingNotes}
-            onChange={(event) => onTestingNotesChange(event.target.value)}
-            rows={3}
-          />
-        </label>
-        <div className="agent-test-accounts">
-          {testAccounts.length === 0 ? (
-            <p className="muted">No test accounts yet.</p>
-          ) : (
-            testAccounts.map((account, index) => (
-              <div key={`test-account-${index}`} className="agent-test-account-row">
-                <input
-                  type="text"
-                  placeholder="role"
-                  value={account.role ?? ''}
-                  onChange={(event) => onTestAccountFieldChange(index, 'role', event.target.value)}
-                />
-                <input
-                  type="text"
-                  placeholder="username"
-                  value={account.username ?? ''}
-                  onChange={(event) => onTestAccountFieldChange(index, 'username', event.target.value)}
-                />
-                <input
-                  type="text"
-                  placeholder="password"
-                  value={account.password ?? ''}
-                  onChange={(event) => onTestAccountFieldChange(index, 'password', event.target.value)}
-                />
-                <input
-                  type="text"
-                  placeholder="description"
-                  value={account.description ?? ''}
-                  onChange={(event) => onTestAccountFieldChange(index, 'description', event.target.value)}
-                />
-                <button
-                  type="button"
-                  className="agent-mini-btn danger"
-                  onClick={() => onRemoveTestAccount(index)}
-                >
-                  Remove
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
 
       <div className="agent-status-card">
         <div className="agent-header">
@@ -398,6 +498,8 @@ export const AgentPanel = ({
           </div>
         </section>
       </div>
+
+      {testingInfoModal}
     </div>
   )
 }

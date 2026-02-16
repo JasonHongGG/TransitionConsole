@@ -1767,6 +1767,61 @@
   gap: 10px;
 }
 
+.testing-info-modal {
+  width: min(1080px, 94vw);
+  max-height: min(840px, 90vh);
+  padding: 20px;
+  border-radius: 22px;
+}
+
+.testing-info-backdrop {
+  z-index: 120;
+}
+
+.testing-info-modal-header {
+  align-items: flex-start;
+}
+
+.testing-info-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.testing-info-modal-title {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.testing-info-title-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 204, 119, 0.45);
+  background: rgba(255, 204, 119, 0.12);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffe0a8;
+  flex-shrink: 0;
+}
+
+.testing-info-title-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.testing-info-close {
+  width: 36px;
+  height: 36px;
+}
+
+.testing-info-modal-body {
+  gap: 14px;
+}
+
 .agent-mini-btn {
   border: 1px solid var(--line-soft);
   border-radius: 10px;
@@ -1788,16 +1843,35 @@
 
 .agent-test-accounts {
   display: grid;
-  gap: 8px;
+  gap: 10px;
+  max-height: min(46vh, 420px);
+  overflow: auto;
+  padding-right: 4px;
 }
 
-.agent-test-account-row {
+.agent-account-card {
+  display: block;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.agent-account-inline {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
-  gap: 6px;
+  grid-template-columns: 34px minmax(120px, 1fr) minmax(160px, 1.5fr) minmax(160px, 1.5fr) minmax(240px, 3fr) 34px;
+  gap: 8px;
+  align-items: center;
 }
 
-.agent-test-account-row input {
+.agent-account-order {
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(242, 245, 252, 0.9);
+  text-align: center;
+}
+
+.agent-account-inline input {
   border: 1px solid var(--line-soft);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.05);
@@ -1808,13 +1882,77 @@
   box-sizing: border-box;
 }
 
-.agent-test-account-row input::placeholder {
+.agent-account-inline input::placeholder {
   color: rgba(207, 214, 230, 0.62);
 }
 
-.agent-test-account-row input:focus-visible {
+.agent-account-inline input:focus-visible {
   outline: 2px solid rgba(255, 204, 119, 0.45);
   outline-offset: 1px;
+}
+
+.testing-info-section {
+  gap: 12px;
+}
+
+.testing-info-section-header h4 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.testing-info-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.testing-info-section-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+
+.testing-info-section-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.testing-info-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 14px;
+}
+
+.testing-info-add-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.agent-account-remove {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid rgba(240, 82, 82, 0.48);
+  background: rgba(240, 82, 82, 0.08);
+  color: #f4b1b1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.agent-account-remove:hover {
+  background: rgba(240, 82, 82, 0.18);
+}
+
+.agent-account-remove svg {
+  width: 14px;
+  height: 14px;
 }
 
 .agent-card {
@@ -2176,12 +2314,42 @@
     gap: 6px;
   }
 
-  .agent-test-account-row {
-    grid-template-columns: 1fr 1fr;
+  .agent-account-inline {
+    grid-template-columns: 28px 1fr 1fr;
   }
 
-  .agent-test-account-row .agent-mini-btn {
+  .agent-account-inline input:nth-of-type(3),
+  .agent-account-inline input:nth-of-type(4) {
+    grid-column: span 1;
+  }
+
+  .agent-account-remove {
     grid-column: 1 / -1;
+    justify-self: end;
+  }
+
+  .testing-info-modal {
+    width: min(96vw, 96vw);
+    max-height: 92vh;
+    padding: 14px;
+  }
+
+  .testing-info-title-wrap {
+    gap: 8px;
+  }
+
+  .testing-info-title-icon {
+    width: 30px;
+    height: 30px;
+  }
+
+  .testing-info-modal-header .section-title {
+    font-size: 24px;
+  }
+
+  .testing-info-add-btn {
+    padding: 4px 6px;
+    margin-left: 8px;
   }
 
   .agent-keyvals-columns {
