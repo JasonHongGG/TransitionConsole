@@ -12,6 +12,7 @@ import type {
 
 export interface StepNarrator {
   generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction>
+  resetReplayCursor?(): Promise<void>
 }
 
 export interface LoopDecisionInput {
@@ -75,6 +76,7 @@ export interface OperatorLoopAgent {
   decide(input: LoopDecisionInput): Promise<LoopDecision>
   appendFunctionResponses?(runId: string, pathId: string, responses: LoopFunctionResponse[]): Promise<void>
   cleanupRun?(runId: string): Promise<void>
+  resetReplayCursor?(): Promise<void>
 }
 
 export interface BrowserOperatorRunResult {
@@ -95,6 +97,7 @@ export interface BrowserOperator {
     assertions: StepAssertionSpec[],
   ): Promise<BrowserOperatorRunResult>
   cleanupRun?(runId: string): Promise<void>
+  resetReplayCursor?(): Promise<void>
 }
 
 export type NetworkRecord = { method: string; url: string; status: number | null }

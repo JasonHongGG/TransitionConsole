@@ -25,6 +25,8 @@ export interface StepNarratorGenerateResponse {
   narrative: StepNarrativeInstruction
 }
 
+export type StepNarratorResetResponse = ApiOkResponse
+
 export type OperatorLoopDecideRequest = LoopDecisionInput
 export type OperatorLoopDecideResponse = LoopDecision
 
@@ -41,3 +43,5 @@ export interface OperatorLoopCleanupRunRequest {
 }
 
 export type OperatorLoopCleanupRunResponse = ApiOkResponse
+
+export type OperatorLoopResetResponse = ApiOkResponse

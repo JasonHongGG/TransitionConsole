@@ -28,3 +28,7 @@ export interface OperatorStepRunResponse {
 export interface OperatorCleanupRunRequest {
   runId: string
 }
+
+export interface OperatorResetReplayResponse {
+  ok: boolean
+}

@@ -13,12 +13,14 @@ export interface PathPlannerAgent {
 
 export interface StepNarratorAgent {
   generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction>
+  reset(): Promise<void>
 }
 
 export interface OperatorLoopDecisionAgent {
   decide(input: LoopDecisionInput): Promise<LoopDecision>
   appendFunctionResponses(runId: string, pathId: string, responses: LoopFunctionResponse[]): Promise<void>
   cleanupRun(runId: string): Promise<void>
+  reset(): Promise<void>
 }
 
 export interface AiAgents {

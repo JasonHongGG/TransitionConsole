@@ -5,7 +5,12 @@ import type {
   StepNarrativeInstruction,
 } from '../types'
 import type { BrowserOperator } from '../executor/contracts'
-import type { OperatorCleanupRunRequest, OperatorStepRunRequest, OperatorStepRunResponse } from '../../shared/contracts'
+import type {
+  OperatorCleanupRunRequest,
+  OperatorResetReplayResponse,
+  OperatorStepRunRequest,
+  OperatorStepRunResponse,
+} from '../../shared/contracts'
 import { postApiJson } from './apiClient'
 
 export class BrowserOperatorApi implements BrowserOperator {
@@ -14,7 +19,7 @@ export class BrowserOperatorApi implements BrowserOperator {
 
   constructor(options?: { operatorBaseUrl?: string; timeoutMs?: number }) {
     this.operatorBaseUrl = options?.operatorBaseUrl ?? process.env.OPERATOR_SERVER_BASE_URL ?? 'http://localhost:7082'
-    this.timeoutMs = options?.timeoutMs ?? Number(process.env.PLANNED_RUNNER_OPERATOR_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
+    this.timeoutMs = options?.timeoutMs ?? Number(process.env.OPERATOR_LOOP_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
   }
 
   async run(
@@ -41,6 +46,15 @@ export class BrowserOperatorApi implements BrowserOperator {
       this.operatorBaseUrl,
       '/api/operator/step-executor/cleanup-run',
       { runId },
+      this.timeoutMs,
+    )
+  }
+
+  async resetReplayCursor(): Promise<void> {
+    await postApiJson<Record<string, never>, OperatorResetReplayResponse>(
+      this.operatorBaseUrl,
+      '/api/operator/step-executor/reset-replay',
+      {},
       this.timeoutMs,
     )
   }

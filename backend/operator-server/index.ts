@@ -3,7 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import { createLogger } from '../common/logger'
 import { PlaywrightBrowserOperator } from '../main-server/planned-runner/executor/operators/PlaywrightBrowserOperator'
-import type { OperatorCleanupRunRequest, OperatorStepRunRequest } from '../main-server/shared/contracts'
+import type { OperatorCleanupRunRequest, OperatorResetReplayResponse, OperatorStepRunRequest } from '../main-server/shared/contracts'
 import { OperatorLoopApi } from './OperatorLoopApi'
 
 const log = createLogger('operator-server')
@@ -71,6 +71,23 @@ app.post('/api/operator/step-executor/cleanup-run', async (req, res) => {
     res.status(500).json({
       ok: false,
       error: error instanceof Error ? error.message : 'operator cleanup failed',
+    })
+  }
+})
+
+app.post('/api/operator/step-executor/reset-replay', async (_req, res) => {
+  try {
+    log.log('operator replay reset request')
+    await operator.resetReplayCursor?.()
+    log.log('operator replay reset completed')
+    res.json({ ok: true } satisfies OperatorResetReplayResponse)
+  } catch (error) {
+    log.log('operator replay reset failed', {
+      error: error instanceof Error ? error.message : 'operator replay reset failed',
+    })
+    res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'operator replay reset failed',
     })
   }
 })

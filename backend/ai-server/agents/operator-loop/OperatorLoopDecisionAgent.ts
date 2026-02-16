@@ -4,6 +4,7 @@ import { extractJsonPayload } from '../../common/json'
 import type { LoopDecision, LoopDecisionInput, LoopFunctionCall, LoopFunctionResponse } from '../../../main-server/planned-runner/executor/contracts'
 import type { OperatorLoopDecisionAgent as OperatorLoopDecisionAgentContract } from '../types'
 import { OPERATOR_LOOP_PROMPT } from './prompt'
+import { OperatorLoopMockReplay } from './mockReplay/OperatorLoopMockReplay'
 
 type LoopDecisionEnvelope = {
   decision?: {
@@ -32,14 +33,21 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
   private readonly timeoutMs: number
   private readonly maxScreenshotBase64Chars: number
   private readonly maxFunctionResponseScreenshotTurns: number
+  private readonly useMockReplay: boolean
+  private readonly mockReplay: OperatorLoopMockReplay
   private readonly conversationHistory = new Map<string, ConversationTurn[]>()
 
   constructor(runtime: AiRuntime) {
     this.runtime = runtime
-    this.model = process.env.PLANNED_RUNNER_OPERATOR_MODEL ?? process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
-    this.timeoutMs = Number(process.env.PLANNED_RUNNER_OPERATOR_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
-    this.maxScreenshotBase64Chars = Number(process.env.PLANNED_RUNNER_OPERATOR_SCREENSHOT_B64_MAX ?? 200000)
-    this.maxFunctionResponseScreenshotTurns = Number(process.env.PLANNED_RUNNER_OPERATOR_MAX_RECENT_SCREENSHOT_TURNS ?? 3)
+    this.model = process.env.OPERATOR_LOOP_MODEL ?? process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
+    this.timeoutMs = Number(process.env.OPERATOR_LOOP_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
+    this.maxScreenshotBase64Chars = Number(process.env.OPERATOR_LOOP_SCREENSHOT_B64_MAX ?? 200000)
+    this.maxFunctionResponseScreenshotTurns = Number(process.env.OPERATOR_LOOP_MAX_RECENT_SCREENSHOT_TURNS ?? 3)
+    this.useMockReplay = (process.env.OPERATOR_LOOP_PROVIDER ?? 'llm').trim().toLowerCase() === 'mock-replay'
+    this.mockReplay = new OperatorLoopMockReplay({
+      mockDir: process.env.OPERATOR_LOOP_MOCK_DIR,
+      loop: (process.env.OPERATOR_LOOP_MOCK_LOOP ?? 'true').trim().toLowerCase() !== 'false',
+    })
   }
 
   private sessionKey(runId: string, pathId: string): string {
@@ -97,6 +105,32 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
   }
 
   async decide(input: LoopDecisionInput): Promise<LoopDecision> {
+    if (this.useMockReplay) {
+      const decision = await this.mockReplay.decide()
+
+      await writeAgentResponseLog({
+        agent: 'operator-loop',
+        model: this.model,
+        mode: 'mock-replay',
+        runId: input.context.runId,
+        pathId: input.context.pathId,
+        stepId: input.context.stepId,
+        request: {
+          context: input.context,
+          step: input.step,
+          iteration: input.iteration,
+          currentUrl: input.currentUrl,
+          stateSummary: input.stateSummary,
+          actionCursor: input.actionCursor,
+          assertions: input.assertions,
+          narrative: input.narrative,
+        },
+        parsedResponse: decision,
+      })
+
+      return decision
+    }
+
     const key = this.sessionKey(input.context.runId, input.context.pathId)
     const screenshotBase64 =
       input.screenshotBase64.length > this.maxScreenshotBase64Chars
@@ -208,6 +242,10 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
   }
 
   async appendFunctionResponses(runId: string, pathId: string, responses: LoopFunctionResponse[]): Promise<void> {
+    if (this.useMockReplay) {
+      return
+    }
+
     const key = this.sessionKey(runId, pathId)
     this.pushHistory(key, {
       role: 'user',
@@ -218,7 +256,17 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
   }
 
   async cleanupRun(runId: string): Promise<void> {
+    if (this.useMockReplay) {
+      return
+    }
+
     const keys = Array.from(this.conversationHistory.keys()).filter((key) => key.startsWith(`${runId}:`))
     keys.forEach((key) => this.conversationHistory.delete(key))
+  }
+
+  async reset(): Promise<void> {
+    if (this.useMockReplay) {
+      await this.mockReplay.resetRoundCursor()
+    }
   }
 }

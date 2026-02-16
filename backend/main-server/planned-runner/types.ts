@@ -308,4 +308,5 @@ export interface StepExecutor {
   execute(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepExecutionResult>
   onRunStart?(runId: string): Promise<void> | void
   onRunStop?(runId: string): Promise<void> | void
+  onRunnerReset?(): Promise<void> | void
 }

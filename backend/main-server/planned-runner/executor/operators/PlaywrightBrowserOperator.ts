@@ -633,4 +633,10 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
       }),
     )
   }
+
+  async resetReplayCursor(): Promise<void> {
+    if (this.loopAgent.resetReplayCursor) {
+      await this.loopAgent.resetReplayCursor()
+    }
+  }
 }

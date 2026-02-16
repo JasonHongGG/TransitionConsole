@@ -73,10 +73,10 @@ export const createPlannedRoutes = (runner: PlannedRunner): Router => {
     }
   })
 
-  router.post('/reset', (_req, res) => {
+  router.post('/reset', async (_req, res) => {
     try {
       log.log('reset request received')
-      const result = runner.reset()
+      const result = await runner.reset()
       log.log('reset request completed', {
         ok: result.ok,
         completed: result.snapshot.completed,

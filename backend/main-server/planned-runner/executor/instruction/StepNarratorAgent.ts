@@ -46,11 +46,11 @@ export class StepNarratorAgent implements StepNarrator {
   private readonly timeoutMs: number
 
   constructor() {
-    this.model = process.env.PLANNED_RUNNER_NARRATIVE_MODEL ?? process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
+    this.model = process.env.STEP_NARRATOR_MODEL ?? process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
     this.token = process.env.GITHUB_TOKEN ?? null
     this.cliPath = process.env.AI_RUNTIME_CLI_PATH || undefined
     this.cliUrl = process.env.AI_RUNTIME_CLI_URL || undefined
-    this.timeoutMs = Number(process.env.PLANNED_RUNNER_NARRATIVE_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
+    this.timeoutMs = Number(process.env.STEP_NARRATOR_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
   }
 
   private collectValidationHints(step: PlannedTransitionStep, context: ExecutorContext): string[] {

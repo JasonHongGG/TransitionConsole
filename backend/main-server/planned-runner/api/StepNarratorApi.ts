@@ -1,6 +1,6 @@
 import type { ExecutorContext, PlannedTransitionStep, StepNarrativeInstruction } from '../types'
 import type { StepNarrator } from '../executor/contracts'
-import type { StepNarratorGenerateRequest, StepNarratorGenerateResponse } from '../../shared/contracts'
+import type { StepNarratorGenerateRequest, StepNarratorGenerateResponse, StepNarratorResetResponse } from '../../shared/contracts'
 import { postApiJson } from './apiClient'
 
 export class StepNarratorApi implements StepNarrator {
@@ -9,7 +9,7 @@ export class StepNarratorApi implements StepNarrator {
 
   constructor(options?: { aiBaseUrl?: string; timeoutMs?: number }) {
     this.aiBaseUrl = options?.aiBaseUrl ?? process.env.AI_SERVER_BASE_URL ?? 'http://localhost:7081'
-    this.timeoutMs = options?.timeoutMs ?? Number(process.env.PLANNED_RUNNER_NARRATIVE_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
+    this.timeoutMs = options?.timeoutMs ?? Number(process.env.STEP_NARRATOR_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
   }
 
   async generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction> {
@@ -21,5 +21,14 @@ export class StepNarratorApi implements StepNarrator {
     )
 
     return response.narrative
+  }
+
+  async resetReplayCursor(): Promise<void> {
+    await postApiJson<Record<string, never>, StepNarratorResetResponse>(
+      this.aiBaseUrl,
+      '/api/ai/agents/step-narrator/reset',
+      {},
+      this.timeoutMs,
+    )
   }
 }

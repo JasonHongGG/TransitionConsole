@@ -34,12 +34,10 @@ export class PlannedRunner {
   private runtime: RuntimeState | null = null
   private readonly executor: StepExecutor
   private readonly pathPlanner: PathPlanner
-  private readonly resetPlannerCursorOnStart: boolean
 
-  constructor(options: { executor?: StepExecutor; pathPlanner: PathPlanner; resetPlannerCursorOnStart?: boolean }) {
+  constructor(options: { executor?: StepExecutor; pathPlanner: PathPlanner }) {
     this.executor = options.executor ?? new StubStepExecutor()
     this.pathPlanner = options.pathPlanner
-    this.resetPlannerCursorOnStart = options.resetPlannerCursorOnStart ?? true
   }
 
   async start(request: PlannedRunnerRequest): Promise<PlannedStepResponse> {
@@ -73,11 +71,6 @@ export class PlannedRunner {
     })
 
     log.log('planning paths started', { runId })
-
-    if (this.resetPlannerCursorOnStart && this.pathPlanner.resetRoundCursor) {
-      await this.pathPlanner.resetRoundCursor()
-      log.log('planner cursor reset before start', { runId })
-    }
 
     if (this.executor.onRunStart) {
       await this.executor.onRunStart(runId)
@@ -299,7 +292,7 @@ export class PlannedRunner {
     }
   }
 
-  reset(): PlannedStepResponse {
+  async reset(): Promise<PlannedStepResponse> {
     const runId = this.runtime?.runId ?? null
     log.log('reset requested', {
       runId,
@@ -307,7 +300,15 @@ export class PlannedRunner {
     })
 
     if (runId && this.executor.onRunStop) {
-      void this.executor.onRunStop(runId)
+      await this.executor.onRunStop(runId)
+    }
+
+    if (this.pathPlanner.resetRoundCursor) {
+      await this.pathPlanner.resetRoundCursor()
+    }
+
+    if (this.executor.onRunnerReset) {
+      await this.executor.onRunnerReset()
     }
 
     this.runtime = null

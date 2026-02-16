@@ -3,7 +3,6 @@ import express from 'express'
 import cors from 'cors'
 import { createLogger } from '../common/logger'
 import { PlannedRunner } from './planned-runner'
-import { shouldResetPlannerCursorOnStart } from './planned-runner/planner/plannerProvider/pathPlannerFactory'
 import { createPlannedRoutes } from './routes/plannedRoutes'
 import { AgentStepExecutor } from './planned-runner/executor'
 import { BrowserOperatorApi } from './planned-runner/api/BrowserOperatorApi'
@@ -23,7 +22,6 @@ export const startMainServer = (): void => {
     pathPlanner: new PathPlannerApi({
       aiBaseUrl: process.env.AI_SERVER_BASE_URL,
     }),
-    resetPlannerCursorOnStart: shouldResetPlannerCursorOnStart(),
     executor: new AgentStepExecutor({
       narrator: new StepNarratorApi({ aiBaseUrl: process.env.AI_SERVER_BASE_URL }),
       operator: process.env.PLANNED_RUNNER_REAL_BROWSER === 'true'

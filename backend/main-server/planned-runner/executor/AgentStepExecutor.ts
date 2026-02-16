@@ -21,6 +21,15 @@ export class AgentStepExecutor implements StepExecutor {
     await this.operator.cleanupRun(runId)
   }
 
+  async onRunnerReset(): Promise<void> {
+    if (this.narrator.resetReplayCursor) {
+      await this.narrator.resetReplayCursor()
+    }
+    if (this.operator.resetReplayCursor) {
+      await this.operator.resetReplayCursor()
+    }
+  }
+
   async execute(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepExecutionResult> {
     try {
       const narrative = await this.narrator.generate(step, context)

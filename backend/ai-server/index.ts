@@ -100,6 +100,23 @@ app.post('/api/ai/agents/step-narrator/generate', async (req, res) => {
   }
 })
 
+app.post('/api/ai/agents/step-narrator/reset', async (_req, res) => {
+  try {
+    log.log('step narrator reset request')
+    await agents.stepNarrator.reset()
+    log.log('step narrator reset completed')
+    res.json({ ok: true })
+  } catch (error) {
+    log.log('step narrator reset failed', {
+      error: error instanceof Error ? error.message : 'step narrator reset failed',
+    })
+    res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'step narrator reset failed',
+    })
+  }
+})
+
 app.post('/api/ai/agents/operator-loop/decide', async (req, res) => {
   try {
     const body = req.body as OperatorLoopDecideRequest
@@ -171,6 +188,23 @@ app.post('/api/ai/agents/operator-loop/cleanup-run', async (req, res) => {
     res.status(500).json({
       ok: false,
       error: error instanceof Error ? error.message : 'operator loop cleanup failed',
+    })
+  }
+})
+
+app.post('/api/ai/agents/operator-loop/reset', async (_req, res) => {
+  try {
+    log.log('operator loop reset request')
+    await agents.operatorLoop.reset()
+    log.log('operator loop reset completed')
+    res.json({ ok: true })
+  } catch (error) {
+    log.log('operator loop reset failed', {
+      error: error instanceof Error ? error.message : 'operator loop reset failed',
+    })
+    res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'operator loop reset failed',
     })
   }
 })

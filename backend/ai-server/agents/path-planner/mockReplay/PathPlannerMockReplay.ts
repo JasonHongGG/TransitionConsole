@@ -1,22 +1,22 @@
 import path from 'node:path'
-import { createLogger } from '../../../common/logger'
-import { loadMockReplayItems, type MockReplayItem } from './mockReplayLogReader'
-import type { PathPlanner, PathPlannerContext, PlannedPathDraft } from './types'
+import { createLogger } from '../../../../common/logger'
+import type { PathPlannerContext, PlannedPathDraft } from '../../../../../main-server/planned-runner/planner/plannerProvider/types'
+import { loadPathPlannerMockReplayItems, type PathPlannerMockReplayItem } from './pathPlannerMockReplayReader'
 
-const log = createLogger('mock-replay-planner')
+const log = createLogger('mock-replay-path-planner')
 
-interface MockReplayOptions {
+interface PathPlannerMockReplayOptions {
   mockDir?: string
   loop?: boolean
 }
 
-export class MockReplayPathPlanner implements PathPlanner {
+export class PathPlannerMockReplay {
   private readonly mockDir: string
   private readonly loop: boolean
   private cursor = 0
-  private items: MockReplayItem[] = []
+  private items: PathPlannerMockReplayItem[] = []
 
-  constructor(options: MockReplayOptions = {}) {
+  constructor(options: PathPlannerMockReplayOptions = {}) {
     this.mockDir = path.resolve(process.cwd(), options.mockDir ?? path.join('ai-server', 'mock-data', 'path-planner'))
     this.loop = options.loop ?? true
 
@@ -27,7 +27,7 @@ export class MockReplayPathPlanner implements PathPlanner {
   }
 
   async resetRoundCursor(): Promise<void> {
-    this.items = await loadMockReplayItems(this.mockDir)
+    this.items = await loadPathPlannerMockReplayItems(this.mockDir)
     this.cursor = 0
 
     log.log('round cursor reset', {
@@ -41,7 +41,7 @@ export class MockReplayPathPlanner implements PathPlanner {
     await this.resetRoundCursor()
   }
 
-  private consumeNextItem(): MockReplayItem {
+  private consumeNextItem(): PathPlannerMockReplayItem {
     if (this.items.length === 0) {
       throw new Error(`No mock planner JSON files found in ${this.mockDir}`)
     }

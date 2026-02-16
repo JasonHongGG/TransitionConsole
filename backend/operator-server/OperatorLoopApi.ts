@@ -6,6 +6,7 @@ import type {
   OperatorLoopCleanupRunResponse,
   OperatorLoopDecideRequest,
   OperatorLoopDecideResponse,
+  OperatorLoopResetResponse,
 } from '../main-server/shared/contracts'
 
 const postJson = async <TRequest extends object, TResponse>(baseUrl: string, path: string, body: TRequest): Promise<TResponse> => {
@@ -53,6 +54,14 @@ export class OperatorLoopApi implements OperatorLoopAgent {
       this.aiBaseUrl,
       '/api/ai/agents/operator-loop/cleanup-run',
       { runId },
+    )
+  }
+
+  async resetReplayCursor(): Promise<void> {
+    await postJson<Record<string, never>, OperatorLoopResetResponse>(
+      this.aiBaseUrl,
+      '/api/ai/agents/operator-loop/reset',
+      {},
     )
   }
 }

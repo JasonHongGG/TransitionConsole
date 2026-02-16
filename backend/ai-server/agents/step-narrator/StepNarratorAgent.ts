@@ -4,6 +4,7 @@ import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
 import type { StepNarratorAgent as StepNarratorAgentContract } from '../types'
 import { STEP_NARRATOR_PROMPT } from './prompt'
+import { StepNarratorMockReplay } from './mockReplay/StepNarratorMockReplay'
 
 type NarrativeEnvelope = {
   narrative?: {
@@ -36,11 +37,18 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
   private readonly runtime: AiRuntime
   private readonly model: string
   private readonly timeoutMs: number
+  private readonly useMockReplay: boolean
+  private readonly mockReplay: StepNarratorMockReplay
 
   constructor(runtime: AiRuntime) {
     this.runtime = runtime
-    this.model = process.env.PLANNED_RUNNER_NARRATIVE_MODEL ?? process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
-    this.timeoutMs = Number(process.env.PLANNED_RUNNER_NARRATIVE_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
+    this.model = process.env.STEP_NARRATOR_MODEL ?? process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
+    this.timeoutMs = Number(process.env.STEP_NARRATOR_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
+    this.useMockReplay = (process.env.STEP_NARRATOR_PROVIDER ?? 'llm').trim().toLowerCase() === 'mock-replay'
+    this.mockReplay = new StepNarratorMockReplay({
+      mockDir: process.env.STEP_NARRATOR_MOCK_DIR,
+      loop: (process.env.STEP_NARRATOR_MOCK_LOOP ?? 'true').trim().toLowerCase() !== 'false',
+    })
   }
 
   private collectValidationHints(step: PlannedTransitionStep, context: ExecutorContext): string[] {
@@ -101,6 +109,26 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
   }
 
   async generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction> {
+    if (this.useMockReplay) {
+      const payload = { step, context }
+      const output = await this.mockReplay.generateNarrative()
+
+      await writeAgentResponseLog({
+        agent: 'step-narrator',
+        model: this.model,
+        mode: 'mock-replay',
+        runId: context.runId,
+        pathId: context.pathId,
+        stepId: context.stepId,
+        request: payload,
+        parsedResponse: {
+          narrative: output,
+        },
+      })
+
+      return output
+    }
+
     const payload = {
       step,
       context,
@@ -150,11 +178,16 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
       request: payload,
       rawResponse: content,
       parsedResponse: {
-        envelope: parsed,
         narrative: output,
       },
     })
 
     return output
+  }
+
+  async reset(): Promise<void> {
+    if (this.useMockReplay) {
+      await this.mockReplay.resetRoundCursor()
+    }
   }
 }

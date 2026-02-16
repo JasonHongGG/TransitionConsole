@@ -1,10 +1,10 @@
 import type { PathPlannerContext, PlannedPathDraft } from '../../../main-server/planned-runner/planner/plannerProvider/types'
-import { MockReplayPathPlanner } from '../../../main-server/planned-runner/planner/plannerProvider/mockReplayPathPlanner'
 import type { AiRuntime } from '../../runtime/types'
 import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
 import type { PathPlannerAgent } from '../types'
 import { PATH_PLANNER_SYSTEM_PROMPT, PATH_PLANNER_USER_INSTRUCTION } from './prompt'
+import { PathPlannerMockReplay } from './mockReplay/PathPlannerMockReplay'
 
 type PathPlannerEnvelope = {
   paths?: Array<{
@@ -18,7 +18,7 @@ type PathPlannerEnvelope = {
 
 export class DefaultPathPlannerAgent implements PathPlannerAgent {
   private readonly runtime: AiRuntime
-  private readonly mockReplayPlanner: MockReplayPathPlanner
+  private readonly mockReplayPlanner: PathPlannerMockReplay
   private readonly useMockReplay: boolean
   private readonly model: string
   private readonly timeoutMs: number
@@ -28,7 +28,7 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
     this.model = process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
     this.timeoutMs = Number(process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
     this.useMockReplay = (process.env.PATH_PLANNER_PROVIDER ?? 'llm').trim().toLowerCase() === 'mock-replay'
-    this.mockReplayPlanner = new MockReplayPathPlanner({
+    this.mockReplayPlanner = new PathPlannerMockReplay({
       mockDir: process.env.PATH_PLANNER_MOCK_DIR,
       loop: (process.env.PATH_PLANNER_MOCK_LOOP ?? 'true').trim().toLowerCase() !== 'false',
     })
