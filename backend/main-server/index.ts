@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { createLogger } from '../common/logger'
@@ -16,7 +17,7 @@ export const startMainServer = (): void => {
   app.use(cors())
   app.use(express.json({ limit: '2mb' }))
 
-  const port = Number(process.env.PORT ?? 7070)
+  const port = Number(process.env.MAIN_SERVER_PORT ?? 7070)
 
   const plannedRunner = new PlannedRunner({
     pathPlanner: new PathPlannerApi({
@@ -45,3 +46,5 @@ export const startMainServer = (): void => {
     })
   })
 }
+
+startMainServer()

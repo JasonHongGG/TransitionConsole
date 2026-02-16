@@ -8,6 +8,7 @@ export default defineConfig(({ mode }) => {
   const frontendRoot = path.dirname(fileURLToPath(import.meta.url))
   const env = loadEnv(mode, process.cwd(), '')
   const apiBase = env.VITE_AGENT_API_BASE || 'http://localhost:7070'
+  const port = Number(env.VITE_PORT || 5173)
 
   return {
     root: frontendRoot,
@@ -19,6 +20,7 @@ export default defineConfig(({ mode }) => {
       }),
     ],
     server: {
+      port,
       proxy: {
         '/api': {
           target: apiBase,
