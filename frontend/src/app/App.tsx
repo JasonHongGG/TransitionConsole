@@ -4,6 +4,7 @@ import type { DiagramConnector, GraphData } from '../types'
 import { DiagramList, DiagramView } from '../features/diagram'
 import { SystemView } from '../features/system'
 import { AgentPanel, usePlannedRunner } from '../features/agent'
+import { TemporaryRunnerSettingsButtons } from '../features/agent/components/TemporaryRunnerSettingsButtons'
 
 type ViewMode = 'diagram' | 'system'
 type FocusMode = 'off' | 'current' | 'path'
@@ -215,6 +216,10 @@ function App() {
             </span>
             匯出
           </button>
+          <TemporaryRunnerSettingsButtons
+            getSettings={agentRunner.getTemporarySettings}
+            applySettings={agentRunner.applyTemporarySettings}
+          />
           <button
             type="button"
             className="header-button"

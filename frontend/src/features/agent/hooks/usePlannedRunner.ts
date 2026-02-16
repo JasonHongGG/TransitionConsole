@@ -28,6 +28,12 @@ interface PlannedStepResponse {
   snapshot: PlannedRunSnapshot
 }
 
+export interface TemporaryRunnerSettings {
+  targetUrl: string
+  testingNotes: string
+  testAccounts: TestingAccount[]
+}
+
 export interface PlannedRunnerState {
   running: boolean
   isBusy: boolean
@@ -49,9 +55,12 @@ export interface PlannedRunnerState {
   testAccounts: TestingAccount[]
   setTargetUrl: (url: string) => void
   setTestingNotes: (value: string) => void
+  setTestAccounts: (accounts: TestingAccount[]) => void
   setTestAccountField: (index: number, field: keyof TestingAccount, value: string) => void
   addTestAccount: () => void
   removeTestAccount: (index: number) => void
+  getTemporarySettings: () => TemporaryRunnerSettings
+  applyTemporarySettings: (settings: TemporaryRunnerSettings) => void
   setRunning: (next: boolean) => void
   reset: () => void
   step: () => void
@@ -62,6 +71,13 @@ const createEmptyTestAccount = (): TestingAccount => ({
   username: '',
   password: '',
   description: '',
+})
+
+const normalizeAccount = (account: Partial<TestingAccount>): TestingAccount => ({
+  role: String(account.role ?? ''),
+  username: String(account.username ?? ''),
+  password: String(account.password ?? ''),
+  description: String(account.description ?? ''),
 })
 
 const nowIso = () => new Date().toISOString()
@@ -96,7 +112,7 @@ export const usePlannedRunner = (
   const [activeEdgeId, setActiveEdgeId] = useState<string | null>(null)
   const [targetUrl, setTargetUrl] = useState('')
   const [testingNotes, setTestingNotes] = useState('')
-  const [testAccounts, setTestAccounts] = useState<TestingAccount[]>([])
+  const [testAccounts, setTestAccountsState] = useState<TestingAccount[]>([])
   const [logs, setLogs] = useState<AgentLogEntry[]>([])
   const [latestEvent, setLatestEvent] = useState<PlannedStepEvent | null>(null)
   const [coverage, setCoverage] = useState<CoverageState>({
@@ -113,17 +129,21 @@ export const usePlannedRunner = (
   }, [])
 
   const setTestAccountField = useCallback((index: number, field: keyof TestingAccount, value: string) => {
-    setTestAccounts((prev) =>
+    setTestAccountsState((prev) =>
       prev.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)),
     )
   }, [])
 
   const addTestAccount = useCallback(() => {
-    setTestAccounts((prev) => [...prev, createEmptyTestAccount()])
+    setTestAccountsState((prev) => [...prev, createEmptyTestAccount()])
+  }, [])
+
+  const setTestAccounts = useCallback((accounts: TestingAccount[]) => {
+    setTestAccountsState((accounts ?? []).map((account) => normalizeAccount(account)))
   }, [])
 
   const removeTestAccount = useCallback((index: number) => {
-    setTestAccounts((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+    setTestAccountsState((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
   }, [])
 
   const formatRequestError = useCallback((error: unknown) => {
@@ -469,6 +489,18 @@ export const usePlannedRunner = (
     }
   }, [ensureSession, runSingleStep, running])
 
+  const getTemporarySettings = useCallback<() => TemporaryRunnerSettings>(() => ({
+    targetUrl,
+    testingNotes,
+    testAccounts,
+  }), [targetUrl, testingNotes, testAccounts])
+
+  const applyTemporarySettings = useCallback((settings: TemporaryRunnerSettings) => {
+    setTargetUrl(settings.targetUrl ?? '')
+    setTestingNotes(settings.testingNotes ?? '')
+    setTestAccounts((settings.testAccounts ?? []).map((account) => normalizeAccount(account)))
+  }, [setTargetUrl, setTestingNotes, setTestAccounts])
+
   return {
     running,
     isBusy,
@@ -490,9 +522,12 @@ export const usePlannedRunner = (
     testAccounts,
     setTargetUrl,
     setTestingNotes,
+    setTestAccounts,
     setTestAccountField,
     addTestAccount,
     removeTestAccount,
+    getTemporarySettings,
+    applyTemporarySettings,
     setRunning: (next) => {
       if (next) {
         setRunningState(true)
