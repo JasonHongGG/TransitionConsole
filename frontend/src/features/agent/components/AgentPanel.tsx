@@ -13,7 +13,6 @@ interface AgentPanelProps {
   isBusy: boolean
   statusMessage: string
   statusTone: 'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'
-  lastError: string | null
   plannerRound: number
   completed: boolean
   fullCoveragePassed: boolean | null
@@ -47,7 +46,6 @@ export const AgentPanel = ({
   isBusy,
   statusMessage,
   statusTone,
-  lastError,
   plannerRound,
   completed,
   fullCoveragePassed,
@@ -380,7 +378,6 @@ export const AgentPanel = ({
           <span className="agent-meta-chip">Mode {runModeLabel}</span>
           <span className="agent-meta-chip">Coverage {coverageLabel}</span>
         </div>
-        {lastError ? <p className="agent-error-banner">{lastError}</p> : null}
       </div>
 
       <div className="agent-summary">

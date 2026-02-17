@@ -13,6 +13,7 @@ import type {
 } from '../../../types'
 
 const MAX_LOGS = 120
+const TARGET_URL_REQUIRED_MESSAGE = '請先輸入 URL 以開始流程。'
 
 interface PlannedRunnerRequest {
   diagrams: Diagram[]
@@ -277,8 +278,21 @@ export const usePlannedRunner = (
     setStatusMessage('Executing planned paths...')
   }, [appendLog, running])
 
+  const ensureTargetUrl = useCallback((): boolean => {
+    if (targetUrl.trim().length > 0) {
+      return true
+    }
+
+    setLastError(TARGET_URL_REQUIRED_MESSAGE)
+    setStatusTone('error')
+    setStatusMessage(TARGET_URL_REQUIRED_MESSAGE)
+    appendLog(createLog('error', TARGET_URL_REQUIRED_MESSAGE))
+    return false
+  }, [appendLog, targetUrl])
+
   const start = useCallback(async (): Promise<boolean> => {
     if (diagrams.length === 0) return false
+    if (!ensureTargetUrl()) return false
     setIsBusy(true)
     setLastError(null)
     setStatusTone('waiting')
@@ -317,7 +331,7 @@ export const usePlannedRunner = (
     } finally {
       setIsBusy(false)
     }
-  }, [appendLog, applySnapshot, diagrams.length, endpointBase, formatHttpFailure, formatRequestError, requestPayload])
+  }, [appendLog, applySnapshot, diagrams.length, endpointBase, ensureTargetUrl, formatHttpFailure, formatRequestError, requestPayload])
 
   const stop = useCallback(async () => {
     setIsBusy(true)
@@ -349,6 +363,7 @@ export const usePlannedRunner = (
   }, [appendLog, endpointBase, formatRequestError])
 
   const runSingleStep = useCallback(async (): Promise<boolean> => {
+    if (!ensureTargetUrl()) return false
     setIsBusy(true)
     setLastError(null)
     setStatusTone('waiting')
@@ -376,11 +391,27 @@ export const usePlannedRunner = (
       }
 
       if (data.event) {
+        const event = data.event
         const level = data.event.result === 'pass' ? 'success' : 'error'
-        const message = `[${data.event.result.toUpperCase()}] ${data.event.step.label} : ${data.event.pathName}`
-        appendLog(createLog(level, message, data.event))
-        if (data.event.blockedReason) {
-          appendLog(createLog('error', `Blocked: ${data.event.blockedReason}`, data.event))
+        const message = `[${event.result.toUpperCase()}] ${event.step.label} : ${event.pathName}`
+        appendLog(createLog(level, message, event))
+
+        if (event.narrativeTaskDescription) {
+          appendLog(createLog('info', `[Step Narrator] ${event.narrativeTaskDescription}`, event))
+        }
+
+        if (event.operatorDecisionReason) {
+          appendLog(createLog('info', `[Operator Loop] ${event.operatorDecisionReason}`, event))
+        }
+
+        if (Array.isArray(event.operatorToolDescriptions) && event.operatorToolDescriptions.length > 0) {
+          event.operatorToolDescriptions.forEach((description) => {
+            appendLog(createLog('info', `[Tool] ${description}`, event))
+          })
+        }
+
+        if (event.blockedReason) {
+          appendLog(createLog('error', `Blocked: ${event.blockedReason}`, event))
         }
       } else if (!data.snapshot.completed) {
         appendLog(createLog('info', running ? 'Planner preparing next executable step.' : 'Planner updated. Press Step to continue.'))
@@ -398,7 +429,7 @@ export const usePlannedRunner = (
     } finally {
       setIsBusy(false)
     }
-  }, [appendLog, applySnapshot, endpointBase, formatHttpFailure, formatRequestError, running])
+  }, [appendLog, applySnapshot, endpointBase, ensureTargetUrl, formatHttpFailure, formatRequestError, running])
 
   const ensureSession = useCallback(async (): Promise<boolean> => {
     const hasActiveSnapshot = plannedStatus !== null
@@ -530,6 +561,7 @@ export const usePlannedRunner = (
     applyTemporarySettings,
     setRunning: (next) => {
       if (next) {
+        if (!ensureTargetUrl()) return
         setRunningState(true)
       } else {
         void stop()
@@ -541,6 +573,7 @@ export const usePlannedRunner = (
     step: () => {
       void (async () => {
         if (running || isBusy) return
+        if (!ensureTargetUrl()) return
         if (plannedStatus === null) {
           const started = await start()
           if (!started) return

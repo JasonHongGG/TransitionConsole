@@ -41,6 +41,10 @@ export class PlannedRunner {
   }
 
   async start(request: PlannedRunnerRequest): Promise<PlannedStepResponse> {
+    // 強制驗證 targetUrl 必填且非空
+    if (!request.targetUrl || typeof request.targetUrl !== 'string' || request.targetUrl.trim().length === 0) {
+      throw new Error('PlannedRunner: targetUrl is required and must be a non-empty string.')
+    }
     const runId = createRunId()
 
     log.log('start requested', {
@@ -256,6 +260,16 @@ export class PlannedRunner {
 
     this.runtime.stepIndex += 1
 
+    const narrativeTaskDescription = exec.narrative?.taskDescription?.trim() || undefined
+    const operatorDecisionReason =
+      exec.trace
+        ?.map((item) => (typeof item.detail === 'string' ? item.detail.trim() : ''))
+        .find((detail) => detail.length > 0) || undefined
+    const operatorToolDescriptions =
+      exec.trace
+        ?.map((item) => item.functionCall?.description?.trim())
+        .filter((description): description is string => Boolean(description)) || undefined
+
     const event: PlannedStepEvent = {
       pathId: currentPath.id,
       pathName: currentPath.name,
@@ -264,6 +278,9 @@ export class PlannedRunner {
       message: `${currentPath.name} :: ${step.label}`,
       blockedReason: exec.blockedReason,
       validationResults: exec.validationResults,
+      narrativeTaskDescription,
+      operatorDecisionReason,
+      operatorToolDescriptions,
     }
 
     return {

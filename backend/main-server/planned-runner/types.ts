@@ -208,6 +208,9 @@ export interface PlannedStepEvent {
   message: string
   blockedReason?: string
   validationResults: StepValidationResult[]
+  narrativeTaskDescription?: string
+  operatorDecisionReason?: string
+  operatorToolDescriptions?: string[]
 }
 
 export interface PlannedRunPlan {

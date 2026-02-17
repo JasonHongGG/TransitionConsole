@@ -68,9 +68,18 @@ const PLAYWRIGHT_KEY_MAP: Record<string, string> = {
   command: 'Meta',
 }
 
+const parseBooleanEnv = (value: string | undefined, fallback: boolean): boolean => {
+  if (value === undefined) return fallback
+  const normalized = value.trim().toLowerCase()
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes') return true
+  if (normalized === 'false' || normalized === '0' || normalized === 'no') return false
+  return fallback
+}
+
 export class PlaywrightBrowserOperator implements BrowserOperator {
   private readonly sessions = new Map<string, BrowserSession>()
   private readonly highlightMouseEnabled = process.env.PLANNED_RUNNER_HIGHLIGHT_MOUSE === 'true'
+  private readonly browserHeadless = parseBooleanEnv(process.env.OPERATOR_BROWSER_HEADLESS, true)
   private readonly loopAgent: OperatorLoopAgent
   private playwrightModulePromise: Promise<{ chromium: { launch: (options?: Record<string, unknown>) => Promise<unknown> } }> | null = null
 
@@ -97,13 +106,26 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     const existing = this.sessions.get(key)
     if (existing) return existing
 
+    // targetUrl 必須存在且非空
+    if (!context.targetUrl || typeof context.targetUrl !== 'string' || context.targetUrl.trim().length === 0) {
+      throw new Error('PlaywrightBrowserOperator: targetUrl is required and must be a non-empty string.')
+    }
+
     const playwright = await this.getPlaywrightModule()
-    const browser = (await playwright.chromium.launch()) as BrowserSession['browser'] & {
+    const browser = (await playwright.chromium.launch({
+      headless: this.browserHeadless,
+    })) as BrowserSession['browser'] & {
       newContext: (options?: Record<string, unknown>) => Promise<BrowserSession['context']>
     }
 
     const contextInstance = await browser.newContext()
     const page = await contextInstance.newPage()
+
+    // 啟動時自動導向 targetUrl
+    const normalizedUrl = context.targetUrl.startsWith('http://') || context.targetUrl.startsWith('https://')
+      ? context.targetUrl
+      : `https://${context.targetUrl}`
+    await page.goto(normalizedUrl, { waitUntil: 'domcontentloaded', timeout: 30000 })
 
     const session: BrowserSession = {
       browser,
@@ -324,13 +346,13 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         throw new Error('evaluate tool requires script to resolve to a function when mode=function')
       }
 
-      const evaluateFn = page.evaluate as unknown as (pageFunction: (arg: unknown) => unknown, arg: unknown) => Promise<unknown>
-      await evaluateFn(executable, payload.arg)
+      await page.evaluate(executable, payload.arg)
       return
     }
 
-    const evaluateExpression = page.evaluate as unknown as (expression: string) => Promise<unknown>
-    await evaluateExpression(script)
+    await page.evaluate((code) => {
+      return (0, eval)(code)
+    }, script)
   }
 
   private async currentState(page: BrowserPage): Promise<CurrentState> {

@@ -6,7 +6,7 @@ import type { StepNarratorAgent as StepNarratorAgentContract } from '../types'
 import { STEP_NARRATOR_PROMPT } from './prompt'
 import { StepNarratorMockReplay } from './mockReplay/StepNarratorMockReplay'
 
-type NarrativeEnvelope = {
+type NarrativePayload = {
   narrative?: {
     summary?: string
     taskDescription?: string
@@ -141,7 +141,7 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
       timeoutMs: this.timeoutMs,
     })
 
-    const parsed = extractJsonPayload<NarrativeEnvelope>(content)
+    const parsed = extractJsonPayload<NarrativePayload>(content)
     const assertionFallbackHints = this.collectValidationHints(step, context)
     const assertions = (parsed?.assertions ?? [])
       .map((assertion, index) => {
