@@ -13,6 +13,7 @@ interface AgentPanelProps {
   isBusy: boolean
   statusMessage: string
   statusTone: 'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'
+  waitingElapsedSeconds: number
   plannerRound: number
   completed: boolean
   fullCoveragePassed: boolean | null
@@ -59,6 +60,7 @@ export const AgentPanel = ({
   isBusy,
   statusMessage,
   statusTone,
+  waitingElapsedSeconds,
   plannerRound,
   completed,
   fullCoveragePassed,
@@ -381,10 +383,13 @@ export const AgentPanel = ({
       <div className="agent-status-card">
         <div className="agent-header">
           <p className="agent-status-message">{statusMessage}</p>
-          <span className={`status-pill ${statusTone}`}>
-            {statusTone === 'waiting' ? <span className="status-spinner" aria-hidden="true" /> : null}
-            {toneLabel}
-          </span>
+          <div className="agent-status-indicators">
+            <span className={`status-pill ${statusTone}`}>
+              {statusTone === 'waiting' ? <span className="status-spinner" aria-hidden="true" /> : null}
+              {toneLabel}
+            </span>
+            {statusTone === 'waiting' ? <span className="status-elapsed">{waitingElapsedSeconds}s</span> : null}
+          </div>
         </div>
         <div className="agent-status-meta">
           <span className="agent-meta-chip">Planner {plannerLabel}</span>

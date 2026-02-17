@@ -452,6 +452,7 @@ function App() {
                 nextStateId={agentRunner.nextStateId}
                 statusMessage={agentRunner.statusMessage}
                 statusTone={agentRunner.statusTone}
+                waitingElapsedSeconds={agentRunner.waitingElapsedSeconds}
                 plannerRound={agentRunner.plannerRound}
                 completed={agentRunner.completed}
                 fullCoveragePassed={agentRunner.fullCoveragePassed}

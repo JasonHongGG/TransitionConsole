@@ -77,6 +77,8 @@ const parseBooleanEnv = (value: string | undefined, fallback: boolean): boolean 
   return fallback
 }
 
+const toElapsedSeconds = (elapsedMs: number): number => Math.max(1, Math.ceil(elapsedMs / 1000))
+
 export class PlaywrightBrowserOperator implements BrowserOperator {
   private readonly sessions = new Map<string, BrowserSession>()
   private readonly highlightMouseEnabled = process.env.PLANNED_RUNNER_HIGHLIGHT_MOUSE === 'true'
@@ -470,6 +472,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         actionCursor,
       })
 
+      const decisionStartedAt = Date.now()
       const decision = await this.loopAgent.decide({
         context: {
           runId: context.runId,
@@ -500,6 +503,25 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         actionCursor,
         narrative,
         assertions,
+      })
+      const decisionElapsedMs = Date.now() - decisionStartedAt
+      const decisionElapsedSeconds = toElapsedSeconds(decisionElapsedMs)
+
+      this.emitLiveEvent({
+        type: 'agent.generation.completed',
+        level: 'success',
+        message: `[operator-loop] 生成完成，花費 ${decisionElapsedSeconds}s`,
+        runId: context.runId,
+        pathId: context.pathId,
+        stepId: context.stepId,
+        edgeId: step.edgeId,
+        iteration,
+        actionCursor,
+        meta: {
+          agentTag: 'operator-loop',
+          elapsedMs: decisionElapsedMs,
+          elapsedSeconds: decisionElapsedSeconds,
+        },
       })
 
       this.emitLiveEvent({

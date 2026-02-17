@@ -6,6 +6,8 @@ import { PlaywrightBrowserOperator, SimulatedBrowserOperator } from './operators
 
 const log = createLogger('planned-executor')
 
+const toElapsedSeconds = (elapsedMs: number): number => Math.max(1, Math.ceil(elapsedMs / 1000))
+
 export class AgentStepExecutor implements StepExecutor {
   private readonly narrator: StepNarrator
   private readonly operator: BrowserOperator
@@ -52,16 +54,34 @@ export class AgentStepExecutor implements StepExecutor {
         edgeId: step.edgeId,
       })
 
+      const narratorStartedAt = Date.now()
       const narrative = await this.narrator.generate(step, context)
+      const narratorElapsedMs = Date.now() - narratorStartedAt
+      const narratorElapsedSeconds = toElapsedSeconds(narratorElapsedMs)
 
       this.emitLiveEvent({
         type: 'narrator.completed',
         level: 'success',
-        message: narrative.taskDescription,
+        message: 'Step narrator completed',
         runId: context.runId,
         pathId: context.pathId,
         stepId: context.stepId,
         edgeId: step.edgeId,
+      })
+
+      this.emitLiveEvent({
+        type: 'agent.generation.completed',
+        level: 'success',
+        message: `[step-narrator] 生成完成，花費 ${narratorElapsedSeconds}s`,
+        runId: context.runId,
+        pathId: context.pathId,
+        stepId: context.stepId,
+        edgeId: step.edgeId,
+        meta: {
+          agentTag: 'step-narrator',
+          elapsedMs: narratorElapsedMs,
+          elapsedSeconds: narratorElapsedSeconds,
+        },
       })
 
       const assertions =

@@ -19,6 +19,7 @@ import type {
 const log = createLogger('planned-runner')
 
 const createRunId = () => `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+const toElapsedSeconds = (elapsedMs: number): number => Math.max(1, Math.ceil(elapsedMs / 1000))
 
 const requestTargetUrl = (runtime: RuntimeState): string => runtime.targetUrl
 
@@ -98,6 +99,7 @@ export class PlannedRunner {
       await this.executor.onRunStart(runId)
     }
 
+    const plannerStartedAt = Date.now()
     const plan = await generatePlannedPaths(
       this.pathPlanner,
       runId,
@@ -111,6 +113,20 @@ export class PlannedRunner {
       edgeStatuses,
       [],
     )
+    const plannerElapsedMs = Date.now() - plannerStartedAt
+    const plannerElapsedSeconds = toElapsedSeconds(plannerElapsedMs)
+
+    this.emitLiveEvent({
+      type: 'agent.generation.completed',
+      level: 'success',
+      message: `[path-planner] 生成完成，花費 ${plannerElapsedSeconds}s`,
+      runId,
+      meta: {
+        agentTag: 'path-planner',
+        elapsedMs: plannerElapsedMs,
+        elapsedSeconds: plannerElapsedSeconds,
+      },
+    })
 
     log.log('planning paths completed', {
       runId,
@@ -482,6 +498,7 @@ export class PlannedRunner {
     })
     this.runtime.executedPathHistory = Array.from(historicalBySignature.values())
 
+    const replanStartedAt = Date.now()
     const plan = await generatePlannedPaths(
       this.pathPlanner,
       this.runtime.runId,
@@ -495,6 +512,20 @@ export class PlannedRunner {
       this.runtime.edgeStatuses,
       this.runtime.executedPathHistory,
     )
+    const replanElapsedMs = Date.now() - replanStartedAt
+    const replanElapsedSeconds = toElapsedSeconds(replanElapsedMs)
+
+    this.emitLiveEvent({
+      type: 'agent.generation.completed',
+      level: 'success',
+      message: `[path-planner] 生成完成，花費 ${replanElapsedSeconds}s`,
+      runId: this.runtime.runId,
+      meta: {
+        agentTag: 'path-planner',
+        elapsedMs: replanElapsedMs,
+        elapsedSeconds: replanElapsedSeconds,
+      },
+    })
 
     const offset = this.runtime.totalPlannedPaths + 1
     const reindexedPaths = withReindexedPaths(plan.paths, offset)

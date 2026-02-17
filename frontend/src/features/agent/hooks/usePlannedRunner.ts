@@ -41,6 +41,7 @@ export interface PlannedRunnerState {
   isBusy: boolean
   statusMessage: string
   statusTone: 'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'
+  waitingElapsedSeconds: number
   lastError: string | null
   plannerRound: number
   completed: boolean
@@ -110,6 +111,7 @@ export const usePlannedRunner = (
   const [isBusy, setIsBusy] = useState(false)
   const [statusMessage, setStatusMessage] = useState('Idle')
   const [statusTone, setStatusTone] = useState<'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'>('idle')
+  const [waitingElapsedSeconds, setWaitingElapsedSeconds] = useState(0)
   const [lastError, setLastError] = useState<string | null>(null)
   const [plannerRound, setPlannerRound] = useState(0)
   const [completed, setCompleted] = useState(false)
@@ -505,6 +507,23 @@ export const usePlannedRunner = (
   }, [disconnectLiveEvents])
 
   useEffect(() => {
+    if (statusTone !== 'waiting') {
+      setWaitingElapsedSeconds(0)
+      return
+    }
+
+    const startedAt = Date.now()
+    setWaitingElapsedSeconds(0)
+    const timer = window.setInterval(() => {
+      setWaitingElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000))
+    }, 1000)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [statusTone])
+
+  useEffect(() => {
     if (!running) return
 
     let cancelled = false
@@ -552,6 +571,7 @@ export const usePlannedRunner = (
     isBusy,
     statusMessage,
     statusTone,
+    waitingElapsedSeconds,
     lastError,
     plannerRound,
     completed,
