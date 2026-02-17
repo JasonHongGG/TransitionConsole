@@ -5,6 +5,7 @@ import { createLogger } from '../common/logger'
 import { PlannedRunner } from './planned-runner'
 import { createPlannedRoutes } from './routes/plannedRoutes'
 import { AgentStepExecutor } from './planned-runner/executor'
+import { PassOnlyStepExecutor } from './planned-runner/executor/PassOnlyStepExecutor'
 import { BrowserOperatorApi } from './planned-runner/api/BrowserOperatorApi'
 import { PathPlannerApi } from './planned-runner/api/PathPlannerApi'
 import { StepNarratorApi } from './planned-runner/api/StepNarratorApi'
@@ -19,20 +20,26 @@ export const startMainServer = (): void => {
 
   const port = Number(process.env.MAIN_SERVER_PORT ?? 7070)
   const liveEventBus = new PlannedLiveEventBus()
+  const executorMode = (process.env.PLANNED_RUNNER_EXECUTOR_MODE ?? 'agent').trim().toLowerCase()
+
+  const executor =
+    executorMode === 'pass-only'
+      ? new PassOnlyStepExecutor()
+      : new AgentStepExecutor({
+          narrator: new StepNarratorApi({ aiBaseUrl: process.env.AI_SERVER_BASE_URL }),
+          operator: process.env.PLANNED_RUNNER_REAL_BROWSER === 'true'
+            ? new BrowserOperatorApi({ operatorBaseUrl: process.env.OPERATOR_SERVER_BASE_URL })
+            : undefined,
+          publishLiveEvent: (event) => {
+            liveEventBus.publish(event)
+          },
+        })
 
   const plannedRunner = new PlannedRunner({
     pathPlanner: new PathPlannerApi({
       aiBaseUrl: process.env.AI_SERVER_BASE_URL,
     }),
-    executor: new AgentStepExecutor({
-      narrator: new StepNarratorApi({ aiBaseUrl: process.env.AI_SERVER_BASE_URL }),
-      operator: process.env.PLANNED_RUNNER_REAL_BROWSER === 'true'
-        ? new BrowserOperatorApi({ operatorBaseUrl: process.env.OPERATOR_SERVER_BASE_URL })
-        : undefined,
-      publishLiveEvent: (event) => {
-        liveEventBus.publish(event)
-      },
-    }),
+    executor,
     publishLiveEvent: (event) => {
       liveEventBus.publish(event)
     },
@@ -47,6 +54,7 @@ export const startMainServer = (): void => {
   app.listen(port, () => {
     log.log(`Main server listening on ${port}`, {
       mode: 'split',
+      executorMode,
       aiBaseUrl: process.env.AI_SERVER_BASE_URL ?? 'http://localhost:7081',
       operatorBaseUrl: process.env.OPERATOR_SERVER_BASE_URL ?? 'http://localhost:7082',
     })
