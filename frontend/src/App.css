@@ -2167,12 +2167,44 @@
 
 .agent-logs .log {
   display: grid;
-  grid-template-columns: 74px minmax(0, 1fr) auto;
+  grid-template-columns: 74px minmax(0, 1fr) 76px;
   gap: 8px;
   font-size: 10px;
   color: var(--muted);
   padding-bottom: 8px;
   border-bottom: 1px dashed rgba(255, 255, 255, 0.06);
+}
+
+.agent-logs .log-category {
+  justify-self: end;
+  align-self: center;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 2px 8px;
+  text-transform: uppercase;
+  color: rgba(242, 245, 252, 0.9);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.agent-logs .log-category.narrator {
+  color: #bde6ff;
+  border-color: rgba(80, 188, 255, 0.35);
+  background: rgba(80, 188, 255, 0.14);
+}
+
+.agent-logs .log-category.operator {
+  color: #ffe4b8;
+  border-color: rgba(255, 204, 119, 0.4);
+  background: rgba(255, 204, 119, 0.16);
+}
+
+.agent-logs .log-category.tool {
+  color: #c9f6d8;
+  border-color: rgba(109, 224, 156, 0.38);
+  background: rgba(109, 224, 156, 0.14);
 }
 
 .agent-logs .log.success {

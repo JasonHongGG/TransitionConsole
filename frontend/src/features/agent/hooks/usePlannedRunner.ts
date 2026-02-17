@@ -6,6 +6,7 @@ import type {
   DiagramConnector,
   PlannedRunSnapshot,
   PlannedRunnerStatus,
+  PlannedLiveEvent,
   PlannedStepEvent,
   TestingAccount,
   TransitionResult,
@@ -81,15 +82,20 @@ const normalizeAccount = (account: Partial<TestingAccount>): TestingAccount => (
   description: String(account.description ?? ''),
 })
 
-const nowIso = () => new Date().toISOString()
+const classifyEventCategory = (eventType: string): AgentLogEntry['category'] => {
+  if (eventType.startsWith('narrator.')) return 'narrator'
+  if (eventType.startsWith('operator.tool.')) return 'tool'
+  if (eventType.startsWith('operator.')) return 'operator'
+  return 'system'
+}
 
-const createLog = (level: AgentLogEntry['level'], message: string, event?: PlannedStepEvent): AgentLogEntry => ({
-  id: `${level}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-  timestamp: nowIso(),
-  level,
-  message,
-  stateId: event?.step.toStateId,
-  transitionId: event?.step.edgeId,
+const toAgentLogEntry = (event: PlannedLiveEvent): AgentLogEntry => ({
+  id: `event-${event.runId ?? 'global'}-${event.seq}`,
+  timestamp: event.emittedAt,
+  level: event.level,
+  message: event.message,
+  category: classifyEventCategory(event.type),
+  transitionId: event.edgeId,
 })
 
 export const usePlannedRunner = (
@@ -124,9 +130,49 @@ export const usePlannedRunner = (
   })
   const [plannedStatus, setPlannedStatus] = useState<PlannedRunnerStatus | null>(null)
   const maxKnownPathCountRef = useRef(0)
+  const eventSourceRef = useRef<EventSource | null>(null)
 
-  const appendLog = useCallback((entry: AgentLogEntry) => {
-    setLogs((prev) => [entry, ...prev].slice(0, MAX_LOGS))
+  const appendLiveEvent = useCallback((event: PlannedLiveEvent) => {
+    const entry = toAgentLogEntry(event)
+    setLogs((prev) => {
+      if (prev.some((item) => item.id === entry.id)) {
+        return prev
+      }
+      return [entry, ...prev].slice(0, MAX_LOGS)
+    })
+  }, [])
+
+  const connectLiveEvents = useCallback(() => {
+    if (eventSourceRef.current) {
+      return
+    }
+
+    const source = new EventSource(`${endpointBase}/events`)
+    source.onmessage = (messageEvent) => {
+      try {
+        const payload = JSON.parse(messageEvent.data) as PlannedLiveEvent
+        if (!payload || typeof payload.seq !== 'number' || typeof payload.message !== 'string') {
+          return
+        }
+        appendLiveEvent(payload)
+      } catch {
+        // ignore malformed stream chunks
+      }
+    }
+    source.onerror = () => {
+      // Browser will auto-reconnect for SSE by default.
+    }
+
+    eventSourceRef.current = source
+  }, [appendLiveEvent, endpointBase])
+
+  const disconnectLiveEvents = useCallback(() => {
+    if (!eventSourceRef.current) {
+      return
+    }
+
+    eventSourceRef.current.close()
+    eventSourceRef.current = null
   }, [])
 
   const setTestAccountField = useCallback((index: number, field: keyof TestingAccount, value: string) => {
@@ -247,7 +293,6 @@ export const usePlannedRunner = (
       setFullCoveragePassed(passed)
       setStatusMessage(passed ? 'Full coverage complete: PASS' : 'Run complete: full coverage NOT passed')
       setStatusTone(passed ? 'success' : 'error')
-      appendLog(createLog('success', 'Planned run completed.'))
       return
     }
 
@@ -276,7 +321,7 @@ export const usePlannedRunner = (
 
     setStatusTone('running')
     setStatusMessage('Executing planned paths...')
-  }, [appendLog, running])
+  }, [running])
 
   const ensureTargetUrl = useCallback((): boolean => {
     if (targetUrl.trim().length > 0) {
@@ -286,13 +331,13 @@ export const usePlannedRunner = (
     setLastError(TARGET_URL_REQUIRED_MESSAGE)
     setStatusTone('error')
     setStatusMessage(TARGET_URL_REQUIRED_MESSAGE)
-    appendLog(createLog('error', TARGET_URL_REQUIRED_MESSAGE))
     return false
-  }, [appendLog, targetUrl])
+  }, [targetUrl])
 
   const start = useCallback(async (): Promise<boolean> => {
     if (diagrams.length === 0) return false
     if (!ensureTargetUrl()) return false
+    connectLiveEvents()
     setIsBusy(true)
     setLastError(null)
     setStatusTone('waiting')
@@ -309,7 +354,6 @@ export const usePlannedRunner = (
           response,
           `Failed to start planned run (${response.status}).`,
         )
-        appendLog(createLog('error', failureMessage))
         setLastError(failureMessage)
         setStatusTone('error')
         setStatusMessage('Start failed.')
@@ -319,19 +363,17 @@ export const usePlannedRunner = (
       const data = (await response.json()) as PlannedStepResponse
       applySnapshot(data.snapshot, 'start')
       setLatestEvent(null)
-      appendLog(createLog('info', 'Planned run started.'))
       return true
     } catch (error) {
       const failureMessage = formatRequestError(error)
       setLastError(failureMessage)
       setStatusTone('error')
       setStatusMessage('Backend unavailable. Please check server connection.')
-      appendLog(createLog('error', failureMessage))
       return false
     } finally {
       setIsBusy(false)
     }
-  }, [appendLog, applySnapshot, diagrams.length, endpointBase, ensureTargetUrl, formatHttpFailure, formatRequestError, requestPayload])
+  }, [applySnapshot, connectLiveEvents, diagrams.length, endpointBase, ensureTargetUrl, formatHttpFailure, formatRequestError, requestPayload])
 
   const stop = useCallback(async () => {
     setIsBusy(true)
@@ -344,23 +386,20 @@ export const usePlannedRunner = (
         setLastError(failureMessage)
         setStatusTone('error')
         setStatusMessage('Pause failed.')
-        appendLog(createLog('error', failureMessage))
         return
       }
       setRunningState(false)
       setStatusTone('paused')
       setStatusMessage('Paused.')
-      appendLog(createLog('info', 'Planned run paused.'))
     } catch (error) {
       const failureMessage = formatRequestError(error)
       setLastError(failureMessage)
       setStatusTone('error')
       setStatusMessage('Pause failed: backend unavailable.')
-      appendLog(createLog('error', failureMessage))
     } finally {
       setIsBusy(false)
     }
-  }, [appendLog, endpointBase, formatRequestError])
+  }, [endpointBase, formatRequestError])
 
   const runSingleStep = useCallback(async (): Promise<boolean> => {
     if (!ensureTargetUrl()) return false
@@ -372,7 +411,6 @@ export const usePlannedRunner = (
       const response = await fetch(`${endpointBase}/step`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
       if (!response.ok) {
         const failureMessage = await formatHttpFailure(response, `Step request failed (${response.status}).`)
-        appendLog(createLog('error', failureMessage))
         setRunningState(false)
         setLastError(failureMessage)
         setStatusTone('error')
@@ -390,33 +428,6 @@ export const usePlannedRunner = (
         })
       }
 
-      if (data.event) {
-        const event = data.event
-        const level = data.event.result === 'pass' ? 'success' : 'error'
-        const message = `[${event.result.toUpperCase()}] ${event.step.label} : ${event.pathName}`
-        appendLog(createLog(level, message, event))
-
-        if (event.narrativeTaskDescription) {
-          appendLog(createLog('info', `[Step Narrator] ${event.narrativeTaskDescription}`, event))
-        }
-
-        if (event.operatorDecisionReason) {
-          appendLog(createLog('info', `[Operator Loop] ${event.operatorDecisionReason}`, event))
-        }
-
-        if (Array.isArray(event.operatorToolDescriptions) && event.operatorToolDescriptions.length > 0) {
-          event.operatorToolDescriptions.forEach((description) => {
-            appendLog(createLog('info', `[Tool] ${description}`, event))
-          })
-        }
-
-        if (event.blockedReason) {
-          appendLog(createLog('error', `Blocked: ${event.blockedReason}`, event))
-        }
-      } else if (!data.snapshot.completed) {
-        appendLog(createLog('info', running ? 'Planner preparing next executable step.' : 'Planner updated. Press Step to continue.'))
-      }
-
       return !data.snapshot.completed
     } catch (error) {
       const failureMessage = formatRequestError(error)
@@ -424,12 +435,11 @@ export const usePlannedRunner = (
       setLastError(failureMessage)
       setStatusTone('error')
       setStatusMessage('Step failed: backend unavailable.')
-      appendLog(createLog('error', failureMessage))
       return false
     } finally {
       setIsBusy(false)
     }
-  }, [appendLog, applySnapshot, endpointBase, ensureTargetUrl, formatHttpFailure, formatRequestError, running])
+  }, [applySnapshot, endpointBase, ensureTargetUrl, formatHttpFailure, formatRequestError, running])
 
   const ensureSession = useCallback(async (): Promise<boolean> => {
     const hasActiveSnapshot = plannedStatus !== null
@@ -443,6 +453,8 @@ export const usePlannedRunner = (
     setIsBusy(true)
     setStatusTone('waiting')
     setLastError(null)
+    setLogs([])
+    disconnectLiveEvents()
     try {
       if (running) {
         await fetch(`${endpointBase}/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
@@ -453,7 +465,6 @@ export const usePlannedRunner = (
         setLastError(failureMessage)
         setStatusTone('error')
         setStatusMessage('Reset failed.')
-        appendLog(createLog('error', failureMessage))
         return
       }
 
@@ -476,18 +487,22 @@ export const usePlannedRunner = (
         nodeStatuses: {},
         edgeStatuses: {},
       })
-      appendLog(createLog('info', 'Planned run reset.'))
     } catch (error) {
       const failureMessage = formatRequestError(error)
       setLastError(failureMessage)
       setStatusTone('error')
       setStatusMessage('Reset failed: backend unavailable.')
-      appendLog(createLog('error', failureMessage))
     }
     finally {
       setIsBusy(false)
     }
-  }, [appendLog, endpointBase, formatRequestError, running])
+  }, [disconnectLiveEvents, endpointBase, formatRequestError, running])
+
+  useEffect(() => {
+    return () => {
+      disconnectLiveEvents()
+    }
+  }, [disconnectLiveEvents])
 
   useEffect(() => {
     if (!running) return

@@ -8,6 +8,7 @@ import { AgentStepExecutor } from './planned-runner/executor'
 import { BrowserOperatorApi } from './planned-runner/api/BrowserOperatorApi'
 import { PathPlannerApi } from './planned-runner/api/PathPlannerApi'
 import { StepNarratorApi } from './planned-runner/api/StepNarratorApi'
+import { PlannedLiveEventBus } from './planned-runner/live-events/PlannedLiveEventBus'
 
 const log = createLogger('main-server')
 
@@ -17,6 +18,7 @@ export const startMainServer = (): void => {
   app.use(express.json({ limit: '2mb' }))
 
   const port = Number(process.env.MAIN_SERVER_PORT ?? 7070)
+  const liveEventBus = new PlannedLiveEventBus()
 
   const plannedRunner = new PlannedRunner({
     pathPlanner: new PathPlannerApi({
@@ -27,14 +29,20 @@ export const startMainServer = (): void => {
       operator: process.env.PLANNED_RUNNER_REAL_BROWSER === 'true'
         ? new BrowserOperatorApi({ operatorBaseUrl: process.env.OPERATOR_SERVER_BASE_URL })
         : undefined,
+      publishLiveEvent: (event) => {
+        liveEventBus.publish(event)
+      },
     }),
+    publishLiveEvent: (event) => {
+      liveEventBus.publish(event)
+    },
   })
 
   app.get('/health', (_req, res) => {
     res.json({ ok: true, service: 'main-server', mode: 'split' })
   })
 
-  app.use('/api/planned', createPlannedRoutes(plannedRunner))
+  app.use('/api/planned', createPlannedRoutes(plannedRunner, liveEventBus))
 
   app.listen(port, () => {
     log.log(`Main server listening on ${port}`, {

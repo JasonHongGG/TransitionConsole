@@ -208,10 +208,26 @@ export interface PlannedStepEvent {
   message: string
   blockedReason?: string
   validationResults: StepValidationResult[]
-  narrativeTaskDescription?: string
-  operatorDecisionReason?: string
-  operatorToolDescriptions?: string[]
 }
+
+export type PlannedLiveEventLevel = 'info' | 'success' | 'error'
+
+export interface PlannedLiveEvent {
+  seq: number
+  emittedAt: string
+  type: string
+  level: PlannedLiveEventLevel
+  message: string
+  runId?: string
+  pathId?: string
+  stepId?: string
+  edgeId?: string
+  iteration?: number
+  actionCursor?: number
+  meta?: Record<string, unknown>
+}
+
+export type PlannedLiveEventInput = Omit<PlannedLiveEvent, 'seq' | 'emittedAt'>
 
 export interface PlannedRunPlan {
   paths: PlannedTransitionPath[]

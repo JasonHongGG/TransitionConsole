@@ -6,6 +6,7 @@ import { generatePlannedPaths, withReindexedPaths } from './planner'
 import { buildEmptySnapshot, buildRuntimeSnapshot, computeCoverageSummary } from './snapshot'
 import type {
   ElementExecutionStatus,
+  PlannedLiveEventInput,
   PlannedPathHistoryItem,
   PlannedRunnerRequest,
   PlannedStepEvent,
@@ -34,10 +35,20 @@ export class PlannedRunner {
   private runtime: RuntimeState | null = null
   private readonly executor: StepExecutor
   private readonly pathPlanner: PathPlanner
+  private readonly publishLiveEvent?: (event: PlannedLiveEventInput) => void
 
-  constructor(options: { executor?: StepExecutor; pathPlanner: PathPlanner }) {
+  constructor(options: {
+    executor?: StepExecutor
+    pathPlanner: PathPlanner
+    publishLiveEvent?: (event: PlannedLiveEventInput) => void
+  }) {
     this.executor = options.executor ?? new StubStepExecutor()
     this.pathPlanner = options.pathPlanner
+    this.publishLiveEvent = options.publishLiveEvent
+  }
+
+  private emitLiveEvent(event: PlannedLiveEventInput): void {
+    this.publishLiveEvent?.(event)
   }
 
   async start(request: PlannedRunnerRequest): Promise<PlannedStepResponse> {
@@ -46,6 +57,13 @@ export class PlannedRunner {
       throw new Error('PlannedRunner: targetUrl is required and must be a non-empty string.')
     }
     const runId = createRunId()
+
+    this.emitLiveEvent({
+      type: 'run.starting',
+      level: 'info',
+      message: 'Planned run is starting',
+      runId,
+    })
 
     log.log('start requested', {
       runId,
@@ -128,6 +146,16 @@ export class PlannedRunner {
       currentStepIndex: 0,
     })
 
+    this.emitLiveEvent({
+      type: 'run.started',
+      level: 'success',
+      message: 'Planned run started',
+      runId,
+      meta: {
+        totalPaths: plan.paths.length,
+      },
+    })
+
     return {
       ok: true,
       event: null,
@@ -138,6 +166,11 @@ export class PlannedRunner {
   async step(): Promise<PlannedStepResponse> {
     if (!this.runtime) {
       log.log('step requested but runtime is not started')
+      this.emitLiveEvent({
+        type: 'step.rejected',
+        level: 'error',
+        message: 'Step requested before run started',
+      })
       return {
         ok: false,
         event: null,
@@ -147,6 +180,12 @@ export class PlannedRunner {
 
     if (this.runtime.completed) {
       log.log('step requested but runtime already completed', { runId: this.runtime.runId })
+      this.emitLiveEvent({
+        type: 'step.skipped',
+        level: 'info',
+        message: 'Step requested after run completed',
+        runId: this.runtime.runId,
+      })
       return {
         ok: true,
         event: null,
@@ -191,6 +230,20 @@ export class PlannedRunner {
 
     this.runtime.edgeStatuses[step.edgeId] = 'running'
     this.runtime.nodeStatuses[step.fromStateId] = 'pass'
+
+    this.emitLiveEvent({
+      type: 'step.started',
+      level: 'info',
+      message: `Step started: ${step.label}`,
+      runId: this.runtime.runId,
+      pathId: currentPath.id,
+      stepId: step.id,
+      edgeId: step.edgeId,
+      meta: {
+        fromStateId: step.fromStateId,
+        toStateId: step.toStateId,
+      },
+    })
 
     log.log('step execution started', {
       runId: this.runtime.runId,
@@ -260,15 +313,18 @@ export class PlannedRunner {
 
     this.runtime.stepIndex += 1
 
-    const narrativeTaskDescription = exec.narrative?.taskDescription?.trim() || undefined
-    const operatorDecisionReason =
-      exec.trace
-        ?.map((item) => (typeof item.detail === 'string' ? item.detail.trim() : ''))
-        .find((detail) => detail.length > 0) || undefined
-    const operatorToolDescriptions =
-      exec.trace
-        ?.map((item) => item.functionCall?.description?.trim())
-        .filter((description): description is string => Boolean(description)) || undefined
+    this.emitLiveEvent({
+      type: 'step.completed',
+      level: result === 'pass' ? 'success' : 'error',
+      message: `Step ${result}: ${step.label}`,
+      runId: this.runtime.runId,
+      pathId: currentPath.id,
+      stepId: step.id,
+      edgeId: step.edgeId,
+      meta: {
+        blockedReason: exec.blockedReason,
+      },
+    })
 
     const event: PlannedStepEvent = {
       pathId: currentPath.id,
@@ -278,9 +334,6 @@ export class PlannedRunner {
       message: `${currentPath.name} :: ${step.label}`,
       blockedReason: exec.blockedReason,
       validationResults: exec.validationResults,
-      narrativeTaskDescription,
-      operatorDecisionReason,
-      operatorToolDescriptions,
     }
 
     return {
@@ -300,6 +353,15 @@ export class PlannedRunner {
 
     if (runId && this.executor.onRunStop) {
       void this.executor.onRunStop(runId)
+    }
+
+    if (runId) {
+      this.emitLiveEvent({
+        type: 'run.stopped',
+        level: 'info',
+        message: 'Planned run stopped',
+        runId,
+      })
     }
 
     return {
@@ -330,6 +392,15 @@ export class PlannedRunner {
 
     this.runtime = null
 
+    if (runId) {
+      this.emitLiveEvent({
+        type: 'run.reset',
+        level: 'info',
+        message: 'Planned run reset',
+        runId,
+      })
+    }
+
     return {
       ok: true,
       event: null,
@@ -352,6 +423,12 @@ export class PlannedRunner {
     if (coverage.uncoveredEdgeIds.length === 0 && coverage.uncoveredNodeIds.length === 0) {
       this.runtime.completed = true
       log.log('run completed: full coverage reached', { runId: this.runtime.runId })
+      this.emitLiveEvent({
+        type: 'run.completed',
+        level: 'success',
+        message: 'Run completed with full coverage',
+        runId: this.runtime.runId,
+      })
       if (this.executor.onRunStop) {
         await this.executor.onRunStop(this.runtime.runId)
       }
@@ -364,6 +441,12 @@ export class PlannedRunner {
         runId: this.runtime.runId,
         replanCount: this.runtime.replanCount,
       })
+      this.emitLiveEvent({
+        type: 'run.completed',
+        level: 'error',
+        message: 'Run completed due to max replan limit',
+        runId: this.runtime.runId,
+      })
       if (this.executor.onRunStop) {
         await this.executor.onRunStop(this.runtime.runId)
       }
@@ -374,6 +457,16 @@ export class PlannedRunner {
       runId: this.runtime.runId,
       remainingEdges: coverage.uncoveredEdgeIds.length,
       replanCount: this.runtime.replanCount,
+    })
+
+    this.emitLiveEvent({
+      type: 'replan.started',
+      level: 'info',
+      message: 'Replan started',
+      runId: this.runtime.runId,
+      meta: {
+        remainingEdges: coverage.uncoveredEdgeIds.length,
+      },
     })
 
     const historicalBySignature = new Map<string, PlannedPathHistoryItem>()
@@ -417,6 +510,16 @@ export class PlannedRunner {
       addedPaths: reindexedPaths.length,
       totalPlannedPaths: this.runtime.totalPlannedPaths,
       replanCount: this.runtime.replanCount,
+    })
+
+    this.emitLiveEvent({
+      type: 'replan.completed',
+      level: 'info',
+      message: 'Replan completed',
+      runId: this.runtime.runId,
+      meta: {
+        addedPaths: reindexedPaths.length,
+      },
     })
   }
 }

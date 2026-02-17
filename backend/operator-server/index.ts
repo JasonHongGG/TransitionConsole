@@ -5,16 +5,40 @@ import { createLogger } from '../common/logger'
 import { PlaywrightBrowserOperator } from '../main-server/planned-runner/executor/operators/PlaywrightBrowserOperator'
 import type { OperatorCleanupRunRequest, OperatorResetReplayResponse, OperatorStepRunRequest } from '../main-server/shared/contracts'
 import { OperatorLoopApi } from './OperatorLoopApi'
+import type { PlannedLiveEventInput } from '../main-server/planned-runner/types'
 
 const log = createLogger('operator-server')
 const app = express()
 app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 
+const mainServerBaseUrl = process.env.MAIN_SERVER_BASE_URL ?? 'http://localhost:7070'
+
+const pushLiveEvent = async (event: PlannedLiveEventInput): Promise<void> => {
+  try {
+    await fetch(`${mainServerBaseUrl}/api/planned/events/push`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify(event),
+    })
+  } catch (error) {
+    log.log('operator live event push failed', {
+      error: error instanceof Error ? error.message : 'live event push failed',
+      type: event.type,
+      runId: event.runId,
+    })
+  }
+}
+
 const operator = new PlaywrightBrowserOperator({
   loopAgent: new OperatorLoopApi({
     aiBaseUrl: process.env.AI_SERVER_BASE_URL,
   }),
+  onLiveEvent: (event) => {
+    void pushLiveEvent(event)
+  },
 })
 
 app.get('/health', (_req, res) => {

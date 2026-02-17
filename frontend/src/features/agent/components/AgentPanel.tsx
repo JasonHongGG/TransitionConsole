@@ -35,6 +35,19 @@ interface AgentPanelProps {
 
 const formatTime = (value: string) => new Date(value).toLocaleTimeString()
 
+const formatLogCategory = (category: AgentLogEntry['category'] | undefined): string => {
+  switch (category) {
+    case 'narrator':
+      return 'Narrator'
+    case 'operator':
+      return 'Operator'
+    case 'tool':
+      return 'Tool'
+    default:
+      return 'System'
+  }
+}
+
 export const AgentPanel = ({
   diagrams,
   coverage,
@@ -487,7 +500,7 @@ export const AgentPanel = ({
                   <li key={log.id} className={`log ${log.level}`}>
                     <span>{formatTime(log.timestamp)}</span>
                     <span>{log.message}</span>
-                    <span>{log.role ?? 'system'}</span>
+                    <span className={`log-category ${log.category ?? 'system'}`}>{formatLogCategory(log.category)}</span>
                   </li>
                 ))}
               </ul>

@@ -1,11 +1,45 @@
 import { Router } from 'express'
 import { createLogger } from '../common/logger'
 import { PlannedRunner, type PlannedRunnerRequest } from '../planned-runner'
+import type { PlannedLiveEventInput } from '../planned-runner/types'
+import { PlannedLiveEventBus } from '../planned-runner/live-events/PlannedLiveEventBus'
 
 const log = createLogger('api/planned')
 
-export const createPlannedRoutes = (runner: PlannedRunner): Router => {
+export const createPlannedRoutes = (runner: PlannedRunner, liveEventBus: PlannedLiveEventBus): Router => {
   const router = Router()
+
+  router.get('/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.flushHeaders()
+
+    const heartbeat = setInterval(() => {
+      res.write(': heartbeat\n\n')
+    }, 15000)
+
+    const unsubscribe = liveEventBus.subscribe((event) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`)
+    })
+
+    req.on('close', () => {
+      clearInterval(heartbeat)
+      unsubscribe()
+      res.end()
+    })
+  })
+
+  router.post('/events/push', (req, res) => {
+    const payload = req.body as PlannedLiveEventInput
+    if (!payload || typeof payload.type !== 'string' || typeof payload.level !== 'string' || typeof payload.message !== 'string') {
+      res.status(400).json({ ok: false, error: 'Invalid event payload' })
+      return
+    }
+
+    liveEventBus.publish(payload)
+    res.json({ ok: true })
+  })
 
   router.post('/start', async (req, res) => {
     try {

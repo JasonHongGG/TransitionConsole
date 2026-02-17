@@ -67,9 +67,6 @@ export interface PlannedStepEvent {
   message: string
   blockedReason?: string
   validationResults: StepValidationResult[]
-  narrativeTaskDescription?: string
-  operatorDecisionReason?: string
-  operatorToolDescriptions?: string[]
 }
 
 export interface PlannedRunPlan {
@@ -99,10 +96,26 @@ export interface AgentLogEntry {
   timestamp: string
   level: 'info' | 'success' | 'error'
   message: string
+  category?: 'narrator' | 'operator' | 'tool' | 'system'
   role?: string
   diagramId?: string
   stateId?: string
   transitionId?: string
+}
+
+export interface PlannedLiveEvent {
+  seq: number
+  emittedAt: string
+  type: string
+  level: 'info' | 'success' | 'error'
+  message: string
+  runId?: string
+  pathId?: string
+  stepId?: string
+  edgeId?: string
+  iteration?: number
+  actionCursor?: number
+  meta?: Record<string, unknown>
 }
 
 export interface TestingAccount {

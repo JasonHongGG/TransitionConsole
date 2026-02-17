@@ -16,6 +16,7 @@ import type {
   LoopFunctionResponse,
   OperatorLoopAgent,
 } from '../contracts'
+import type { PlannedLiveEventInput } from '../../types'
 import { OperatorLoopApi } from './OperatorLoopApi'
 
 type ToolPayload = Record<string, unknown>
@@ -81,10 +82,16 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
   private readonly highlightMouseEnabled = process.env.PLANNED_RUNNER_HIGHLIGHT_MOUSE === 'true'
   private readonly browserHeadless = parseBooleanEnv(process.env.OPERATOR_BROWSER_HEADLESS, true)
   private readonly loopAgent: OperatorLoopAgent
+  private readonly onLiveEvent?: (event: PlannedLiveEventInput) => void
   private playwrightModulePromise: Promise<{ chromium: { launch: (options?: Record<string, unknown>) => Promise<unknown> } }> | null = null
 
-  constructor(options?: { loopAgent?: OperatorLoopAgent }) {
+  constructor(options?: { loopAgent?: OperatorLoopAgent; onLiveEvent?: (event: PlannedLiveEventInput) => void }) {
     this.loopAgent = options?.loopAgent ?? new OperatorLoopApi()
+    this.onLiveEvent = options?.onLiveEvent
+  }
+
+  private emitLiveEvent(event: PlannedLiveEventInput): void {
+    this.onLiveEvent?.(event)
   }
 
   private async getPlaywrightModule(): Promise<{ chromium: { launch: (options?: Record<string, unknown>) => Promise<unknown> } }> {
@@ -451,6 +458,18 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     for (let iteration = 1; iteration <= maxLoopRounds; iteration += 1) {
       const stateSummary = `url=${page.url()}; iteration=${iteration}; actionCursor=${actionCursor}`
 
+      this.emitLiveEvent({
+        type: 'operator.iteration.started',
+        level: 'info',
+        message: `Operator iteration ${iteration} started`,
+        runId: context.runId,
+        pathId: context.pathId,
+        stepId: context.stepId,
+        edgeId: step.edgeId,
+        iteration,
+        actionCursor,
+      })
+
       const decision = await this.loopAgent.decide({
         context: {
           runId: context.runId,
@@ -481,6 +500,18 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         actionCursor,
         narrative,
         assertions,
+      })
+
+      this.emitLiveEvent({
+        type: 'operator.decision',
+        level: decision.kind === 'fail' ? 'error' : 'info',
+        message: decision.reason,
+        runId: context.runId,
+        pathId: context.pathId,
+        stepId: context.stepId,
+        edgeId: step.edgeId,
+        iteration,
+        actionCursor,
       })
 
       if (decision.kind === 'complete') {
@@ -543,6 +574,22 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           activeFunctionCall = functionCall
           const toolName = functionCall.name.trim().toLowerCase()
           const payload = functionCall.args
+
+          this.emitLiveEvent({
+            type: 'operator.tool.started',
+            level: 'info',
+            message: functionCall.description?.trim() || `Running tool: ${toolName}`,
+            runId: context.runId,
+            pathId: context.pathId,
+            stepId: context.stepId,
+            edgeId: step.edgeId,
+            iteration,
+            actionCursor,
+            meta: {
+              toolName,
+            },
+          })
+
           lastState = await this.executeTool(page, toolName, payload)
 
           functionResponses.push({
@@ -568,6 +615,23 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             outcome: 'success',
             detail: decision.reason,
           })
+
+          this.emitLiveEvent({
+            type: 'operator.tool.completed',
+            level: 'success',
+            message: functionCall.description?.trim() || `Tool completed: ${toolName}`,
+            runId: context.runId,
+            pathId: context.pathId,
+            stepId: context.stepId,
+            edgeId: step.edgeId,
+            iteration,
+            actionCursor,
+            meta: {
+              toolName,
+              url: lastState.url,
+            },
+          })
+
           actionCursor += 1
         }
 
@@ -603,6 +667,21 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             : undefined,
           outcome: 'failed',
           detail: message,
+        })
+
+        this.emitLiveEvent({
+          type: 'operator.tool.failed',
+          level: 'error',
+          message,
+          runId: context.runId,
+          pathId: context.pathId,
+          stepId: context.stepId,
+          edgeId: step.edgeId,
+          iteration,
+          actionCursor,
+          meta: {
+            toolName: activeFunctionCall?.name,
+          },
         })
 
         return {
