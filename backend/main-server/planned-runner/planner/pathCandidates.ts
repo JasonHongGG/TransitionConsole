@@ -45,13 +45,7 @@ const buildCandidate = (
 
 const prioritizeCandidates = (candidates: PlannerPathCandidate[]): PlannerPathCandidate[] => {
   const newCoverageCandidates = candidates.filter((candidate) => candidate.hasNewCoverage)
-  const prioritizedCandidates = newCoverageCandidates.length > 0 ? newCoverageCandidates : candidates
-
-  return [...prioritizedCandidates].sort((left, right) => {
-    if (right.newEdgeCount !== left.newEdgeCount) return right.newEdgeCount - left.newEdgeCount
-    if (right.newNodeCount !== left.newNodeCount) return right.newNodeCount - left.newNodeCount
-    return left.edges.length - right.edges.length
-  })
+  return newCoverageCandidates.length > 0 ? newCoverageCandidates : candidates
 }
 
 const toPlannedPath = (candidate: PlannerPathCandidate, ordinal: number): PlannedTransitionPath => ({

@@ -24,6 +24,25 @@ export const generatePlannedPaths = async (
   previouslyPlannedPaths: PlannerHistoryPath[] = [],
 ): Promise<PlannedRunPlan> => {
   const normalizeId = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const parsePathOrdinal = (pathId?: string): number => {
+    if (!pathId) return Number.POSITIVE_INFINITY
+    const match = pathId.match(/(?:path[-.])(\d+)$/i)
+    if (!match) return Number.POSITIVE_INFINITY
+    const parsed = Number(match[1])
+    return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY
+  }
+
+  const sortedPreviouslyPlannedPaths = [...previouslyPlannedPaths].sort((left, right) => {
+    const leftRound = left.plannedRound ?? Number.POSITIVE_INFINITY
+    const rightRound = right.plannedRound ?? Number.POSITIVE_INFINITY
+    if (leftRound !== rightRound) return leftRound - rightRound
+
+    const leftOrdinal = parsePathOrdinal(left.pathId)
+    const rightOrdinal = parsePathOrdinal(right.pathId)
+    if (leftOrdinal !== rightOrdinal) return leftOrdinal - rightOrdinal
+
+    return (left.pathId ?? '').localeCompare(right.pathId ?? '')
+  })
 
   const plannerDiagrams = buildPlannerDiagrams(sourceDiagrams, sourceConnectors, nodeStatuses, edgeStatuses)
   const globalEntryStateId = resolveGlobalEntryStateId(sourceDiagrams, entryStateIds)
@@ -38,7 +57,7 @@ export const generatePlannedPaths = async (
       specRaw,
       diagrams: plannerDiagrams,
     },
-    previouslyPlannedPaths,
+    previouslyPlannedPaths: sortedPreviouslyPlannedPaths,
   })
 
   const edgesById = new Map(allEdges.map((edge) => [edge.id, edge]))
@@ -71,7 +90,7 @@ export const generatePlannedPaths = async (
   }
 
   const historicalSignatures = new Set(
-    previouslyPlannedPaths
+    sortedPreviouslyPlannedPaths
       .map((path) => (path.edgeIds ?? []).join('>'))
       .filter((signature) => signature.length > 0),
   )

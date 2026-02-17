@@ -383,13 +383,10 @@ export const AgentPanel = ({
       <div className="agent-status-card">
         <div className="agent-header">
           <p className="agent-status-message">{statusMessage}</p>
-          <div className="agent-status-indicators">
-            <span className={`status-pill ${statusTone}`}>
-              {statusTone === 'waiting' ? <span className="status-spinner" aria-hidden="true" /> : null}
-              {toneLabel}
-            </span>
-            {statusTone === 'waiting' ? <span className="status-elapsed">{waitingElapsedSeconds}s</span> : null}
-          </div>
+          <span className={`status-pill ${statusTone}`}>
+            {statusTone === 'waiting' ? <span className="status-spinner" aria-hidden="true" /> : null}
+            {statusTone === 'waiting' ? `${toneLabel} ${waitingElapsedSeconds}s` : toneLabel}
+          </span>
         </div>
         <div className="agent-status-meta">
           <span className="agent-meta-chip">Planner {plannerLabel}</span>
