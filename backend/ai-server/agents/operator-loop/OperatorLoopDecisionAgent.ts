@@ -122,7 +122,6 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
           currentUrl: input.currentUrl,
           stateSummary: input.stateSummary,
           actionCursor: input.actionCursor,
-          assertions: input.assertions,
           narrative: input.narrative,
         },
         parsedResponse: decision,
@@ -138,7 +137,13 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         : input.screenshotBase64
 
     const payload = {
-      ...input,
+      context: input.context,
+      step: input.step,
+      iteration: input.iteration,
+      currentUrl: input.currentUrl,
+      stateSummary: input.stateSummary,
+      actionCursor: input.actionCursor,
+      narrative: input.narrative,
       screenshot: {
         mimeType: 'image/png',
         encoding: 'base64',
@@ -163,13 +168,12 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       pathId: input.context.pathId,
       stepId: input.context.stepId,
       request: {
-        context: input.context,
+        context: payload.context,
         step: input.step,
         iteration: input.iteration,
         currentUrl: input.currentUrl,
         stateSummary: input.stateSummary,
         actionCursor: input.actionCursor,
-        assertions: input.assertions,
         narrative: input.narrative,
         conversationHistoryTurns: this.getHistory(key).length,
         screenshotBase64Chars: screenshotBase64.length,

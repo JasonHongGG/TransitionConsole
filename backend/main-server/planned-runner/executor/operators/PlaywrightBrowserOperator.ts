@@ -481,7 +481,6 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           targetUrl: context.targetUrl,
           specRaw: context.specRaw,
           userTestingInfo: context.userTestingInfo,
-          diagrams: context.systemDiagrams,
         },
         step: {
           edgeId: step.edgeId,
@@ -502,7 +501,6 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         screenshotBase64: lastState.screenshot.toString('base64'),
         actionCursor,
         narrative,
-        assertions,
       })
       const decisionElapsedMs = Date.now() - decisionStartedAt
       const decisionElapsedSeconds = toElapsedSeconds(decisionElapsedMs)

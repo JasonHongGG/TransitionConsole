@@ -1,4 +1,4 @@
-import type { ExecutorContext, PlannedTransitionStep, StepNarrativeInstruction } from '../../planned-runner/types'
+import type { StepNarrativeInstruction } from '../../planned-runner/types'
 import type { LoopDecision, LoopDecisionInput, LoopFunctionResponse } from '../../planned-runner/executor/contracts'
 import type { PathPlannerContext, PlannedPathDraft } from '../../planned-runner/planner/plannerProvider/types'
 
@@ -16,9 +16,89 @@ export interface PathPlannerGenerateResponse {
 
 export type PathPlannerResetResponse = ApiOkResponse
 
+export interface StepNarratorRequestStep {
+  edgeId: string
+  from: {
+    stateId: string
+    diagramId: string
+  }
+  to: {
+    stateId: string
+    diagramId: string
+  }
+  summary?: string
+  semanticGoal?: string
+}
+
+export interface StepNarratorRequestState {
+  id: string
+  walked: boolean
+}
+
+export interface StepNarratorRequestTransition {
+  id: string
+  from: string
+  to: string
+  walked: boolean
+  validations?: string[]
+  intent?: {
+    summary?: string | null
+  }
+}
+
+export interface StepNarratorRequestConnector {
+  id: string
+  type: 'contains' | 'invokes'
+  from: {
+    diagramId: string
+    stateId: string | null
+  }
+  to: {
+    diagramId: string
+    stateId: string | null
+  }
+  meta?: {
+    reason?: string | null
+    action?: string | null
+    validations?: string[]
+  }
+}
+
+export interface StepNarratorRequestDiagram {
+  id: string
+  name: string
+  level: string
+  parentDiagramId: string | null
+  roles: string[]
+  variant: {
+    kind: string
+    baseDiagramId: string | null
+    deltaDiagramIdsByRole: Record<string, string>
+    appliesToRoles: string[]
+  }
+  states: StepNarratorRequestState[]
+  transitions: StepNarratorRequestTransition[]
+  connectors: StepNarratorRequestConnector[]
+  meta: {
+    pageName: string | null
+    featureName: string | null
+    entryStateId: string | null
+    entryValidations: string[]
+  }
+}
+
+export interface StepNarratorRequestContext {
+  runId: string
+  pathId: string
+  stepId: string
+  targetUrl?: string
+  specRaw: string
+  diagrams: StepNarratorRequestDiagram[]
+}
+
 export interface StepNarratorGenerateRequest {
-  step: PlannedTransitionStep
-  context: ExecutorContext
+  step: StepNarratorRequestStep
+  context: StepNarratorRequestContext
 }
 
 export interface StepNarratorGenerateResponse {

@@ -1,8 +1,7 @@
 import type {
-  ExecutorContext,
-  PlannedTransitionStep,
   StepNarrativeInstruction,
 } from '../../main-server/planned-runner/types'
+import type { StepNarratorGenerateRequest } from '../../main-server/shared/contracts'
 import type { LoopDecision, LoopDecisionInput, LoopFunctionResponse } from '../../main-server/planned-runner/executor/contracts'
 import type { PathPlannerContext, PlannedPathDraft } from '../../main-server/planned-runner/planner/plannerProvider/types'
 
@@ -12,7 +11,7 @@ export interface PathPlannerAgent {
 }
 
 export interface StepNarratorAgent {
-  generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction>
+  generate(input: StepNarratorGenerateRequest): Promise<StepNarrativeInstruction>
   reset(): Promise<void>
 }
 

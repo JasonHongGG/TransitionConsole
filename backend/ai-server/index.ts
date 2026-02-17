@@ -2,7 +2,6 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { createLogger } from '../common/logger'
-import type { ExecutorContext, PlannedTransitionStep } from '../main-server/planned-runner/types'
 import type {
   OperatorLoopAppendFunctionResponsesRequest,
   OperatorLoopCleanupRunRequest,
@@ -74,15 +73,14 @@ app.post('/api/ai/path-planner/reset', async (_req, res) => {
 app.post('/api/ai/agents/step-narrator/generate', async (req, res) => {
   try {
     const body = req.body as StepNarratorGenerateRequest
-    const step = body.step as PlannedTransitionStep
-    const context = body.context as ExecutorContext
+    const { step, context } = body
     log.log('step narrator request', {
       runId: context.runId,
       pathId: context.pathId,
       stepId: context.stepId,
       edgeId: step.edgeId,
     })
-    const narrative = await agents.stepNarrator.generate(step, context)
+    const narrative = await agents.stepNarrator.generate(body)
     log.log('step narrator completed', {
       runId: context.runId,
       pathId: context.pathId,

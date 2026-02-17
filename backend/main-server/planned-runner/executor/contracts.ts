@@ -23,7 +23,6 @@ export interface LoopDecisionInput {
     targetUrl: string
     specRaw: string | null
     userTestingInfo?: ExecutorContext['userTestingInfo']
-    diagrams: ExecutorContext['systemDiagrams']
   }
   step: {
     edgeId: string
@@ -44,7 +43,6 @@ export interface LoopDecisionInput {
   screenshotBase64: string
   actionCursor: number
   narrative: StepNarrativeInstruction
-  assertions: StepAssertionSpec[]
 }
 
 export interface LoopFunctionCall {

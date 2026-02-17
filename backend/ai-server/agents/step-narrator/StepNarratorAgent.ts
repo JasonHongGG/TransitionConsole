@@ -1,5 +1,6 @@
 import type { AiRuntime } from '../../runtime/types'
-import type { ExecutorContext, PlannedTransitionStep, StepAssertionSpec, StepNarrativeInstruction } from '../../../main-server/planned-runner/types'
+import type { StepAssertionSpec, StepNarrativeInstruction } from '../../../main-server/planned-runner/types'
+import type { StepNarratorGenerateRequest } from '../../../main-server/shared/contracts'
 import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
 import type { StepNarratorAgent as StepNarratorAgentContract } from '../types'
@@ -51,20 +52,11 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
     })
   }
 
-  private collectValidationHints(step: PlannedTransitionStep, context: ExecutorContext): string[] {
+  private collectValidationHints(input: StepNarratorGenerateRequest): string[] {
+    const { step, context } = input
     const hints = new Set<string>()
 
-    step.validations.forEach((item) => {
-      const text = item.trim()
-      if (text) hints.add(text)
-    })
-
-    context.stepValidations.forEach((item) => {
-      const text = item.trim()
-      if (text) hints.add(text)
-    })
-
-    context.systemDiagrams.forEach((diagram) => {
+    context.diagrams.forEach((diagram) => {
       diagram.transitions
         .filter((transition) => transition.id === step.edgeId)
         .forEach((transition) => {
@@ -77,29 +69,29 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
             hints.add(`符合 transition intent：${intentSummary}`)
           }
         })
-    })
 
-    context.systemConnectors
-      .filter((connector) => {
-        const fromMatches =
-          connector.from.diagramId === step.fromDiagramId
-          && (connector.from.stateId === null || connector.from.stateId === step.fromStateId)
-        const toMatches =
-          connector.to.diagramId === step.toDiagramId
-          && (connector.to.stateId === null || connector.to.stateId === step.toStateId)
-        return fromMatches && toMatches
-      })
-      .forEach((connector) => {
-        ;(connector.meta?.validations ?? []).forEach((item) => {
-          const text = item.trim()
-          if (text) hints.add(text)
+      diagram.connectors
+        .filter((connector) => {
+          const fromMatches =
+            connector.from.diagramId === step.from.diagramId
+            && (connector.from.stateId === null || connector.from.stateId === step.from.stateId)
+          const toMatches =
+            connector.to.diagramId === step.to.diagramId
+            && (connector.to.stateId === null || connector.to.stateId === step.to.stateId)
+          return fromMatches && toMatches
         })
-      })
+        .forEach((connector) => {
+          ;(connector.meta?.validations ?? []).forEach((item) => {
+            const text = item.trim()
+            if (text) hints.add(text)
+          })
+        })
+    })
 
     return Array.from(hints)
   }
 
-  private buildAssertionsFromHints(step: PlannedTransitionStep, hints: string[]): StepAssertionSpec[] {
+  private buildAssertionsFromHints(step: StepNarratorGenerateRequest['step'], hints: string[]): StepAssertionSpec[] {
     return hints.map((hint, index) => ({
       id: `${step.edgeId}.assertion.${index + 1}`,
       type: 'semantic-check',
@@ -108,9 +100,18 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
     }))
   }
 
-  async generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction> {
+  private defaultSummary(step: StepNarratorGenerateRequest['step']): string {
+    return `${step.from.stateId} -> ${step.to.stateId}`
+  }
+
+  private defaultTaskDescription(step: StepNarratorGenerateRequest['step']): string {
+    return `完成狀態轉換：${step.summary ?? step.semanticGoal ?? step.edgeId}`
+  }
+
+  async generate(input: StepNarratorGenerateRequest): Promise<StepNarrativeInstruction> {
+    const { step, context } = input
+
     if (this.useMockReplay) {
-      const payload = { step, context }
       const output = await this.mockReplay.generateNarrative()
 
       await writeAgentResponseLog({
@@ -120,7 +121,7 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
         runId: context.runId,
         pathId: context.pathId,
         stepId: context.stepId,
-        request: payload,
+        request: input,
         parsedResponse: {
           narrative: output,
         },
@@ -129,20 +130,15 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
       return output
     }
 
-    const payload = {
-      step,
-      context,
-    }
-
     const content = await this.runtime.generate({
       model: this.model,
       systemPrompt: STEP_NARRATOR_PROMPT,
-      prompt: `Return JSON only.\n${JSON.stringify(payload)}`,
+      prompt: `Return JSON only.\n${JSON.stringify(input)}`,
       timeoutMs: this.timeoutMs,
     })
 
     const parsed = extractJsonPayload<NarrativePayload>(content)
-    const assertionFallbackHints = this.collectValidationHints(step, context)
+    const assertionFallbackHints = this.collectValidationHints(input)
     const assertions = (parsed?.assertions ?? [])
       .map((assertion, index) => {
         const normalizedType = (assertion.type?.trim() || 'semantic-check') as StepAssertionSpec['type']
@@ -158,14 +154,14 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
       .filter((assertion) => assertion.description.length > 0)
 
     const output = {
-      summary: parsed?.narrative?.summary?.trim() || `${step.fromStateId} -> ${step.toStateId}`,
-      taskDescription: parsed?.narrative?.taskDescription?.trim() || `完成狀態轉換：${step.label}`,
+      summary: parsed?.narrative?.summary?.trim() || this.defaultSummary(step),
+      taskDescription: parsed?.narrative?.taskDescription?.trim() || this.defaultTaskDescription(step),
       assertions:
         assertions.length > 0
           ? assertions
           : this.buildAssertionsFromHints(
               step,
-              assertionFallbackHints.length > 0 ? assertionFallbackHints : [`完成狀態轉換：${step.label}`],
+              assertionFallbackHints.length > 0 ? assertionFallbackHints : [this.defaultTaskDescription(step)],
             ),
     }
 
@@ -175,7 +171,7 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
       runId: context.runId,
       pathId: context.pathId,
       stepId: context.stepId,
-      request: payload,
+      request: input,
       rawResponse: content,
       parsedResponse: {
         narrative: output,
