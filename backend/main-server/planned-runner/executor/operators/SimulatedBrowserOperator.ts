@@ -1,4 +1,4 @@
-import type { ExecutorContext, OperatorTraceItem, PlannedTransitionStep, StepAssertionSpec, StepExecutionResult, StepNarrativeInstruction, StepValidationResult } from '../../types'
+import type { ExecutorContext, OperatorTraceItem, PlannedTransitionStep, StepValidationSpec, StepNarrativeInstruction, StepValidationResult } from '../../types'
 import type { BrowserOperator, BrowserOperatorRunResult } from '../contracts'
 
 export class SimulatedBrowserOperator implements BrowserOperator {
@@ -6,7 +6,7 @@ export class SimulatedBrowserOperator implements BrowserOperator {
     step: PlannedTransitionStep,
     context: ExecutorContext,
     _narrative: StepNarrativeInstruction,
-    assertions: StepAssertionSpec[],
+    validations: StepValidationSpec[],
   ): Promise<BrowserOperatorRunResult> {
     const trace: OperatorTraceItem[] = []
     for (let i = 1; i <= 3; i += 1) {
@@ -19,13 +19,13 @@ export class SimulatedBrowserOperator implements BrowserOperator {
       })
     }
 
-    const validationResults: StepValidationResult[] = assertions.map((assertion) => ({
-      id: assertion.id,
-      label: assertion.description,
+    const validationResults: StepValidationResult[] = validations.map((validation) => ({
+      id: validation.id,
+      label: validation.description,
       status: 'pass',
       reason: 'simulated operator assumed pass',
-      assertionType: assertion.type,
-      expected: assertion.expected,
+      validationType: validation.type,
+      expected: validation.expected,
       actual: 'observed (simulated)',
     }))
 

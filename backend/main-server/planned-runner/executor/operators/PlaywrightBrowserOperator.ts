@@ -3,7 +3,7 @@ import type {
   OperatorTraceItem,
   StepNarrativeInstruction,
   PlannedTransitionStep,
-  StepAssertionSpec,
+  StepValidationSpec,
   StepValidationResult,
 } from '../../types'
 import type {
@@ -422,17 +422,17 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
   }
 
   private buildValidationResultsFromDecision(
-    assertions: StepAssertionSpec[],
+    validations: StepValidationSpec[],
     decision: 'complete' | 'fail',
     reason: string,
   ): StepValidationResult[] {
-    return assertions.map((assertion) => ({
-      id: assertion.id,
-      label: assertion.description,
-      assertionType: assertion.type,
+    return validations.map((validation) => ({
+      id: validation.id,
+      label: validation.description,
+      validationType: validation.type,
       status: decision === 'complete' ? 'pass' : 'fail',
       reason: `copilot-decision:${reason}`,
-      expected: assertion.expected,
+      expected: validation.expected,
       actual: 'decided-by-copilot',
     }))
   }
@@ -448,7 +448,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     step: PlannedTransitionStep,
     context: ExecutorContext,
     narrative: StepNarrativeInstruction,
-    assertions: StepAssertionSpec[],
+    validations: StepValidationSpec[],
   ): Promise<BrowserOperatorRunResult> {
     const session = await this.getOrCreateSession(context)
     const page = session.page
@@ -535,7 +535,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
       })
 
       if (decision.kind === 'complete') {
-        const validationResults = this.buildValidationResultsFromDecision(assertions, 'complete', decision.reason)
+        const validationResults = this.buildValidationResultsFromDecision(validations, 'complete', decision.reason)
         trace.push({
           iteration,
           observation: stateSummary,
@@ -556,7 +556,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
       if (decision.kind === 'fail') {
         const failureCode = decision.failureCode ?? 'operator-no-progress'
-        const validationResults = this.buildValidationResultsFromDecision(assertions, 'fail', decision.reason)
+        const validationResults = this.buildValidationResultsFromDecision(validations, 'fail', decision.reason)
         return {
           result: 'fail',
           blockedReason: decision.reason,
@@ -572,7 +572,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
       const nextFunctionCalls = this.normalizeFunctionCallsFromDecision(decision)
       if (nextFunctionCalls.length === 0) {
-        const validationResults = this.buildValidationResultsFromDecision(assertions, 'fail', 'loop agent returned act without action payload')
+        const validationResults = this.buildValidationResultsFromDecision(validations, 'fail', 'loop agent returned act without action payload')
         return {
           result: 'fail',
           blockedReason: 'loop agent returned act without action payload',
@@ -660,7 +660,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'tool execution failed'
-        const validationResults = this.buildValidationResultsFromDecision(assertions, 'fail', message)
+        const validationResults = this.buildValidationResultsFromDecision(validations, 'fail', message)
         if (this.loopAgent.appendFunctionResponses) {
           const failedResponse: LoopFunctionResponse = {
             name: activeFunctionCall?.name ?? 'unknown_tool',
@@ -718,7 +718,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
       }
     }
 
-    const finalValidationResults = this.buildValidationResultsFromDecision(assertions, 'fail', 'max iterations reached')
+    const finalValidationResults = this.buildValidationResultsFromDecision(validations, 'fail', 'max iterations reached')
     return {
       result: 'fail',
       blockedReason: 'Max iterations reached before Copilot completed the step',

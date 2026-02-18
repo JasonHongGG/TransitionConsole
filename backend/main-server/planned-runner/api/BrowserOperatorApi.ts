@@ -1,7 +1,7 @@
 import type {
   ExecutorContext,
   PlannedTransitionStep,
-  StepAssertionSpec,
+  StepValidationSpec,
   StepNarrativeInstruction,
 } from '../types'
 import type { BrowserOperator } from '../executor/contracts'
@@ -26,7 +26,7 @@ export class BrowserOperatorApi implements BrowserOperator {
     step: PlannedTransitionStep,
     context: ExecutorContext,
     narrative: StepNarrativeInstruction,
-    assertions: StepAssertionSpec[],
+    validations: StepValidationSpec[],
   ): Promise<OperatorStepRunResponse> {
     return postApiJson<OperatorStepRunRequest, OperatorStepRunResponse>(
       this.operatorBaseUrl,
@@ -35,7 +35,7 @@ export class BrowserOperatorApi implements BrowserOperator {
         step,
         context,
         narrative,
-        assertions,
+        validations,
       },
       this.timeoutMs,
     )

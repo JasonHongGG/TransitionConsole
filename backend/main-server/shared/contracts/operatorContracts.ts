@@ -2,7 +2,7 @@ import type {
   ExecutorContext,
   OperatorTraceItem,
   PlannedTransitionStep,
-  StepAssertionSpec,
+  StepValidationSpec,
   StepExecutionResult,
   StepNarrativeInstruction,
   StepValidationResult,
@@ -12,7 +12,7 @@ export interface OperatorStepRunRequest {
   step: PlannedTransitionStep
   context: ExecutorContext
   narrative: StepNarrativeInstruction
-  assertions: StepAssertionSpec[]
+  validations: StepValidationSpec[]
 }
 
 export interface OperatorStepRunResponse {

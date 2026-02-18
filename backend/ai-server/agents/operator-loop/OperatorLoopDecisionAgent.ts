@@ -144,6 +144,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       stateSummary: input.stateSummary,
       actionCursor: input.actionCursor,
       narrative: input.narrative,
+      validations: input.narrative.validations,
       screenshot: {
         mimeType: 'image/png',
         encoding: 'base64',

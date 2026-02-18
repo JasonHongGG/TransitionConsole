@@ -6,7 +6,7 @@ export type PlannedStepKind = 'transition' | 'connector'
 
 export type ValidationStatus = 'pass' | 'fail'
 
-export type AssertionType =
+export type ValidationType =
   | 'url-equals'
   | 'url-includes'
   | 'text-visible'
@@ -32,16 +32,16 @@ export type ExecutionFailureCode =
   | 'operator-timeout'
   | 'operator-no-progress'
   | 'operator-action-failed'
-  | 'assertion-failed'
+  | 'validation-failed'
   | 'unexpected-error'
 
 export interface StepNarrativeInstruction {
   summary: string
   taskDescription: string
-  assertions: StepAssertionSpec[]
+  validations: StepValidationSpec[]
 }
 
-export type OperatorTerminationReason = 'completed' | 'max-iterations' | 'operator-error' | 'assertion-failed' | 'criteria-unmet'
+export type OperatorTerminationReason = 'completed' | 'max-iterations' | 'operator-error' | 'validation-failed' | 'criteria-unmet'
 
 export interface OperatorFunctionCallTrace {
   name: string
@@ -64,14 +64,14 @@ export interface StepValidationResult {
   label: string
   status: ValidationStatus
   reason: string
-  assertionType?: AssertionType
+  validationType?: ValidationType
   actual?: string
   expected?: string
 }
 
-export interface StepAssertionSpec {
+export interface StepValidationSpec {
   id: string
-  type: AssertionType
+  type: ValidationType
   description: string
   expected?: string
   selector?: string
@@ -315,7 +315,7 @@ export interface StepExecutionResult {
   blockedReason?: string
   validationResults: StepValidationResult[]
   narrative?: StepNarrativeInstruction
-  assertions?: StepAssertionSpec[]
+  validations?: StepValidationSpec[]
   loopIterations?: OperatorLoopIteration[]
   terminationReason?: OperatorTerminationReason
   evidence?: StepEvidence

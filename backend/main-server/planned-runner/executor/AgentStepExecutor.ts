@@ -1,7 +1,16 @@
 import { createLogger } from '../../common/logger'
-import type { ExecutorContext, PlannedLiveEventInput, PlannedTransitionStep, StepExecutionResult, StepExecutor } from '../types'
+import type {
+  DiagramConnector,
+  DiagramTransition,
+  ExecutorContext,
+  PlannedLiveEventInput,
+  PlannedTransitionStep,
+  StepExecutionResult,
+  StepExecutor,
+  StepNarrativeInstruction,
+  StepValidationSpec,
+} from '../types'
 import type { BrowserOperator, StepNarrator } from './contracts'
-import { StepNarratorAgent } from './instruction/StepNarratorAgent'
 import { PlaywrightBrowserOperator, SimulatedBrowserOperator } from './operators'
 
 const log = createLogger('planned-executor')
@@ -11,6 +20,7 @@ const toElapsedSeconds = (elapsedMs: number): number => Math.max(1, Math.ceil(el
 export class AgentStepExecutor implements StepExecutor {
   private readonly narrator: StepNarrator
   private readonly operator: BrowserOperator
+  private readonly narratorMode: 'agent' | 'input'
   private readonly publishLiveEvent?: (event: PlannedLiveEventInput) => void
 
   constructor(options?: {
@@ -18,10 +28,82 @@ export class AgentStepExecutor implements StepExecutor {
     operator?: BrowserOperator
     publishLiveEvent?: (event: PlannedLiveEventInput) => void
   }) {
-    this.narrator = options?.narrator ?? new StepNarratorAgent()
+    if (!options?.narrator) {
+      throw new Error('AgentStepExecutor requires narrator injection (use StepNarratorApi)')
+    }
+    this.narrator = options.narrator
     const realOperatorEnabled = process.env.PLANNED_RUNNER_REAL_BROWSER === 'true'
     this.operator = options?.operator ?? (realOperatorEnabled ? new PlaywrightBrowserOperator() : new SimulatedBrowserOperator())
+    this.narratorMode = (process.env.STEP_NARRATOR_MODE ?? 'agent').trim().toLowerCase() === 'input' ? 'input' : 'agent'
     this.publishLiveEvent = options?.publishLiveEvent
+  }
+
+  private buildValidationSpecsFromTexts(step: PlannedTransitionStep, validations: string[]): StepValidationSpec[] {
+    return validations.map((validation, index) => ({
+      id: `${step.edgeId}.validation.${index + 1}`,
+      type: 'semantic-check',
+      description: validation,
+      expected: validation,
+    }))
+  }
+
+  private collectStepConnectorCandidates(step: PlannedTransitionStep, context: ExecutorContext): DiagramConnector[] {
+    const connectorCandidatesFromContext = context.systemConnectors.filter((connector) => connector.id === step.edgeId)
+
+    const connectorCandidatesFromDiagrams = context.systemDiagrams.flatMap((diagram) =>
+      (diagram.connectors ?? []).filter((connector) => connector.id === step.edgeId),
+    )
+
+    return [...connectorCandidatesFromContext, ...connectorCandidatesFromDiagrams]
+  }
+
+  private buildNarrativeFromInput(
+    step: PlannedTransitionStep,
+    context: ExecutorContext,
+  ): { ok: true; narrative: StepNarrativeInstruction } | { ok: false; reason: string } {
+    const transitionMatches: DiagramTransition[] = context.systemDiagrams.flatMap((diagram) =>
+      diagram.transitions.filter((transition) => transition.id === step.edgeId),
+    )
+
+    const connectorMatches = this.collectStepConnectorCandidates(step, context)
+
+    const transitionLike = transitionMatches[0] as (DiagramTransition & {
+      narrative?: { summary?: string; taskDescription?: string }
+    }) | undefined
+
+    const connectorLike = connectorMatches[0] as (DiagramConnector & {
+      narrative?: { summary?: string; taskDescription?: string }
+    }) | undefined
+
+    const summary = transitionLike?.narrative?.summary?.trim() || connectorLike?.narrative?.summary?.trim() || ''
+    const taskDescription =
+      transitionLike?.narrative?.taskDescription?.trim() || connectorLike?.narrative?.taskDescription?.trim() || ''
+
+    const stepValidations = step.validations.map((item) => item.trim()).filter((item) => item.length > 0)
+    const validations = stepValidations
+
+    if (!summary || !taskDescription) {
+      return {
+        ok: false,
+        reason: `input mode requires transition/connector narrative.summary and narrative.taskDescription for edgeId=${step.edgeId}`,
+      }
+    }
+
+    if (validations.length === 0) {
+      return {
+        ok: false,
+        reason: `input mode requires transition/connector validations for edgeId=${step.edgeId}`,
+      }
+    }
+
+    return {
+      ok: true,
+      narrative: {
+        summary,
+        taskDescription,
+        validations: this.buildValidationSpecsFromTexts(step, validations),
+      },
+    }
   }
 
   private emitLiveEvent(event: PlannedLiveEventInput): void {
@@ -47,7 +129,7 @@ export class AgentStepExecutor implements StepExecutor {
       this.emitLiveEvent({
         type: 'narrator.started',
         level: 'info',
-        message: 'Step narrator started',
+        message: this.narratorMode === 'input' ? 'Step narrator started (input mode)' : 'Step narrator started',
         runId: context.runId,
         pathId: context.pathId,
         stepId: context.stepId,
@@ -55,7 +137,16 @@ export class AgentStepExecutor implements StepExecutor {
       })
 
       const narratorStartedAt = Date.now()
-      const narrative = await this.narrator.generate(step, context)
+      const narrative =
+        this.narratorMode === 'input'
+          ? (() => {
+              const built = this.buildNarrativeFromInput(step, context)
+              if (built.ok === false) {
+                throw new Error(built.reason)
+              }
+              return built.narrative
+            })()
+          : await this.narrator.generate(step, context)
       const narratorElapsedMs = Date.now() - narratorStartedAt
       const narratorElapsedSeconds = toElapsedSeconds(narratorElapsedMs)
 
@@ -72,27 +163,34 @@ export class AgentStepExecutor implements StepExecutor {
       this.emitLiveEvent({
         type: 'agent.generation.completed',
         level: 'success',
-        message: `[step-narrator] 生成完成，花費 ${narratorElapsedSeconds}s`,
+        message: this.narratorMode === 'input'
+          ? `[step-narrator:input] 讀取完成，花費 ${narratorElapsedSeconds}s`
+          : `[step-narrator] 生成完成，花費 ${narratorElapsedSeconds}s`,
         runId: context.runId,
         pathId: context.pathId,
         stepId: context.stepId,
         edgeId: step.edgeId,
         meta: {
-          agentTag: 'step-narrator',
+          agentTag: this.narratorMode === 'input' ? 'step-narrator-input' : 'step-narrator',
           elapsedMs: narratorElapsedMs,
           elapsedSeconds: narratorElapsedSeconds,
         },
       })
 
-      const assertions =
-        narrative.assertions.length > 0
-          ? narrative.assertions
-          : context.stepValidations.map((validation, index) => ({
-              id: `${step.edgeId}.assertion.${index + 1}`,
-              type: 'semantic-check' as const,
-              description: validation,
-              expected: validation,
-            }))
+      const validations =
+        narrative.validations.length > 0
+          ? narrative.validations
+          : this.buildValidationSpecsFromTexts(step, context.stepValidations)
+
+      if (validations.length === 0) {
+        return {
+          result: 'fail',
+          blockedReason: `No validations resolved for edgeId=${step.edgeId}`,
+          failureCode: 'narrative-planner-failed',
+          terminationReason: 'criteria-unmet',
+          validationResults: [],
+        }
+      }
 
       this.emitLiveEvent({
         type: 'operator.started',
@@ -104,7 +202,7 @@ export class AgentStepExecutor implements StepExecutor {
         edgeId: step.edgeId,
       })
 
-      const operated = await this.operator.run(step, context, narrative, assertions)
+      const operated = await this.operator.run(step, context, narrative, validations)
 
       this.emitLiveEvent({
         type: 'operator.completed',
@@ -130,7 +228,7 @@ export class AgentStepExecutor implements StepExecutor {
         failureCode: operated.failureCode,
         validationResults: operated.validationResults,
         narrative,
-        assertions,
+        validations,
         loopIterations: operated.trace.map((item) => ({
           iteration: item.iteration,
           url: item.observation,
@@ -158,7 +256,10 @@ export class AgentStepExecutor implements StepExecutor {
       return {
         result: 'fail',
         blockedReason: error instanceof Error ? error.message : 'agent executor failed',
-        failureCode: 'unexpected-error',
+        failureCode:
+          error instanceof Error && error.message.includes('input mode requires')
+            ? 'narrative-planner-failed'
+            : 'unexpected-error',
         validationResults: [],
       }
     }

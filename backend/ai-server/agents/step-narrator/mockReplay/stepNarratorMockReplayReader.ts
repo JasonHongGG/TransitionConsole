@@ -1,10 +1,10 @@
-import type { StepAssertionSpec, StepNarrativeInstruction } from '../../../../../main-server/planned-runner/types'
+import type { StepValidationSpec, StepNarrativeInstruction } from '../../../../main-server/planned-runner/types'
 import { loadSortedMockJsonFiles } from '../../common/mockReplayFileLoader'
 
 type ParsedNarrativeShape = {
   summary?: string
   taskDescription?: string
-  assertions?: Array<{
+  validations?: Array<{
     id?: string
     type?: string
     description?: string
@@ -18,7 +18,7 @@ type StepNarratorParsedResponse = {
   narrative?: ParsedNarrativeShape
 }
 
-const allowedTypes = new Set<StepAssertionSpec['type']>([
+const allowedTypes = new Set<StepValidationSpec['type']>([
   'url-equals',
   'url-includes',
   'text-visible',
@@ -37,27 +37,27 @@ const parseNarrative = (input: ParsedNarrativeShape | undefined): StepNarrativeI
   const taskDescription = input.taskDescription?.trim() ?? ''
   if (!summary || !taskDescription) return null
 
-  const assertions = (input.assertions ?? [])
-    .map((assertion, index) => {
-      const description = assertion.description?.trim() ?? ''
+  const validations = (input.validations ?? [])
+    .map((validation, index) => {
+      const description = validation.description?.trim() ?? ''
       if (!description) return null
 
-      const normalizedType = (assertion.type?.trim() || 'semantic-check') as StepAssertionSpec['type']
+      const normalizedType = (validation.type?.trim() || 'semantic-check') as StepValidationSpec['type']
       return {
-        id: assertion.id?.trim() || `assertion.${index + 1}`,
+        id: validation.id?.trim() || `validation.${index + 1}`,
         type: allowedTypes.has(normalizedType) ? normalizedType : 'semantic-check',
         description,
-        expected: assertion.expected?.trim() || undefined,
-        selector: assertion.selector?.trim() || undefined,
-        timeoutMs: assertion.timeoutMs && assertion.timeoutMs > 0 ? assertion.timeoutMs : undefined,
+        expected: validation.expected?.trim() || undefined,
+        selector: validation.selector?.trim() || undefined,
+        timeoutMs: validation.timeoutMs && validation.timeoutMs > 0 ? validation.timeoutMs : undefined,
       }
     })
-    .filter((assertion): assertion is StepNarrativeInstruction['assertions'][number] => Boolean(assertion))
+    .filter((validation) => Boolean(validation)) as StepValidationSpec[]
 
   return {
     summary,
     taskDescription,
-    assertions,
+    validations,
   }
 }
 

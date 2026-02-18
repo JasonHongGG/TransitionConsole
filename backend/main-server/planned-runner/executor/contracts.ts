@@ -5,7 +5,7 @@ import type {
   OperatorTraceItem,
   OperatorTerminationReason,
   PlannedTransitionStep,
-  StepAssertionSpec,
+  StepValidationSpec,
   StepExecutionResult,
   StepValidationResult,
 } from '../types'
@@ -92,7 +92,7 @@ export interface BrowserOperator {
     step: PlannedTransitionStep,
     context: ExecutorContext,
     narrative: StepNarrativeInstruction,
-    assertions: StepAssertionSpec[],
+    validations: StepValidationSpec[],
   ): Promise<BrowserOperatorRunResult>
   cleanupRun?(runId: string): Promise<void>
   resetReplayCursor?(): Promise<void>

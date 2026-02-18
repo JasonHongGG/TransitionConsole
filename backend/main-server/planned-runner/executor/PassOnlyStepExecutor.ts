@@ -16,7 +16,7 @@ export class PassOnlyStepExecutor implements StepExecutor {
       label: validation,
       status: 'pass',
       reason: 'pass-only-executor',
-      assertionType: 'semantic-check',
+      validationType: 'semantic-check',
       expected: validation,
       actual: 'pass-only-executor',
     }))
@@ -35,7 +35,7 @@ export class PassOnlyStepExecutor implements StepExecutor {
       narrative: {
         summary: step.label,
         taskDescription: `pass-only mode: ${step.label}`,
-        assertions: validationResults.map((item) => ({
+        validations: validationResults.map((item) => ({
           id: item.id,
           type: 'semantic-check',
           description: item.label,

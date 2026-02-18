@@ -1,5 +1,5 @@
 import type { AiRuntime } from '../../runtime/types'
-import type { StepAssertionSpec, StepNarrativeInstruction } from '../../../main-server/planned-runner/types'
+import type { StepValidationSpec, StepNarrativeInstruction } from '../../../main-server/planned-runner/types'
 import type { StepNarratorGenerateRequest } from '../../../main-server/shared/contracts'
 import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
@@ -12,7 +12,7 @@ type NarrativePayload = {
     summary?: string
     taskDescription?: string
   }
-  assertions?: Array<{
+  validations?: Array<{
     id?: string
     type?: string
     description?: string
@@ -22,7 +22,7 @@ type NarrativePayload = {
   }>
 }
 
-const allowedTypes = new Set<StepAssertionSpec['type']>([
+const allowedTypes = new Set<StepValidationSpec['type']>([
   'url-equals',
   'url-includes',
   'text-visible',
@@ -91,9 +91,9 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
     return Array.from(hints)
   }
 
-  private buildAssertionsFromHints(step: StepNarratorGenerateRequest['step'], hints: string[]): StepAssertionSpec[] {
+  private buildValidationsFromHints(step: StepNarratorGenerateRequest['step'], hints: string[]): StepValidationSpec[] {
     return hints.map((hint, index) => ({
-      id: `${step.edgeId}.assertion.${index + 1}`,
+      id: `${step.edgeId}.validation.${index + 1}`,
       type: 'semantic-check',
       description: hint,
       expected: hint,
@@ -138,30 +138,30 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
     })
 
     const parsed = extractJsonPayload<NarrativePayload>(content)
-    const assertionFallbackHints = this.collectValidationHints(input)
-    const assertions = (parsed?.assertions ?? [])
-      .map((assertion, index) => {
-        const normalizedType = (assertion.type?.trim() || 'semantic-check') as StepAssertionSpec['type']
+    const validationFallbackHints = this.collectValidationHints(input)
+    const validations = (parsed?.validations ?? [])
+      .map((validation, index) => {
+        const normalizedType = (validation.type?.trim() || 'semantic-check') as StepValidationSpec['type']
         return {
-          id: assertion.id?.trim() || `${step.edgeId}.assertion.${index + 1}`,
+          id: validation.id?.trim() || `${step.edgeId}.validation.${index + 1}`,
           type: allowedTypes.has(normalizedType) ? normalizedType : 'semantic-check',
-          description: assertion.description?.trim() || assertionFallbackHints[index] || `assertion ${index + 1}`,
-          expected: assertion.expected?.trim() || undefined,
-          selector: assertion.selector?.trim() || undefined,
-          timeoutMs: assertion.timeoutMs && assertion.timeoutMs > 0 ? assertion.timeoutMs : undefined,
+          description: validation.description?.trim() || validationFallbackHints[index] || `validation ${index + 1}`,
+          expected: validation.expected?.trim() || undefined,
+          selector: validation.selector?.trim() || undefined,
+          timeoutMs: validation.timeoutMs && validation.timeoutMs > 0 ? validation.timeoutMs : undefined,
         }
       })
-      .filter((assertion) => assertion.description.length > 0)
+      .filter((validation) => validation.description.length > 0)
 
     const output = {
       summary: parsed?.narrative?.summary?.trim() || this.defaultSummary(step),
       taskDescription: parsed?.narrative?.taskDescription?.trim() || this.defaultTaskDescription(step),
-      assertions:
-        assertions.length > 0
-          ? assertions
-          : this.buildAssertionsFromHints(
+      validations:
+        validations.length > 0
+          ? validations
+          : this.buildValidationsFromHints(
               step,
-              assertionFallbackHints.length > 0 ? assertionFallbackHints : [this.defaultTaskDescription(step)],
+              validationFallbackHints.length > 0 ? validationFallbackHints : [this.defaultTaskDescription(step)],
             ),
     }
 
