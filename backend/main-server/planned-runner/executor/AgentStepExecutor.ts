@@ -8,7 +8,6 @@ import type {
   StepExecutionResult,
   StepExecutor,
   StepNarrativeInstruction,
-  StepValidationSpec,
 } from '../types'
 import type { BrowserOperator, StepNarrator } from './contracts'
 import { PlaywrightBrowserOperator, SimulatedBrowserOperator } from './operators'
@@ -36,15 +35,6 @@ export class AgentStepExecutor implements StepExecutor {
     this.operator = options?.operator ?? (realOperatorEnabled ? new PlaywrightBrowserOperator() : new SimulatedBrowserOperator())
     this.narratorMode = (process.env.STEP_NARRATOR_MODE ?? 'agent').trim().toLowerCase() === 'input' ? 'input' : 'agent'
     this.publishLiveEvent = options?.publishLiveEvent
-  }
-
-  private buildValidationSpecsFromTexts(step: PlannedTransitionStep, validations: string[]): StepValidationSpec[] {
-    return validations.map((validation, index) => ({
-      id: `${step.edgeId}.validation.${index + 1}`,
-      type: 'semantic-check',
-      description: validation,
-      expected: validation,
-    }))
   }
 
   private collectStepConnectorCandidates(step: PlannedTransitionStep, context: ExecutorContext): DiagramConnector[] {
@@ -79,8 +69,11 @@ export class AgentStepExecutor implements StepExecutor {
     const taskDescription =
       transitionLike?.narrative?.taskDescription?.trim() || connectorLike?.narrative?.taskDescription?.trim() || ''
 
-    const stepValidations = step.validations.map((item) => item.trim()).filter((item) => item.length > 0)
-    const validations = stepValidations
+    const stepValidations = step.validations
+    const transitionValidations = transitionLike?.validations ?? []
+    const connectorValidations = connectorLike?.validations ?? []
+
+    const validations = stepValidations.length > 0 ? stepValidations : [...transitionValidations, ...connectorValidations]
 
     if (!summary || !taskDescription) {
       return {
@@ -101,7 +94,7 @@ export class AgentStepExecutor implements StepExecutor {
       narrative: {
         summary,
         taskDescription,
-        validations: this.buildValidationSpecsFromTexts(step, validations),
+        validations,
       },
     }
   }
@@ -180,7 +173,7 @@ export class AgentStepExecutor implements StepExecutor {
       const validations =
         narrative.validations.length > 0
           ? narrative.validations
-          : this.buildValidationSpecsFromTexts(step, context.stepValidations)
+          : context.stepValidations
 
       if (validations.length === 0) {
         return {

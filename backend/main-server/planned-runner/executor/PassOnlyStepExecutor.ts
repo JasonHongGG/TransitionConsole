@@ -13,11 +13,11 @@ export class PassOnlyStepExecutor implements StepExecutor {
   async execute(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepExecutionResult> {
     const validationResults: StepValidationResult[] = context.stepValidations.map((validation, index) => ({
       id: `${step.edgeId}.pass-only.${index + 1}`,
-      label: validation,
+      label: validation.description,
       status: 'pass',
       reason: 'pass-only-executor',
-      validationType: 'semantic-check',
-      expected: validation,
+      validationType: validation.type,
+      expected: validation.expected,
       actual: 'pass-only-executor',
     }))
 

@@ -54,7 +54,7 @@ export class StepNarratorApi implements StepNarrator {
             from: transition.from,
             to: transition.to,
             walked: false,
-            validations: transition.validations,
+            validations: transition.validations ?? [],
             intent: {
               summary: transition.intent?.summary ?? null,
             },
@@ -70,19 +70,17 @@ export class StepNarratorApi implements StepNarrator {
               diagramId: connector.to.diagramId,
               stateId: connector.to.stateId,
             },
+            validations: connector.validations ?? [],
             meta: {
               reason: connector.meta?.reason ?? null,
               action: connector.meta?.action ?? null,
-              validations: connector.meta?.validations ?? [],
             },
           })),
           meta: {
             pageName: diagram.meta?.pageName ?? null,
             featureName: diagram.meta?.featureName ?? null,
             entryStateId: diagram.meta?.entryStateId ?? null,
-            entryValidations: Array.isArray(diagram.meta?.entryValidations)
-              ? diagram.meta.entryValidations.filter((item): item is string => typeof item === 'string')
-              : [],
+            entryValidations: diagram.meta?.entryValidations ?? [],
           },
         })),
       },

@@ -47,7 +47,7 @@ export const buildRuntimeGraph = (
         fromDiagramId: connector.from.diagramId,
         toDiagramId: connector.to.diagramId,
         label: connector.meta?.reason ?? connector.id,
-        validations: connector.meta?.validations ?? [],
+        validations: connector.validations ?? [],
         semantic: connector.meta?.action ?? connector.meta?.reason ?? connector.id,
       }
     })

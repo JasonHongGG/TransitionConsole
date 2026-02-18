@@ -1,3 +1,4 @@
+import { VALIDATION_TYPES } from '../../../../main-server/planned-runner/types'
 import type { StepValidationSpec, StepNarrativeInstruction } from '../../../../main-server/planned-runner/types'
 import { loadSortedMockJsonFiles } from '../../common/mockReplayFileLoader'
 
@@ -18,17 +19,7 @@ type StepNarratorParsedResponse = {
   narrative?: ParsedNarrativeShape
 }
 
-const allowedTypes = new Set<StepValidationSpec['type']>([
-  'url-equals',
-  'url-includes',
-  'text-visible',
-  'text-not-visible',
-  'element-visible',
-  'element-not-visible',
-  'network-success',
-  'network-failed',
-  'semantic-check',
-])
+const allowedTypes = new Set<StepValidationSpec['type']>(VALIDATION_TYPES)
 
 const parseNarrative = (input: ParsedNarrativeShape | undefined): StepNarrativeInstruction | null => {
   if (!input) return null

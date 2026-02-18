@@ -1,4 +1,4 @@
-import type { StepNarrativeInstruction } from '../../planned-runner/types'
+import type { DiagramValidation, StepNarrativeInstruction } from '../../planned-runner/types'
 import type { LoopDecision, LoopDecisionInput, LoopFunctionResponse } from '../../planned-runner/executor/contracts'
 import type { PathPlannerContext, PlannedPathDraft } from '../../planned-runner/planner/plannerProvider/types'
 
@@ -40,7 +40,7 @@ export interface StepNarratorRequestTransition {
   from: string
   to: string
   walked: boolean
-  validations?: string[]
+  validations?: DiagramValidation[]
   intent?: {
     summary?: string | null
   }
@@ -57,10 +57,10 @@ export interface StepNarratorRequestConnector {
     diagramId: string
     stateId: string | null
   }
+  validations?: DiagramValidation[]
   meta?: {
     reason?: string | null
     action?: string | null
-    validations?: string[]
   }
 }
 
@@ -83,7 +83,7 @@ export interface StepNarratorRequestDiagram {
     pageName: string | null
     featureName: string | null
     entryStateId: string | null
-    entryValidations: string[]
+    entryValidations: DiagramValidation[]
   }
 }
 

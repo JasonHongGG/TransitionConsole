@@ -132,6 +132,6 @@ Format:
 - 若 type 為 url-equals/url-includes，建議提供 expected。
 - 若 type 為 element-visible，建議提供 selector。
 - taskDescription 應包含具體任務完成訊號，避免與 validations 完全重複。
-- validations 內容應優先覆蓋本步 transition.validations 與關聯 connector.meta.validations。
+- validations 內容應優先覆蓋本步 transition.validations 與關聯 connector.validations。
 - 不可輸出與當前 step 無關的驗證條件。
 - 若無法完美推導，仍需回傳符合 schema 的最小有效 JSON。`

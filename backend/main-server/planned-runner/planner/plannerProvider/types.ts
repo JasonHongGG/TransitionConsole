@@ -1,3 +1,5 @@
+import type { DiagramValidation } from '../../types'
+
 export interface PlannedPathDraft {
   pathId?: string
   name?: string
@@ -45,7 +47,7 @@ export interface PlannerDiagramPayload {
     pageName: string | null
     featureName: string | null
     entryStateId: string | null
-    entryValidations: string[]
+    entryValidations: DiagramValidation[]
     [key: string]: unknown
   }
   [key: string]: unknown

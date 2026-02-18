@@ -1,4 +1,5 @@
 import type { AiRuntime } from '../../runtime/types'
+import { VALIDATION_TYPES } from '../../../main-server/planned-runner/types'
 import type { StepValidationSpec, StepNarrativeInstruction } from '../../../main-server/planned-runner/types'
 import type { StepNarratorGenerateRequest } from '../../../main-server/shared/contracts'
 import { writeAgentResponseLog } from '../../common/agentResponseLog'
@@ -22,17 +23,7 @@ type NarrativePayload = {
   }>
 }
 
-const allowedTypes = new Set<StepValidationSpec['type']>([
-  'url-equals',
-  'url-includes',
-  'text-visible',
-  'text-not-visible',
-  'element-visible',
-  'element-not-visible',
-  'network-success',
-  'network-failed',
-  'semantic-check',
-])
+const allowedTypes = new Set<StepValidationSpec['type']>(VALIDATION_TYPES)
 
 export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
   private readonly runtime: AiRuntime
@@ -61,7 +52,7 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
         .filter((transition) => transition.id === step.edgeId)
         .forEach((transition) => {
           ;(transition.validations ?? []).forEach((item) => {
-            const text = item.trim()
+            const text = item.description?.trim() ?? ''
             if (text) hints.add(text)
           })
           const intentSummary = transition.intent?.summary?.trim()
@@ -81,8 +72,8 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
           return fromMatches && toMatches
         })
         .forEach((connector) => {
-          ;(connector.meta?.validations ?? []).forEach((item) => {
-            const text = item.trim()
+          ;(connector.validations ?? []).forEach((item) => {
+            const text = item.description?.trim() ?? ''
             if (text) hints.add(text)
           })
         })

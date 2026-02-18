@@ -6,16 +6,19 @@ export type PlannedStepKind = 'transition' | 'connector'
 
 export type ValidationStatus = 'pass' | 'fail'
 
-export type ValidationType =
-  | 'url-equals'
-  | 'url-includes'
-  | 'text-visible'
-  | 'text-not-visible'
-  | 'element-visible'
-  | 'element-not-visible'
-  | 'network-success'
-  | 'network-failed'
-  | 'semantic-check'
+export const VALIDATION_TYPES = [
+  'url-equals',
+  'url-includes',
+  'text-visible',
+  'text-not-visible',
+  'element-visible',
+  'element-not-visible',
+  'network-success',
+  'network-failed',
+  'semantic-check',
+] as const
+
+export type ValidationType = (typeof VALIDATION_TYPES)[number]
 
 export type OperatorActionType =
   | 'goto'
@@ -78,6 +81,8 @@ export interface StepValidationSpec {
   timeoutMs?: number
 }
 
+export type DiagramValidation = StepValidationSpec
+
 export interface StepEvidence {
   beforeScreenshotPath?: string
   afterScreenshotPath?: string
@@ -104,7 +109,7 @@ export interface DiagramTransition {
   from: string
   to: string
   event: string | null
-  validations?: string[]
+  validations?: DiagramValidation[]
   intent?: { summary?: string }
   meta?: { diagramId?: string; source?: { raw?: string } }
   [key: string]: unknown
@@ -115,10 +120,10 @@ export interface DiagramConnector {
   type: 'contains' | 'invokes'
   from: { diagramId: string; stateId: string | null }
   to: { diagramId: string; stateId: string | null }
+  validations?: DiagramValidation[]
   meta?: {
     reason?: string
     action?: string
-    validations?: string[]
   }
 }
 
@@ -141,7 +146,7 @@ export interface DiagramLike {
     pageName?: string | null
     featureName?: string | null
     entryStateId?: string | null
-    entryValidations?: string[]
+    entryValidations?: DiagramValidation[]
     [key: string]: unknown
   }
 }
@@ -155,7 +160,7 @@ export interface PlannedTransitionStep {
   fromDiagramId: string
   toDiagramId: string
   label: string
-  validations: string[]
+  validations: StepValidationSpec[]
   semantic: string
 }
 
@@ -267,7 +272,7 @@ export interface RuntimeEdge {
   fromDiagramId: string
   toDiagramId: string
   label: string
-  validations: string[]
+  validations: StepValidationSpec[]
   semantic: string
 }
 
@@ -302,7 +307,7 @@ export interface ExecutorContext {
   targetUrl: string
   specRaw: string | null
   userTestingInfo?: UserTestingInfo
-  stepValidations: string[]
+  stepValidations: StepValidationSpec[]
   currentPathStepIndex: number
   currentPathStepTotal: number
   pathEdgeIds: string[]
