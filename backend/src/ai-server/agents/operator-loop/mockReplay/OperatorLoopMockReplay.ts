@@ -17,7 +17,7 @@ export class OperatorLoopMockReplay {
   private items: OperatorLoopMockReplayItem[] = []
 
   constructor(options: OperatorLoopMockReplayOptions = {}) {
-    this.mockDir = path.resolve(process.cwd(), options.mockDir ?? path.join('ai-server', 'mock-data', 'operator-loop'))
+    this.mockDir = path.resolve(process.cwd(), options.mockDir ?? path.join('mock-data', 'operator-loop'))
     this.loop = options.loop ?? true
 
     log.log('initialized', {

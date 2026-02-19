@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "npm run dev:main",
-    "dev:main": "tsx main-server/index.ts",
-    "dev:ai": "tsx ai-server/index.ts",
-    "dev:operator": "tsx operator-server/index.ts",
+    "dev:main": "tsx src/main-server/index.ts",
+    "dev:ai": "tsx src/ai-server/index.ts",
+    "dev:operator": "tsx src/operator-server/index.ts",
     "dev:all": "npm run dev:main",
     "lint": "eslint ."
   },

@@ -17,7 +17,7 @@ export class PathPlannerMockReplay {
   private items: PathPlannerMockReplayItem[] = []
 
   constructor(options: PathPlannerMockReplayOptions = {}) {
-    this.mockDir = path.resolve(process.cwd(), options.mockDir ?? path.join('ai-server', 'mock-data', 'path-planner'))
+    this.mockDir = path.resolve(process.cwd(), options.mockDir ?? path.join('mock-data', 'path-planner'))
     this.loop = options.loop ?? true
 
     log.log('initialized', {

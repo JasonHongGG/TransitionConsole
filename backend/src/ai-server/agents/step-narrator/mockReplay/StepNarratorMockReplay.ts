@@ -17,7 +17,7 @@ export class StepNarratorMockReplay {
   private items: StepNarratorMockReplayItem[] = []
 
   constructor(options: StepNarratorMockReplayOptions = {}) {
-    this.mockDir = path.resolve(process.cwd(), options.mockDir ?? path.join('ai-server', 'mock-data', 'step-narrator'))
+    this.mockDir = path.resolve(process.cwd(), options.mockDir ?? path.join('mock-data', 'step-narrator'))
     this.loop = options.loop ?? true
 
     log.log('initialized', {
