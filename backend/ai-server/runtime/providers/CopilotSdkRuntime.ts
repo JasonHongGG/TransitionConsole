@@ -18,6 +18,7 @@ export class CopilotSdkRuntime implements AiRuntime {
   private readonly client: CopilotClient
   private started = false
   private startPromise: Promise<void> | null = null
+  private readonly reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
 
   constructor(options: AiRuntimeFactoryOptions) {
     if (!options.githubToken) {
@@ -33,6 +34,9 @@ export class CopilotSdkRuntime implements AiRuntime {
       cliUrl: this.cliUrl,
       autoStart: false,
     })
+
+    const effort = (process.env.AI_RUNTIME_REASONING_EFFORT ?? '').trim().toLowerCase()
+    this.reasoningEffort = (effort === 'low' || effort === 'medium' || effort === 'high' || effort === 'xhigh') ? effort : undefined
   }
 
   private async ensureStarted(): Promise<void> {
@@ -68,6 +72,7 @@ export class CopilotSdkRuntime implements AiRuntime {
       const createSessionStartedAt = profiling ? Date.now() : 0
       const session = await this.client.createSession({
         model: request.model,
+        reasoningEffort: this.reasoningEffort,
         systemMessage: {
           content: request.systemPrompt,
         },
@@ -80,6 +85,7 @@ export class CopilotSdkRuntime implements AiRuntime {
       const finalEvent = await session.sendAndWait(
         {
           prompt: request.prompt,
+          attachments: request.attachments,
         },
         request.timeoutMs,
       )

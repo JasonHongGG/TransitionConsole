@@ -1,10 +1,15 @@
 import type { AiRuntime } from '../../runtime/types'
+import type { AiRuntimeMessageAttachment } from '../../runtime/types'
 import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
 import type { LoopDecision, LoopDecisionInput, LoopFunctionCall, LoopFunctionResponse } from '../../../main-server/planned-runner/executor/contracts'
 import type { OperatorLoopDecisionAgent as OperatorLoopDecisionAgentContract } from '../types'
 import { OPERATOR_LOOP_PROMPT } from './prompt'
 import { OperatorLoopMockReplay } from './mockReplay/OperatorLoopMockReplay'
+import crypto from 'node:crypto'
+import os from 'node:os'
+import path from 'node:path'
+import { promises as fs } from 'node:fs'
 
 type LoopDecisionEnvelope = {
   decision?: {
@@ -33,9 +38,11 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
   private readonly timeoutMs: number
   private readonly maxScreenshotBase64Chars: number
   private readonly maxFunctionResponseScreenshotTurns: number
+  private readonly maxHistoryTurns: number
   private readonly useMockReplay: boolean
   private readonly mockReplay: OperatorLoopMockReplay
   private readonly conversationHistory = new Map<string, ConversationTurn[]>()
+  private readonly screenshotDirsBySession = new Map<string, string>()
 
   constructor(runtime: AiRuntime) {
     this.runtime = runtime
@@ -43,6 +50,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     this.timeoutMs = Number(process.env.OPERATOR_LOOP_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
     this.maxScreenshotBase64Chars = Number(process.env.OPERATOR_LOOP_SCREENSHOT_B64_MAX ?? 200000)
     this.maxFunctionResponseScreenshotTurns = Number(process.env.OPERATOR_LOOP_MAX_RECENT_SCREENSHOT_TURNS ?? 3)
+    this.maxHistoryTurns = Number(process.env.OPERATOR_LOOP_MAX_HISTORY_TURNS ?? 12)
     this.useMockReplay = (process.env.OPERATOR_LOOP_PROVIDER ?? 'llm').trim().toLowerCase() === 'mock-replay'
     this.mockReplay = new OperatorLoopMockReplay({
       mockDir: process.env.OPERATOR_LOOP_MOCK_DIR,
@@ -61,7 +69,47 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
   private pushHistory(key: string, turn: ConversationTurn): void {
     const current = this.getHistory(key)
     current.push(turn)
+
+    if (Number.isFinite(this.maxHistoryTurns) && this.maxHistoryTurns > 0 && current.length > this.maxHistoryTurns) {
+      current.splice(0, current.length - this.maxHistoryTurns)
+    }
+
     this.conversationHistory.set(key, current)
+  }
+
+  private ensureScreenshotDir(runId: string, pathId: string): string {
+    const session = this.sessionKey(runId, pathId)
+    const existing = this.screenshotDirsBySession.get(session)
+    if (existing) return existing
+
+    const dir = path.join(os.tmpdir(), 'transitor', 'operator-loop', runId, pathId)
+    this.screenshotDirsBySession.set(session, dir)
+    return dir
+  }
+
+  private async writeScreenshotAttachment(input: LoopDecisionInput): Promise<AiRuntimeMessageAttachment | null> {
+    const base64 = input.screenshotBase64
+    if (!base64) return null
+
+    if (base64.length > this.maxScreenshotBase64Chars) {
+      return null
+    }
+
+    const dir = this.ensureScreenshotDir(input.context.runId, input.context.pathId)
+    await fs.mkdir(dir, { recursive: true })
+
+    const stepHash = crypto.createHash('sha1').update(input.context.stepId).digest('hex').slice(0, 10)
+    const fileName = `step-${stepHash}-iter-${input.iteration}.png`
+    const filePath = path.join(dir, fileName)
+
+    const buffer = Buffer.from(base64, 'base64')
+    await fs.writeFile(filePath, buffer)
+
+    return {
+      type: 'file',
+      path: filePath,
+      displayName: 'screenshot.png',
+    }
   }
 
   private compactHistoryScreenshots(key: string): void {
@@ -131,10 +179,10 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     }
 
     const key = this.sessionKey(input.context.runId, input.context.pathId)
-    const screenshotBase64 =
-      input.screenshotBase64.length > this.maxScreenshotBase64Chars
-        ? input.screenshotBase64.slice(0, this.maxScreenshotBase64Chars)
-        : input.screenshotBase64
+    const screenshotBase64 = input.screenshotBase64
+
+    const screenshotAttachment = await this.writeScreenshotAttachment(input)
+    const attachments = screenshotAttachment ? [screenshotAttachment] : undefined
 
     const payload = {
       context: input.context,
@@ -145,18 +193,23 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       actionCursor: input.actionCursor,
       narrative: input.narrative,
       validations: input.narrative.validations,
-      screenshot: {
-        mimeType: 'image/png',
-        encoding: 'base64',
-        data: screenshotBase64,
-      },
+      screenshot: screenshotAttachment
+        ? {
+            mimeType: 'image/png',
+            attachment: 'screenshot.png',
+          }
+        : {
+            omitted: true,
+            reason: `screenshotBase64 exceeds OPERATOR_LOOP_SCREENSHOT_B64_MAX (${this.maxScreenshotBase64Chars})`,
+          },
       conversationHistory: this.getHistory(key),
     }
 
     const content = await this.runtime.generate({
       model: this.model,
       systemPrompt: OPERATOR_LOOP_PROMPT,
-      prompt: `Return JSON only.\n${JSON.stringify(payload)}`,
+      prompt: `Return JSON only.\nScreenshot is provided as an attached file named screenshot.png (image/png) when present.\n${JSON.stringify(payload)}`,
+      attachments,
       timeoutMs: this.timeoutMs,
     })
 
@@ -255,7 +308,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     this.pushHistory(key, {
       role: 'user',
       type: 'function_response',
-      payload: responses,
+      payload: responses.map((item) => ({ ...item, screenshotBase64: undefined })),
     })
     this.compactHistoryScreenshots(key)
   }
@@ -267,6 +320,18 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
 
     const keys = Array.from(this.conversationHistory.keys()).filter((key) => key.startsWith(`${runId}:`))
     keys.forEach((key) => this.conversationHistory.delete(key))
+
+    const screenshotDirs = Array.from(this.screenshotDirsBySession.entries()).filter(([key]) => key.startsWith(`${runId}:`))
+    screenshotDirs.forEach(([key]) => this.screenshotDirsBySession.delete(key))
+    await Promise.all(
+      screenshotDirs.map(async ([, screenshotDir]) => {
+        try {
+          await fs.rm(screenshotDir, { recursive: true, force: true })
+        } catch {
+          // ignore
+        }
+      }),
+    )
   }
 
   async reset(): Promise<void> {
