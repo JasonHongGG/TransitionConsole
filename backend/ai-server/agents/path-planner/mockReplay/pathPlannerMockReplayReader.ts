@@ -1,4 +1,4 @@
-import type { PlannedPathDraft } from '../../../../../main-server/planned-runner/planner/plannerProvider/types'
+import type { PlannedPathDraft } from '../../../../main-server/planned-runner/planner/plannerProvider/types'
 import { loadSortedMockJsonFiles } from '../../common/mockReplayFileLoader'
 
 type ParsedResponseShape = {

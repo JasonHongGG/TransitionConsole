@@ -20,14 +20,42 @@ type LoopDecisionEnvelope = {
     args?: Record<string, unknown>
     description?: string
   }>
-  stateSummary?: string
+  progressSummary?: string
 }
 
-type ConversationTurn = {
-  role: 'assistant' | 'user'
-  type: 'decision' | 'function_response'
-  payload: unknown
+type ConversationDecisionPayload = {
+  decision: {
+    kind: 'complete' | 'act' | 'fail'
+    reason: string
+    failureCode?: LoopDecision['failureCode']
+    terminationReason?: LoopDecision['terminationReason']
+  }
+  functionCalls: LoopFunctionCall[]
+  progressSummary?: string
 }
+
+type ConversationFunctionResponsePayloadItem = {
+  name: string
+  arguments: Record<string, unknown>
+  response: {
+    status: 'success' | 'failed'
+    url?: string
+    message?: string
+    result?: unknown
+  }
+}
+
+type ConversationTurn =
+  | {
+      role: 'assistant'
+      type: 'decision'
+      payload: ConversationDecisionPayload
+    }
+  | {
+      role: 'user'
+      type: 'function_response'
+      payload: ConversationFunctionResponsePayloadItem[]
+    }
 
 export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAgentContract {
   private readonly runtime: AiRuntime
@@ -85,6 +113,8 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     return explicit.length > 0 ? explicit : undefined
   }
 
+
+
   async decide(input: LoopDecisionInput): Promise<LoopDecision> {
     if (this.useMockReplay) {
       const decision = await this.mockReplay.decide()
@@ -99,10 +129,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         request: {
           context: input.context,
           step: input.step,
-          iteration: input.iteration,
-          currentUrl: input.currentUrl,
-          stateSummary: input.stateSummary,
-          actionCursor: input.actionCursor,
+          runtimeState: input.runtimeState,
           narrative: input.narrative,
         },
         parsedResponse: decision,
@@ -113,13 +140,14 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
 
     const key = this.sessionKey(input.context.runId, input.context.pathId)
     const screenshotBase64 = input.screenshotBase64
+    const iteration = Number(input.runtimeState.iteration)
 
     const decisionScreenshotPath = await this.runtimeScreenshotLogger.saveDecisionInput({
       runId: input.context.runId,
       pathId: input.context.pathId,
       stepOrder: input.context.stepOrder,
       narrativeSummary: input.narrative.summary,
-      iteration: input.iteration,
+      iteration,
       screenshotBase64: input.screenshotBase64,
     })
 
@@ -134,12 +162,8 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     const payload = {
       context: input.context,
       step: input.step,
-      iteration: input.iteration,
-      currentUrl: input.currentUrl,
-      stateSummary: input.stateSummary,
-      actionCursor: input.actionCursor,
+      runtimeState: input.runtimeState,
       narrative: input.narrative,
-      validations: input.narrative.validations,
       screenshot: decisionScreenshotPath
         ? {
             mimeType: 'image/png',
@@ -171,10 +195,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       request: {
         context: payload.context,
         step: input.step,
-        iteration: input.iteration,
-        currentUrl: input.currentUrl,
-        stateSummary: input.stateSummary,
-        actionCursor: input.actionCursor,
+        runtimeState: input.runtimeState,
         narrative: input.narrative,
         conversationHistoryTurns: this.getHistory(key).length,
         screenshotBase64Chars: screenshotBase64.length,
@@ -183,13 +204,20 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       parsedResponse: parsed,
     })
 
-    if (!parsed?.decision?.kind || !parsed.decision.reason) {
+    if (!parsed?.decision?.kind || !parsed.decision.reason || !parsed.progressSummary?.trim()) {
       return {
         kind: 'fail',
         reason: 'LLM operator loop returned malformed decision payload',
         failureCode: 'operator-action-failed',
         terminationReason: 'operator-error',
       }
+    }
+
+    const normalizedDecision: ConversationDecisionPayload['decision'] = {
+      kind: parsed.decision.kind,
+      reason: parsed.decision.reason,
+      failureCode: parsed.decision.failureCode,
+      terminationReason: parsed.decision.terminationReason,
     }
 
     if (parsed.decision.kind === 'act') {
@@ -207,15 +235,16 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         role: 'assistant',
         type: 'decision',
         payload: {
-          decision: parsed.decision,
+          decision: normalizedDecision,
           functionCalls,
-          stateSummary: parsed.stateSummary,
+          progressSummary: parsed.progressSummary,
         },
       })
 
       return {
         kind: 'act',
-        reason: parsed.stateSummary || parsed.decision.reason,
+        reason: normalizedDecision.reason,
+        progressSummary: parsed.progressSummary,
         functionCalls,
       }
     }
@@ -224,25 +253,27 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       role: 'assistant',
       type: 'decision',
       payload: {
-        decision: parsed.decision,
+        decision: normalizedDecision,
         functionCalls: [],
-        stateSummary: parsed.stateSummary,
+        progressSummary: parsed.progressSummary,
       },
     })
 
-    if (parsed.decision.kind === 'complete') {
+    if (normalizedDecision.kind === 'complete') {
       return {
         kind: 'complete',
-        reason: parsed.stateSummary || parsed.decision.reason,
-        terminationReason: parsed.decision.terminationReason ?? 'completed',
+        reason: normalizedDecision.reason,
+        progressSummary: parsed.progressSummary,
+        terminationReason: normalizedDecision.terminationReason ?? 'completed',
       }
     }
 
     return {
       kind: 'fail',
-      reason: parsed.stateSummary || parsed.decision.reason,
-      failureCode: parsed.decision.failureCode ?? 'operator-no-progress',
-      terminationReason: parsed.decision.terminationReason ?? 'criteria-unmet',
+      reason: normalizedDecision.reason,
+      progressSummary: parsed.progressSummary,
+      failureCode: normalizedDecision.failureCode ?? 'operator-no-progress',
+      terminationReason: normalizedDecision.terminationReason ?? 'criteria-unmet',
     }
   }
 
@@ -251,12 +282,14 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       return
     }
 
+    const iteration = Number(input.runtimeState.iteration)
+
     await this.runtimeScreenshotLogger.saveFunctionResponses({
       runId: input.runId,
       pathId: input.pathId,
       stepOrder: input.stepOrder,
       narrativeSummary: input.narrativeSummary,
-      iteration: input.iteration,
+      iteration,
       responses: input.responses.map((item) => ({
         name: item.name,
         screenshotBase64: item.screenshotBase64,
@@ -267,7 +300,11 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     this.pushHistory(key, {
       role: 'user',
       type: 'function_response',
-      payload: input.responses.map((item) => ({ ...item, screenshotBase64: undefined })),
+      payload: input.responses.map((item) => ({
+        name: item.name,
+        arguments: item.arguments,
+        response: item.response,
+      })),
     })
   }
 

@@ -55,7 +55,7 @@ export interface OperatorFunctionCallTrace {
 export interface OperatorLoopIteration {
   iteration: number
   url: string
-  stateSummary: string
+  observationSummary: string
   action: string
   functionCall?: OperatorFunctionCallTrace
   outcome: 'success' | 'failed' | 'skipped'
@@ -92,6 +92,7 @@ export interface StepEvidence {
 
 export interface OperatorTraceItem {
   iteration: number
+  url: string
   observation: string
   action: string
   functionCall?: OperatorFunctionCallTrace

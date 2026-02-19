@@ -38,11 +38,13 @@ export interface LoopDecisionInput {
     summary?: string
     semanticGoal?: string
   }
-  iteration: number
-  currentUrl: string
-  stateSummary: string
+  runtimeState: {
+    url: string
+    title: string
+    iteration: number
+    actionCursor: number
+  }
   screenshotBase64: string
-  actionCursor: number
   narrative: StepNarrativeInstruction
 }
 
@@ -55,6 +57,7 @@ export interface LoopFunctionCall {
 export interface LoopDecision {
   kind: 'complete' | 'act' | 'fail'
   reason: string
+  progressSummary?: string
   functionCalls?: LoopFunctionCall[]
   failureCode?: ExecutionFailureCode
   terminationReason?: OperatorTerminationReason
@@ -67,6 +70,7 @@ export interface LoopFunctionResponse {
     url?: string
     status: 'success' | 'failed'
     message?: string
+    result?: unknown
   }
   screenshotBase64?: string
 }
@@ -77,7 +81,12 @@ export interface LoopAppendFunctionResponsesInput {
   stepId: string
   stepOrder: number
   narrativeSummary: string
-  iteration: number
+  runtimeState: {
+    url: string
+    title: string
+    iteration: number
+    actionCursor: number
+  }
   responses: LoopFunctionResponse[]
 }
 

@@ -152,7 +152,7 @@ app.post('/api/ai/agents/operator-loop/append-function-responses', async (req, r
       pathId: body.pathId,
       stepId: body.stepId,
       stepOrder: body.stepOrder,
-      iteration: body.iteration,
+      iteration: body.runtimeState?.iteration,
       responses: body.responses.length,
     })
     await agents.operatorLoop.appendFunctionResponses(body)

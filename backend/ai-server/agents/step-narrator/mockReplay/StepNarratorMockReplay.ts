@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { createLogger } from '../../../../common/logger'
-import type { StepNarrativeInstruction } from '../../../../../main-server/planned-runner/types'
+import type { StepNarrativeInstruction } from '../../../../main-server/planned-runner/types'
 import { loadStepNarratorMockReplayItems, type StepNarratorMockReplayItem } from './stepNarratorMockReplayReader'
 
 const log = createLogger('mock-replay-step-narrator')

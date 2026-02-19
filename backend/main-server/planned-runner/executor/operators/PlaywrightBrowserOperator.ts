@@ -24,6 +24,12 @@ type ToolPayload = Record<string, unknown>
 type CurrentState = {
   screenshot: Buffer
   url: string
+  title: string
+}
+
+type ToolExecutionResult = {
+  state: CurrentState
+  result?: unknown
 }
 
 const PLAYWRIGHT_KEY_MAP: Record<string, string> = {
@@ -344,7 +350,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     await page.waitForTimeout(5000)
   }
 
-  private async evaluateScript(page: BrowserPage, payload: ToolPayload): Promise<void> {
+  private async evaluateScript(page: BrowserPage, payload: ToolPayload): Promise<unknown> {
     const script = this.readString(payload, 'script')
     const modeRaw = payload.mode
     const mode = typeof modeRaw === 'string' ? modeRaw.toLowerCase() : 'expression'
@@ -355,67 +361,69 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         throw new Error('evaluate tool requires script to resolve to a function when mode=function')
       }
 
-      await page.evaluate(executable, payload.arg)
-      return
+      return page.evaluate(executable, payload.arg)
     }
 
-    await page.evaluate((code) => {
+    return page.evaluate((code) => {
       return (0, eval)(code)
     }, script)
   }
 
   private async currentState(page: BrowserPage): Promise<CurrentState> {
     const screenshotBytes = (await page.screenshot({ type: 'png', fullPage: false })) as Buffer
+    const title = await page.title()
     return {
       screenshot: screenshotBytes,
       url: page.url(),
+      title,
     }
   }
 
-  private async executeTool(page: BrowserPage, toolName: string, payload: ToolPayload): Promise<CurrentState> {
+  private async executeTool(page: BrowserPage, toolName: string, payload: ToolPayload): Promise<ToolExecutionResult> {
     switch (toolName) {
       case 'open_web_browser':
-        return this.currentState(page)
+        return { state: await this.currentState(page) }
       case 'click_at':
         await this.clickAt(page, payload)
-        return this.currentState(page)
+        return { state: await this.currentState(page) }
       case 'hover_at':
         await this.hoverAt(page, payload)
-        return this.currentState(page)
+        return { state: await this.currentState(page) }
       case 'type_text_at':
         await this.typeTextAt(page, payload)
-        return this.currentState(page)
+        return { state: await this.currentState(page) }
       case 'scroll_document':
         await this.scrollDocument(page, payload)
-        return this.currentState(page)
+        return { state: await this.currentState(page) }
       case 'scroll_at':
         await this.scrollAt(page, payload)
-        return this.currentState(page)
+        return { state: await this.currentState(page) }
       case 'wait_5_seconds':
         await this.wait5Seconds(page)
-        return this.currentState(page)
-      case 'evaluate':
-        await this.evaluateScript(page, payload)
-        return this.currentState(page)
+        return { state: await this.currentState(page) }
+      case 'evaluate': {
+        const result = await this.evaluateScript(page, payload)
+        return { state: await this.currentState(page), result }
+      }
       case 'go_back':
         await this.goBack(page)
-        return this.currentState(page)
+        return { state: await this.currentState(page) }
       case 'go_forward':
         await this.goForward(page)
-        return this.currentState(page)
+        return { state: await this.currentState(page) }
       case 'navigate':
         await this.navigate(page, payload)
-        return this.currentState(page)
+        return { state: await this.currentState(page) }
       case 'key_combination': {
         const keys = this.readStringArray(payload, 'keys')
         await this.keyCombination(page, keys)
-        return this.currentState(page)
+        return { state: await this.currentState(page) }
       }
       case 'drag_and_drop':
         await this.dragAndDrop(page, payload)
-        return this.currentState(page)
+        return { state: await this.currentState(page) }
       case 'current_state':
-        return this.currentState(page)
+        return { state: await this.currentState(page) }
       default:
         throw new Error(`unsupported tool: ${toolName}`)
     }
@@ -458,7 +466,13 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     let actionCursor = 0
 
     for (let iteration = 1; iteration <= maxLoopRounds; iteration += 1) {
-      const stateSummary = `url=${page.url()}; iteration=${iteration}; actionCursor=${actionCursor}`
+      const titleSummary = lastState.title.replace(/\s+/g, ' ').slice(0, 120)
+      const runtimeState = {
+        url: page.url(),
+        title: titleSummary,
+        iteration,
+        actionCursor,
+      }
 
       this.emitLiveEvent({
         type: 'operator.iteration.started',
@@ -496,11 +510,8 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           summary: step.label,
           semanticGoal: step.semantic,
         },
-        iteration,
-        currentUrl: page.url(),
-        stateSummary,
+        runtimeState,
         screenshotBase64: lastState.screenshot.toString('base64'),
-        actionCursor,
         narrative,
       })
       const decisionElapsedMs = Date.now() - decisionStartedAt
@@ -539,7 +550,8 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         const validationResults = this.buildValidationResultsFromDecision(validations, 'complete', decision.reason)
         trace.push({
           iteration,
-          observation: stateSummary,
+          url: runtimeState.url,
+          observation: JSON.stringify(runtimeState),
           action: 'function_call:complete',
           outcome: 'success',
           detail: decision.reason,
@@ -611,7 +623,8 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             },
           })
 
-          lastState = await this.executeTool(page, toolName, payload)
+          const execution = await this.executeTool(page, toolName, payload)
+          lastState = execution.state
 
           functionResponses.push({
             name: toolName,
@@ -620,13 +633,20 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
               url: lastState.url,
               status: 'success',
               message: functionCall.description,
+              result: execution.result,
             },
             screenshotBase64: lastState.screenshot.toString('base64'),
           })
 
           trace.push({
             iteration,
-            observation: `url=${lastState.url}; iteration=${iteration}; actionCursor=${actionCursor}`,
+            url: lastState.url,
+            observation: JSON.stringify({
+              url: lastState.url,
+              title: lastState.title,
+              iteration,
+              actionCursor,
+            }),
             action: `function_call:${toolName}`,
             functionCall: {
               name: functionCall.name,
@@ -663,7 +683,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             stepId: context.stepId,
             stepOrder: context.currentPathStepIndex + 1,
             narrativeSummary: narrative.summary,
-            iteration,
+            runtimeState,
             responses: functionResponses,
           })
         }
@@ -687,13 +707,24 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             stepId: context.stepId,
             stepOrder: context.currentPathStepIndex + 1,
             narrativeSummary: narrative.summary,
-            iteration,
+            runtimeState: {
+              url: lastState?.url ?? page.url(),
+              title: lastState?.title ?? titleSummary,
+              iteration,
+              actionCursor,
+            },
             responses: [...functionResponses, failedResponse],
           })
         }
         trace.push({
           iteration,
-          observation: `url=${lastState?.url ?? page.url()}`,
+          url: lastState?.url ?? page.url(),
+          observation: JSON.stringify({
+            url: lastState?.url ?? page.url(),
+            title: lastState?.title ?? '',
+            iteration,
+            actionCursor,
+          }),
           action: `function_call:${activeFunctionCall?.name ?? 'unknown_tool'}`,
           functionCall: activeFunctionCall
             ? {

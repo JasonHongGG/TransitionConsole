@@ -224,8 +224,8 @@ export class AgentStepExecutor implements StepExecutor {
         validations,
         loopIterations: operated.trace.map((item) => ({
           iteration: item.iteration,
-          url: item.observation,
-          stateSummary: item.observation,
+          url: item.url,
+          observationSummary: item.observation,
           action: item.action,
           functionCall: item.functionCall,
           outcome: item.outcome,

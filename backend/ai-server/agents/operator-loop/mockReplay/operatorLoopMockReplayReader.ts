@@ -1,7 +1,7 @@
 import type {
   LoopDecision,
   LoopFunctionCall,
-} from '../../../../../main-server/planned-runner/executor/contracts'
+} from '../../../../main-server/planned-runner/executor/contracts'
 import { loadSortedMockJsonFiles } from '../../common/mockReplayFileLoader'
 
 type ParsedOperatorResponse = {
@@ -16,7 +16,7 @@ type ParsedOperatorResponse = {
     args?: Record<string, unknown>
     description?: string
   }>
-  stateSummary?: string
+  progressSummary?: string
 }
 
 const parseFunctionCalls = (input: ParsedOperatorResponse['functionCalls']): LoopFunctionCall[] | undefined => {
@@ -41,7 +41,8 @@ const parseDecision = (input: ParsedOperatorResponse | undefined): LoopDecision 
 
     return {
       kind: 'act',
-      reason: input.stateSummary || input.decision.reason,
+      reason: input.decision.reason,
+      progressSummary: input.progressSummary,
       functionCalls,
     }
   }
@@ -49,14 +50,16 @@ const parseDecision = (input: ParsedOperatorResponse | undefined): LoopDecision 
   if (input.decision.kind === 'complete') {
     return {
       kind: 'complete',
-      reason: input.stateSummary || input.decision.reason,
+      reason: input.decision.reason,
+      progressSummary: input.progressSummary,
       terminationReason: input.decision.terminationReason ?? 'completed',
     }
   }
 
   return {
     kind: 'fail',
-    reason: input.stateSummary || input.decision.reason,
+    reason: input.decision.reason,
+    progressSummary: input.progressSummary,
     failureCode: input.decision.failureCode ?? 'operator-no-progress',
     terminationReason: input.decision.terminationReason ?? 'criteria-unmet',
   }

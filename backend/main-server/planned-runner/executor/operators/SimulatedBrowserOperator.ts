@@ -12,6 +12,7 @@ export class SimulatedBrowserOperator implements BrowserOperator {
     for (let i = 1; i <= 3; i += 1) {
       trace.push({
         iteration: i,
+        url: context.targetUrl,
         observation: `targetUrl=${context.targetUrl}`,
         action: 'function_call:simulated',
         outcome: 'success',
