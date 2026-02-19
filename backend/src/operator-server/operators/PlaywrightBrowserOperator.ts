@@ -116,6 +116,24 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     return `${runId}:${pathId}`
   }
 
+  private async closeSessionByKey(key: string): Promise<void> {
+    const session = this.sessions.get(key)
+    if (!session) return
+
+    try {
+      await session.context.close()
+    } catch {
+      // ignore
+    }
+    try {
+      await session.browser.close()
+    } catch {
+      // ignore
+    }
+
+    this.sessions.delete(key)
+  }
+
   private async getOrCreateSession(context: ExecutorContext): Promise<BrowserSession> {
     const key = this.sessionKey(context.runId, context.pathId)
     const existing = this.sessions.get(key)
@@ -786,21 +804,12 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     }
 
     const entries = Array.from(this.sessions.entries()).filter(([key]) => key.startsWith(`${runId}:`))
-    await Promise.all(
-      entries.map(async ([key, session]) => {
-        try {
-          await session.context.close()
-        } catch {
-          // ignore
-        }
-        try {
-          await session.browser.close()
-        } catch {
-          // ignore
-        }
-        this.sessions.delete(key)
-      }),
-    )
+    await Promise.all(entries.map(async ([key]) => this.closeSessionByKey(key)))
+  }
+
+  async cleanupPath(runId: string, pathId: string): Promise<void> {
+    const key = this.sessionKey(runId, pathId)
+    await this.closeSessionByKey(key)
   }
 
   async resetReplayCursor(): Promise<void> {

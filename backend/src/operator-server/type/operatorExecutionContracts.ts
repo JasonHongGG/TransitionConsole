@@ -130,6 +130,11 @@ export interface OperatorCleanupRunRequest {
   runId: string
 }
 
+export interface OperatorCleanupPathRequest {
+  runId: string
+  pathId: string
+}
+
 export interface OperatorResetReplayResponse {
   ok: boolean
 }

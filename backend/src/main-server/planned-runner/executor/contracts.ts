@@ -30,6 +30,7 @@ export interface BrowserOperator {
     narrative: StepNarrativeInstruction,
     validations: StepValidationSpec[],
   ): Promise<BrowserOperatorRunResult>
+  cleanupPath?(runId: string, pathId: string): Promise<void>
   cleanupRun?(runId: string): Promise<void>
   resetReplayCursor?(): Promise<void>
 }

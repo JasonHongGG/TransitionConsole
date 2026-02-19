@@ -4,6 +4,7 @@ import cors from 'cors'
 import { createLogger } from '../common/logger'
 import { PlaywrightBrowserOperator } from './operators/PlaywrightBrowserOperator'
 import type {
+  OperatorCleanupPathRequest,
   OperatorCleanupRunRequest,
   OperatorResetReplayResponse,
   OperatorStepRunRequest,
@@ -99,6 +100,24 @@ app.post('/api/operator/step-executor/cleanup-run', async (req, res) => {
     res.status(500).json({
       ok: false,
       error: error instanceof Error ? error.message : 'operator cleanup failed',
+    })
+  }
+})
+
+app.post('/api/operator/step-executor/cleanup-path', async (req, res) => {
+  try {
+    const { runId, pathId } = req.body as OperatorCleanupPathRequest
+    log.log('operator path cleanup request', { runId, pathId })
+    await operator.cleanupPath?.(runId, pathId)
+    log.log('operator path cleanup completed', { runId, pathId })
+    res.json({ ok: true })
+  } catch (error) {
+    log.log('operator path cleanup failed', {
+      error: error instanceof Error ? error.message : 'operator path cleanup failed',
+    })
+    res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'operator path cleanup failed',
     })
   }
 })

@@ -6,6 +6,7 @@ import type {
 } from '../types'
 import type { BrowserOperator } from '../executor/contracts'
 import type {
+  OperatorCleanupPathRequest,
   OperatorCleanupRunRequest,
   OperatorResetReplayResponse,
   OperatorStepRunRequest,
@@ -46,6 +47,15 @@ export class BrowserOperatorApi implements BrowserOperator {
       this.operatorBaseUrl,
       '/api/operator/step-executor/cleanup-run',
       { runId },
+      this.timeoutMs,
+    )
+  }
+
+  async cleanupPath(runId: string, pathId: string): Promise<void> {
+    await postApiJson<OperatorCleanupPathRequest, { ok: boolean }>(
+      this.operatorBaseUrl,
+      '/api/operator/step-executor/cleanup-path',
+      { runId, pathId },
       this.timeoutMs,
     )
   }

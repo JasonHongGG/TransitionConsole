@@ -232,6 +232,17 @@ export class PlannedRunner {
         pathId: currentPath.id,
         pathName: currentPath.name,
       })
+      if (this.executor.onPathCompleted) {
+        try {
+          await this.executor.onPathCompleted(this.runtime.runId, currentPath.id)
+        } catch (error) {
+          log.log('path cleanup failed', {
+            runId: this.runtime.runId,
+            pathId: currentPath.id,
+            error: error instanceof Error ? error.message : 'path cleanup failed',
+          })
+        }
+      }
       this.runtime.pathIndex += 1
       this.runtime.stepIndex = 0
       this.runtime.completedPathsTotal += 1

@@ -109,6 +109,11 @@ export class AgentStepExecutor implements StepExecutor {
     await this.operator.cleanupRun(runId)
   }
 
+  async onPathCompleted(runId: string, pathId: string): Promise<void> {
+    if (!this.operator.cleanupPath) return
+    await this.operator.cleanupPath(runId, pathId)
+  }
+
   async onRunnerReset(): Promise<void> {
     if (this.narrator.resetReplayCursor) {
       await this.narrator.resetReplayCursor()
