@@ -20,6 +20,14 @@ export const VALIDATION_TYPES = [
 
 export type ValidationType = (typeof VALIDATION_TYPES)[number]
 
+export type AgentMode = 'llm' | 'mock'
+
+export interface RunnerAgentModes {
+  pathPlanner: AgentMode
+  stepNarrator: AgentMode
+  operatorLoop: AgentMode
+}
+
 export type OperatorActionType =
   | 'goto'
   | 'click'
@@ -190,6 +198,7 @@ export interface PlannedCoverageSummary {
 }
 
 export interface PlannedRunSnapshot {
+  runId: string | null
   running: boolean
   completed: boolean
   currentPathId: string | null
@@ -204,6 +213,7 @@ export interface PlannedRunSnapshot {
   nodeStatuses: Record<string, ElementExecutionStatus>
   edgeStatuses: Record<string, ElementExecutionStatus>
   coverage: PlannedCoverageSummary
+  agentModes: RunnerAgentModes
 }
 
 export interface PlannedStepEvent {
@@ -257,6 +267,7 @@ export interface PlannedRunnerRequest {
   specRaw: string | null
   targetUrl: string
   userTestingInfo?: UserTestingInfo
+  agentModes?: Partial<RunnerAgentModes>
 }
 
 export interface PlannedStepResponse {
@@ -288,6 +299,7 @@ export interface RuntimeState {
   specRaw: string | null
   targetUrl: string
   userTestingInfo?: UserTestingInfo
+  agentModes: RunnerAgentModes
   pathIndex: number
   stepIndex: number
   totalPlannedPaths: number
@@ -308,6 +320,7 @@ export interface ExecutorContext {
   targetUrl: string
   specRaw: string | null
   userTestingInfo?: UserTestingInfo
+  agentModes: RunnerAgentModes
   stepValidations: StepValidationSpec[]
   currentPathStepIndex: number
   currentPathStepTotal: number

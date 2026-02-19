@@ -465,6 +465,9 @@ function App() {
                 testingNotes={agentRunner.testingNotes}
                 onTestingNotesChange={agentRunner.setTestingNotes}
                 testAccounts={agentRunner.testAccounts}
+                agentModes={agentRunner.agentModes}
+                isSettingsBusy={agentRunner.isSettingsBusy}
+                onAgentModeChange={agentRunner.setAgentMode}
                 onTestAccountFieldChange={agentRunner.setTestAccountField}
                 onAddTestAccount={agentRunner.addTestAccount}
                 onRemoveTestAccount={agentRunner.removeTestAccount}

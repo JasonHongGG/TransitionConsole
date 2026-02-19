@@ -1,4 +1,5 @@
 import type { PathPlannerContext, PlannedPathDraft } from '../../../main-server/planned-runner/planner/types'
+import type { AgentMode } from '../../../main-server/planned-runner/types'
 import type { AiRuntime } from '../../runtime/types'
 import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
@@ -19,7 +20,7 @@ type PathPlannerEnvelope = {
 export class DefaultPathPlannerAgent implements PathPlannerAgent {
   private readonly runtime: AiRuntime
   private readonly mockReplayPlanner: PathPlannerMockReplay
-  private readonly useMockReplay: boolean
+  private readonly defaultMode: AgentMode
   private readonly model: string
   private readonly timeoutMs: number
 
@@ -27,7 +28,7 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
     this.runtime = runtime
     this.model = process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
     this.timeoutMs = Number(process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
-    this.useMockReplay = (process.env.PATH_PLANNER_PROVIDER ?? 'llm').trim().toLowerCase() === 'mock-replay'
+    this.defaultMode = (process.env.PATH_PLANNER_PROVIDER ?? 'llm').trim().toLowerCase() === 'mock-replay' ? 'mock' : 'llm'
     this.mockReplayPlanner = new PathPlannerMockReplay({
       mockDir: process.env.PATH_PLANNER_MOCK_DIR,
       loop: (process.env.PATH_PLANNER_MOCK_LOOP ?? 'true').trim().toLowerCase() !== 'false',
@@ -35,7 +36,9 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
   }
 
   async generate(context: PathPlannerContext): Promise<PlannedPathDraft[]> {
-    if (this.useMockReplay) {
+    const mode = context.agentMode ?? this.defaultMode
+
+    if (mode === 'mock') {
       const drafts = await this.mockReplayPlanner.generatePaths(context)
       await writeAgentResponseLog({
         agent: 'path-planner',
@@ -98,8 +101,6 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
   }
 
   async reset(): Promise<void> {
-    if (this.useMockReplay) {
-      await this.mockReplayPlanner.resetRoundCursor()
-    }
+    await this.mockReplayPlanner.resetRoundCursor()
   }
 }

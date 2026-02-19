@@ -1,4 +1,4 @@
-import type { DiagramValidation, StepNarrativeInstruction } from '../../planned-runner/types'
+import type { AgentMode, DiagramValidation, StepNarrativeInstruction } from '../../planned-runner/types'
 import type { PathPlannerContext, PlannedPathDraft } from '../../planned-runner/planner/types'
 
 export interface ApiOkResponse {
@@ -90,6 +90,7 @@ export interface StepNarratorRequestContext {
   runId: string
   pathId: string
   stepId: string
+  agentMode?: AgentMode
   targetUrl?: string
   specRaw: string
   diagrams: StepNarratorRequestDiagram[]

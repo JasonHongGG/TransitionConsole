@@ -13,6 +13,8 @@ type TemporaryRunnerSettingsFile = {
   settings: TemporaryRunnerSettings
 }
 
+const normalizeMode = (value: unknown): 'llm' | 'mock' => (value === 'mock' ? 'mock' : 'llm')
+
 const normalizeSettings = (input: unknown): TemporaryRunnerSettings | null => {
   if (!input || typeof input !== 'object') return null
 
@@ -31,7 +33,19 @@ const normalizeSettings = (input: unknown): TemporaryRunnerSettings | null => {
       })
     : []
 
-  return { targetUrl, testingNotes, testAccounts }
+  const inputModesRaw = (input as { agentModes?: unknown }).agentModes
+  const inputModes =
+    inputModesRaw && typeof inputModesRaw === 'object'
+      ? (inputModesRaw as { pathPlanner?: unknown; stepNarrator?: unknown; operatorLoop?: unknown })
+      : undefined
+
+  const agentModes = {
+    pathPlanner: normalizeMode(inputModes?.pathPlanner),
+    stepNarrator: normalizeMode(inputModes?.stepNarrator),
+    operatorLoop: normalizeMode(inputModes?.operatorLoop),
+  }
+
+  return { targetUrl, testingNotes, testAccounts, agentModes }
 }
 
 const parseSettingsFile = (input: unknown): TemporaryRunnerSettings | null => {

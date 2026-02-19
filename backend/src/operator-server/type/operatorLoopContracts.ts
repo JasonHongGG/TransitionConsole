@@ -1,6 +1,7 @@
 import type { UserTestingInfo } from './operatorExecutionContracts'
 
 export interface LoopDecisionInput {
+  agentMode?: 'llm' | 'mock'
   context: {
     runId: string
     pathId: string
@@ -82,6 +83,7 @@ export interface LoopFunctionResponse {
 }
 
 export interface LoopAppendFunctionResponsesInput {
+  agentMode?: 'llm' | 'mock'
   runId: string
   pathId: string
   stepId: string

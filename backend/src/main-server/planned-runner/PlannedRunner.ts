@@ -5,10 +5,12 @@ import { buildRuntimeGraph } from './graph'
 import { generatePlannedPaths, withReindexedPaths } from './planner'
 import { buildEmptySnapshot, buildRuntimeSnapshot, computeCoverageSummary } from './snapshot'
 import type {
+  AgentMode,
   ElementExecutionStatus,
   PlannedLiveEventInput,
   PlannedPathHistoryItem,
   PlannedRunnerRequest,
+  RunnerAgentModes,
   PlannedStepEvent,
   PlannedStepResponse,
   RuntimeState,
@@ -20,6 +22,17 @@ const log = createLogger('planned-runner')
 
 const createRunId = () => `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
 const toElapsedSeconds = (elapsedMs: number): number => Math.max(1, Math.ceil(elapsedMs / 1000))
+
+const isAgentMode = (value: unknown): value is AgentMode => value === 'llm' || value === 'mock'
+
+const normalizeAgentModes = (
+  defaults: RunnerAgentModes,
+  overrides?: Partial<RunnerAgentModes>,
+): RunnerAgentModes => ({
+  pathPlanner: isAgentMode(overrides?.pathPlanner) ? overrides.pathPlanner : defaults.pathPlanner,
+  stepNarrator: isAgentMode(overrides?.stepNarrator) ? overrides.stepNarrator : defaults.stepNarrator,
+  operatorLoop: isAgentMode(overrides?.operatorLoop) ? overrides.operatorLoop : defaults.operatorLoop,
+})
 
 const requestTargetUrl = (runtime: RuntimeState): string => runtime.targetUrl
 
@@ -37,19 +50,57 @@ export class PlannedRunner {
   private readonly executor: StepExecutor
   private readonly pathPlanner: PathPlanner
   private readonly publishLiveEvent?: (event: PlannedLiveEventInput) => void
+  private readonly defaultAgentModes: RunnerAgentModes
 
   constructor(options: {
     executor?: StepExecutor
     pathPlanner: PathPlanner
     publishLiveEvent?: (event: PlannedLiveEventInput) => void
+    defaultAgentModes?: RunnerAgentModes
   }) {
     this.executor = options.executor ?? new StubStepExecutor()
     this.pathPlanner = options.pathPlanner
     this.publishLiveEvent = options.publishLiveEvent
+    this.defaultAgentModes = options.defaultAgentModes ?? {
+      pathPlanner: 'llm',
+      stepNarrator: 'llm',
+      operatorLoop: 'llm',
+    }
   }
 
   private emitLiveEvent(event: PlannedLiveEventInput): void {
     this.publishLiveEvent?.(event)
+  }
+
+  getAgentSettings(): { runId: string | null; agentModes: RunnerAgentModes } {
+    if (!this.runtime) {
+      return {
+        runId: null,
+        agentModes: this.defaultAgentModes,
+      }
+    }
+
+    return {
+      runId: this.runtime.runId,
+      agentModes: this.runtime.agentModes,
+    }
+  }
+
+  updateAgentSettings(runId: string, nextModes: Partial<RunnerAgentModes>): { runId: string; agentModes: RunnerAgentModes } {
+    if (!this.runtime) {
+      throw new Error('No active run to update settings')
+    }
+
+    if (this.runtime.runId !== runId) {
+      throw new Error(`Run not found: ${runId}`)
+    }
+
+    this.runtime.agentModes = normalizeAgentModes(this.runtime.agentModes, nextModes)
+
+    return {
+      runId: this.runtime.runId,
+      agentModes: this.runtime.agentModes,
+    }
   }
 
   async start(request: PlannedRunnerRequest): Promise<PlannedStepResponse> {
@@ -58,6 +109,7 @@ export class PlannedRunner {
       throw new Error('PlannedRunner: targetUrl is required and must be a non-empty string.')
     }
     const runId = createRunId()
+    const initialAgentModes = normalizeAgentModes(this.defaultAgentModes, request.agentModes)
 
     this.emitLiveEvent({
       type: 'run.starting',
@@ -112,6 +164,7 @@ export class PlannedRunner {
       nodeStatuses,
       edgeStatuses,
       [],
+      initialAgentModes.pathPlanner,
     )
     const plannerElapsedMs = Date.now() - plannerStartedAt
     const plannerElapsedSeconds = toElapsedSeconds(plannerElapsedMs)
@@ -144,6 +197,7 @@ export class PlannedRunner {
       specRaw: request.specRaw,
       targetUrl: request.targetUrl,
       userTestingInfo: request.userTestingInfo,
+      agentModes: initialAgentModes,
       pathIndex: 0,
       stepIndex: 0,
       totalPlannedPaths: plan.paths.length,
@@ -287,6 +341,7 @@ export class PlannedRunner {
 
     let exec: StepExecutionResult
     try {
+      const stepAgentModes: RunnerAgentModes = { ...this.runtime.agentModes }
       exec = {
         ...(await this.executor.execute(step, {
           runId: this.runtime.runId,
@@ -297,6 +352,7 @@ export class PlannedRunner {
           targetUrl: requestTargetUrl(this.runtime),
           specRaw: this.runtime.specRaw,
           userTestingInfo: this.runtime.userTestingInfo,
+          agentModes: stepAgentModes,
           stepValidations: step.validations,
           currentPathStepIndex: this.runtime.stepIndex,
           currentPathStepTotal: currentPath.steps.length,
@@ -522,6 +578,7 @@ export class PlannedRunner {
       this.runtime.nodeStatuses,
       this.runtime.edgeStatuses,
       this.runtime.executedPathHistory,
+      this.runtime.agentModes.pathPlanner,
     )
     const replanElapsedMs = Date.now() - replanStartedAt
     const replanElapsedSeconds = toElapsedSeconds(replanElapsedMs)

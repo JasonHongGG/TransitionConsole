@@ -1,5 +1,6 @@
 import type { AiRuntime } from '../../runtime/types'
 import type { AiRuntimeMessageAttachment } from '../../runtime/types'
+import type { AgentMode } from '../../../main-server/planned-runner/types'
 import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
 import type { LoopAppendFunctionResponsesInput, LoopDecision, LoopDecisionInput, LoopFunctionCall } from '../../../operator-server/type'
@@ -62,7 +63,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
   private readonly model: string
   private readonly timeoutMs: number
   private readonly maxHistoryTurns: number
-  private readonly useMockReplay: boolean
+  private readonly defaultMode: AgentMode
   private readonly mockReplay: OperatorLoopMockReplay
   private readonly runtimeScreenshotLogger = new RuntimeScreenshotLogger()
   private readonly conversationHistory = new Map<string, ConversationTurn[]>()
@@ -72,7 +73,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     this.model = process.env.OPERATOR_LOOP_MODEL ?? process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
     this.timeoutMs = Number(process.env.OPERATOR_LOOP_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
     this.maxHistoryTurns = Number(process.env.OPERATOR_LOOP_MAX_HISTORY_TURNS ?? 12)
-    this.useMockReplay = (process.env.OPERATOR_LOOP_PROVIDER ?? 'llm').trim().toLowerCase() === 'mock-replay'
+    this.defaultMode = (process.env.OPERATOR_LOOP_PROVIDER ?? 'llm').trim().toLowerCase() === 'mock-replay' ? 'mock' : 'llm'
     this.mockReplay = new OperatorLoopMockReplay({
       mockDir: process.env.OPERATOR_LOOP_MOCK_DIR,
       loop: (process.env.OPERATOR_LOOP_MOCK_LOOP ?? 'true').trim().toLowerCase() !== 'false',
@@ -116,7 +117,9 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
 
 
   async decide(input: LoopDecisionInput): Promise<LoopDecision> {
-    if (this.useMockReplay) {
+    const mode = input.agentMode ?? this.defaultMode
+
+    if (mode === 'mock') {
       const decision = await this.mockReplay.decide()
 
       await writeAgentResponseLog({
@@ -278,7 +281,8 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
   }
 
   async appendFunctionResponses(input: LoopAppendFunctionResponsesInput): Promise<void> {
-    if (this.useMockReplay) {
+    const mode = input.agentMode ?? this.defaultMode
+    if (mode === 'mock') {
       return
     }
 
@@ -309,18 +313,12 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
   }
 
   async cleanupRun(runId: string): Promise<void> {
-    if (this.useMockReplay) {
-      return
-    }
-
     const keys = Array.from(this.conversationHistory.keys()).filter((key) => key.startsWith(`${runId}:`))
     keys.forEach((key) => this.conversationHistory.delete(key))
     this.runtimeScreenshotLogger.cleanupRun(runId)
   }
 
   async reset(): Promise<void> {
-    if (this.useMockReplay) {
-      await this.mockReplay.resetRoundCursor()
-    }
+    await this.mockReplay.resetRoundCursor()
   }
 }

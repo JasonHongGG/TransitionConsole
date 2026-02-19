@@ -1,5 +1,6 @@
 import type { PathPlanner, PlannerHistoryPath } from './types'
 import type {
+  AgentMode,
   DiagramConnector,
   DiagramLike,
   ElementExecutionStatus,
@@ -22,6 +23,7 @@ export const generatePlannedPaths = async (
   nodeStatuses: Record<string, ElementExecutionStatus>,
   edgeStatuses: Record<string, ElementExecutionStatus>,
   previouslyPlannedPaths: PlannerHistoryPath[] = [],
+  agentMode?: AgentMode,
 ): Promise<PlannedRunPlan> => {
   const normalizeId = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '')
   const parsePathOrdinal = (pathId?: string): number => {
@@ -49,6 +51,7 @@ export const generatePlannedPaths = async (
 
   const draftedPaths = await planner.generatePaths({
     maxPaths: 16,
+    agentMode,
     context: {
       runId,
       pathId: undefined,

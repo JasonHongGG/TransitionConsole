@@ -506,6 +506,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
       const decisionStartedAt = Date.now()
       const decision = await this.loopAgent.decide({
+        agentMode: context.agentModes.operatorLoop,
         context: {
           runId: context.runId,
           pathId: context.pathId,
@@ -696,6 +697,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
         if (this.loopAgent.appendFunctionResponses) {
           await this.loopAgent.appendFunctionResponses({
+            agentMode: context.agentModes.operatorLoop,
             runId: context.runId,
             pathId: context.pathId,
             stepId: context.stepId,
@@ -720,6 +722,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             screenshotBase64: lastState?.screenshot?.toString('base64'),
           }
           await this.loopAgent.appendFunctionResponses({
+            agentMode: context.agentModes.operatorLoop,
             runId: context.runId,
             pathId: context.pathId,
             stepId: context.stepId,

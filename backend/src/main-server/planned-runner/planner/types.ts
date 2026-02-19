@@ -1,4 +1,4 @@
-import type { DiagramValidation, RuntimeEdge } from '../types'
+import type { AgentMode, DiagramValidation, RuntimeEdge } from '../types'
 
 export interface PlannedPathDraft {
   pathId?: string
@@ -55,6 +55,7 @@ export interface PlannerDiagramPayload {
 
 export interface PathPlannerContext {
   maxPaths: number
+  agentMode?: AgentMode
   context: {
     runId?: string
     pathId?: string

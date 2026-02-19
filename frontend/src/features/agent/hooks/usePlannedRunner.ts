@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  AgentMode,
   AgentLogEntry,
   CoverageState,
   Diagram,
@@ -8,6 +9,7 @@ import type {
   PlannedRunnerStatus,
   PlannedLiveEvent,
   PlannedStepEvent,
+  RunnerAgentModes,
   TestingAccount,
   TransitionResult,
   UserTestingInfo,
@@ -22,6 +24,7 @@ interface PlannedRunnerRequest {
   specRaw: string | null
   targetUrl: string
   userTestingInfo?: UserTestingInfo
+  agentModes?: RunnerAgentModes
 }
 
 interface PlannedStepResponse {
@@ -30,10 +33,17 @@ interface PlannedStepResponse {
   snapshot: PlannedRunSnapshot
 }
 
+interface PlannedRunnerSettingsResponse {
+  ok: boolean
+  runId: string | null
+  agentModes: RunnerAgentModes
+}
+
 export interface TemporaryRunnerSettings {
   targetUrl: string
   testingNotes: string
   testAccounts: TestingAccount[]
+  agentModes: RunnerAgentModes
 }
 
 export interface PlannedRunnerState {
@@ -56,6 +66,11 @@ export interface PlannedRunnerState {
   targetUrl: string
   testingNotes: string
   testAccounts: TestingAccount[]
+  runId: string | null
+  agentModes: RunnerAgentModes
+  isSettingsBusy: boolean
+  applyAgentModes: (nextModes: RunnerAgentModes) => void
+  setAgentMode: (agent: keyof RunnerAgentModes, mode: AgentMode) => void
   setTargetUrl: (url: string) => void
   setTestingNotes: (value: string) => void
   setTestAccounts: (accounts: TestingAccount[]) => void
@@ -124,6 +139,13 @@ export const usePlannedRunner = (
   const [testAccounts, setTestAccountsState] = useState<TestingAccount[]>([])
   const [logs, setLogs] = useState<AgentLogEntry[]>([])
   const [latestEvent, setLatestEvent] = useState<PlannedStepEvent | null>(null)
+  const [runId, setRunId] = useState<string | null>(null)
+  const [agentModes, setAgentModes] = useState<RunnerAgentModes>({
+    pathPlanner: 'llm',
+    stepNarrator: 'llm',
+    operatorLoop: 'llm',
+  })
+  const [isSettingsBusy, setIsSettingsBusy] = useState(false)
   const [coverage, setCoverage] = useState<CoverageState>({
     visitedNodes: new Set<string>(),
     transitionResults: {},
@@ -240,10 +262,14 @@ export const usePlannedRunner = (
       specRaw,
       targetUrl,
       userTestingInfo,
+      agentModes,
     }
-  }, [diagrams, connectors, specRaw, targetUrl, testAccounts, testingNotes])
+  }, [agentModes, diagrams, connectors, specRaw, targetUrl, testAccounts, testingNotes])
 
   const applySnapshot = useCallback((snapshot: PlannedRunSnapshot, source: 'start' | 'step' | 'auto') => {
+    setRunId(snapshot.runId)
+    setAgentModes(snapshot.agentModes)
+
     if (snapshot.totalPaths > maxKnownPathCountRef.current) {
       setPlannerRound((prev) => (prev === 0 ? 1 : prev + 1))
       maxKnownPathCountRef.current = snapshot.totalPaths
@@ -324,6 +350,54 @@ export const usePlannedRunner = (
     setStatusTone('running')
     setStatusMessage('Executing planned paths...')
   }, [running])
+
+  const applyAgentModes = useCallback((nextModes: RunnerAgentModes) => {
+    const previousModes = agentModes
+    setAgentModes(nextModes)
+
+    if (!runId) {
+      return
+    }
+
+    void (async () => {
+      setIsSettingsBusy(true)
+      try {
+        const response = await fetch(`${endpointBase}/settings`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ runId, agentModes: nextModes }),
+        })
+
+        if (!response.ok) {
+          const failureMessage = await formatHttpFailure(response, `Failed to update settings (${response.status}).`)
+          setLastError(failureMessage)
+          setStatusTone('error')
+          setStatusMessage('Update settings failed.')
+          setAgentModes(previousModes)
+          return
+        }
+
+        const payload = (await response.json()) as PlannedRunnerSettingsResponse
+        setRunId(payload.runId)
+        setAgentModes(payload.agentModes)
+      } catch (error) {
+        const failureMessage = formatRequestError(error)
+        setLastError(failureMessage)
+        setStatusTone('error')
+        setStatusMessage('Update settings failed: backend unavailable.')
+        setAgentModes(previousModes)
+      } finally {
+        setIsSettingsBusy(false)
+      }
+    })()
+  }, [agentModes, endpointBase, formatHttpFailure, formatRequestError, runId])
+
+  const setAgentMode = useCallback((agent: keyof RunnerAgentModes, mode: AgentMode) => {
+    applyAgentModes({
+      ...agentModes,
+      [agent]: mode,
+    })
+  }, [agentModes, applyAgentModes])
 
   const ensureTargetUrl = useCallback((): boolean => {
     if (targetUrl.trim().length > 0) {
@@ -473,6 +547,7 @@ export const usePlannedRunner = (
       setRunningState(false)
       setCompleted(false)
       setFullCoveragePassed(null)
+      setRunId(null)
       setPlannerRound(0)
       maxKnownPathCountRef.current = 0
       setCurrentStateId(null)
@@ -558,13 +633,20 @@ export const usePlannedRunner = (
     targetUrl,
     testingNotes,
     testAccounts,
-  }), [targetUrl, testingNotes, testAccounts])
+    agentModes,
+  }), [targetUrl, testingNotes, testAccounts, agentModes])
 
   const applyTemporarySettings = useCallback((settings: TemporaryRunnerSettings) => {
     setTargetUrl(settings.targetUrl ?? '')
     setTestingNotes(settings.testingNotes ?? '')
     setTestAccounts((settings.testAccounts ?? []).map((account) => normalizeAccount(account)))
-  }, [setTargetUrl, setTestingNotes, setTestAccounts])
+    const nextModes = settings.agentModes ?? {
+      pathPlanner: 'llm',
+      stepNarrator: 'llm',
+      operatorLoop: 'llm',
+    }
+    applyAgentModes(nextModes)
+  }, [setTargetUrl, setTestingNotes, setTestAccounts, applyAgentModes])
 
   return {
     running,
@@ -583,6 +665,11 @@ export const usePlannedRunner = (
     coverage,
     plannedStatus,
     latestEvent,
+    runId,
+    agentModes,
+    isSettingsBusy,
+    applyAgentModes,
+    setAgentMode,
     targetUrl,
     testingNotes,
     testAccounts,

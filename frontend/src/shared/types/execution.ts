@@ -4,6 +4,14 @@ export type ElementExecutionStatus = 'untested' | 'running' | 'pass' | 'fail'
 
 export type ValidationStatus = 'pass' | 'fail'
 
+export type AgentMode = 'llm' | 'mock'
+
+export interface RunnerAgentModes {
+  pathPlanner: AgentMode
+  stepNarrator: AgentMode
+  operatorLoop: AgentMode
+}
+
 export interface StepValidationResult {
   id: string
   label: string
@@ -43,6 +51,7 @@ export interface PlannedCoverageSummary {
 }
 
 export interface PlannedRunSnapshot {
+  runId: string | null
   running: boolean
   completed: boolean
   currentPathId: string | null
@@ -57,6 +66,7 @@ export interface PlannedRunSnapshot {
   nodeStatuses: Record<string, ElementExecutionStatus>
   edgeStatuses: Record<string, ElementExecutionStatus>
   coverage: PlannedCoverageSummary
+  agentModes: RunnerAgentModes
 }
 
 export interface PlannedStepEvent {

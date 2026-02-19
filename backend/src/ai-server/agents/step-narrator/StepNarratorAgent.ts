@@ -1,4 +1,5 @@
 import type { AiRuntime } from '../../runtime/types'
+import type { AgentMode } from '../../../main-server/planned-runner/types'
 import { VALIDATION_TYPES } from '../../../main-server/planned-runner/types'
 import type { StepValidationSpec, StepNarrativeInstruction } from '../../../main-server/planned-runner/types'
 import type { StepNarratorGenerateRequest } from '../../../main-server/type/contracts'
@@ -29,14 +30,14 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
   private readonly runtime: AiRuntime
   private readonly model: string
   private readonly timeoutMs: number
-  private readonly useMockReplay: boolean
+  private readonly defaultMode: AgentMode
   private readonly mockReplay: StepNarratorMockReplay
 
   constructor(runtime: AiRuntime) {
     this.runtime = runtime
     this.model = process.env.STEP_NARRATOR_MODEL ?? process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
     this.timeoutMs = Number(process.env.STEP_NARRATOR_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
-    this.useMockReplay = (process.env.STEP_NARRATOR_PROVIDER ?? 'llm').trim().toLowerCase() === 'mock-replay'
+    this.defaultMode = (process.env.STEP_NARRATOR_PROVIDER ?? 'llm').trim().toLowerCase() === 'mock-replay' ? 'mock' : 'llm'
     this.mockReplay = new StepNarratorMockReplay({
       mockDir: process.env.STEP_NARRATOR_MOCK_DIR,
       loop: (process.env.STEP_NARRATOR_MOCK_LOOP ?? 'true').trim().toLowerCase() !== 'false',
@@ -101,8 +102,9 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
 
   async generate(input: StepNarratorGenerateRequest): Promise<StepNarrativeInstruction> {
     const { step, context } = input
+    const mode = input.context.agentMode ?? this.defaultMode
 
-    if (this.useMockReplay) {
+    if (mode === 'mock') {
       const output = await this.mockReplay.generateNarrative()
 
       await writeAgentResponseLog({
@@ -173,8 +175,6 @@ export class DefaultStepNarratorAgent implements StepNarratorAgentContract {
   }
 
   async reset(): Promise<void> {
-    if (this.useMockReplay) {
-      await this.mockReplay.resetRoundCursor()
-    }
+    await this.mockReplay.resetRoundCursor()
   }
 }

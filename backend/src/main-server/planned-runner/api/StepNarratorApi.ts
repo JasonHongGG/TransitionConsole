@@ -31,6 +31,7 @@ export class StepNarratorApi implements StepNarrator {
         runId: context.runId,
         pathId: context.pathId,
         stepId: context.stepId,
+        agentMode: context.agentModes.stepNarrator,
         targetUrl: context.targetUrl,
         specRaw: context.specRaw ?? '',
         diagrams: context.systemDiagrams.map((diagram) => ({

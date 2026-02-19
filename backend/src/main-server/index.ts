@@ -10,6 +10,7 @@ import { BrowserOperatorApi } from './planned-runner/api/BrowserOperatorApi'
 import { PathPlannerApi } from './planned-runner/api/PathPlannerApi'
 import { StepNarratorApi } from './planned-runner/api/StepNarratorApi'
 import { PlannedLiveEventBus } from './planned-runner/live-events/PlannedLiveEventBus'
+import type { RunnerAgentModes } from './planned-runner/types'
 
 const log = createLogger('main-server')
 
@@ -21,6 +22,14 @@ export const startMainServer = (): void => {
   const port = Number(process.env.MAIN_SERVER_PORT ?? 7070)
   const liveEventBus = new PlannedLiveEventBus()
   const executorMode = (process.env.PLANNED_RUNNER_EXECUTOR_MODE ?? 'agent').trim().toLowerCase()
+  const resolveMode = (provider: string | undefined): 'llm' | 'mock' =>
+    (provider ?? 'llm').trim().toLowerCase() === 'mock-replay' ? 'mock' : 'llm'
+
+  const defaultAgentModes: RunnerAgentModes = {
+    pathPlanner: resolveMode(process.env.PATH_PLANNER_PROVIDER),
+    stepNarrator: resolveMode(process.env.STEP_NARRATOR_PROVIDER),
+    operatorLoop: resolveMode(process.env.OPERATOR_LOOP_PROVIDER),
+  }
 
   const executor =
     executorMode === 'pass-only'
@@ -41,6 +50,7 @@ export const startMainServer = (): void => {
     publishLiveEvent: (event) => {
       liveEventBus.publish(event)
     },
+    defaultAgentModes,
   })
 
   app.get('/health', (_req, res) => {
@@ -56,6 +66,7 @@ export const startMainServer = (): void => {
       executorMode,
       aiBaseUrl: process.env.AI_SERVER_BASE_URL ?? 'http://localhost:7081',
       operatorBaseUrl: process.env.OPERATOR_SERVER_BASE_URL ?? 'http://localhost:7082',
+      defaultAgentModes,
     })
   })
 }

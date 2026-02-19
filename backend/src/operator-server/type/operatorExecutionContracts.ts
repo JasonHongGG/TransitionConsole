@@ -101,6 +101,11 @@ export interface ExecutorContext {
   targetUrl: string
   specRaw: string | null
   userTestingInfo?: UserTestingInfo
+  agentModes: {
+    pathPlanner: 'llm' | 'mock'
+    stepNarrator: 'llm' | 'mock'
+    operatorLoop: 'llm' | 'mock'
+  }
   stepValidations: StepValidationSpec[]
   currentPathStepIndex: number
   currentPathStepTotal: number

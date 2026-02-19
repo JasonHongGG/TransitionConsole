@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { AgentLogEntry, CoverageState, Diagram, PlannedRunnerStatus, PlannedStepEvent, TestingAccount } from '../../../types'
+import type { AgentLogEntry, CoverageState, Diagram, PlannedRunnerStatus, PlannedStepEvent, RunnerAgentModes, TestingAccount } from '../../../types'
 
 interface AgentPanelProps {
   diagrams: Diagram[]
@@ -26,6 +26,9 @@ interface AgentPanelProps {
   testingNotes: string
   onTestingNotesChange: (value: string) => void
   testAccounts: TestingAccount[]
+  agentModes: RunnerAgentModes
+  isSettingsBusy: boolean
+  onAgentModeChange: (agent: keyof RunnerAgentModes, mode: 'llm' | 'mock') => void
   onTestAccountFieldChange: (index: number, field: keyof TestingAccount, value: string) => void
   onAddTestAccount: () => void
   onRemoveTestAccount: (index: number) => void
@@ -73,6 +76,9 @@ export const AgentPanel = ({
   testingNotes,
   onTestingNotesChange,
   testAccounts,
+  agentModes,
+  isSettingsBusy,
+  onAgentModeChange,
   onTestAccountFieldChange,
   onAddTestAccount,
   onRemoveTestAccount,
@@ -81,6 +87,7 @@ export const AgentPanel = ({
   onCycleFocusMode,
 }: AgentPanelProps) => {
   const [showTestingInfoModal, setShowTestingInfoModal] = useState(false)
+  const [showAgentSettingsModal, setShowAgentSettingsModal] = useState(false)
   const allStates = diagrams.flatMap((diagram) => diagram.states)
   const totalStates = allStates.length
   const visitedStates = coverage.visitedNodes.size
@@ -280,6 +287,133 @@ export const AgentPanel = ({
         )
       : null
 
+  const agentSettingsModal =
+    showAgentSettingsModal && typeof document !== 'undefined'
+      ? createPortal(
+          <div className="modal-backdrop testing-info-backdrop" role="presentation" onClick={() => setShowAgentSettingsModal(false)}>
+            <div
+              className="modal testing-info-modal agent-settings-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Agent Settings"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="modal-header testing-info-modal-header">
+                <div className="testing-info-title-wrap">
+                  <h3 className="section-title testing-info-modal-title">
+                    <span className="testing-info-title-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                        <path d="M12 8v4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                        <circle cx="12" cy="15.5" r="1" fill="currentColor" />
+                      </svg>
+                    </span>
+                    Agent Settings
+                  </h3>
+                </div>
+                <button
+                  type="button"
+                  className="icon-button testing-info-close"
+                  onClick={() => setShowAgentSettingsModal(false)}
+                  aria-label="Close agent settings"
+                >
+                  <svg viewBox="0 0 24 24" className="icon" aria-hidden="true">
+                    <path d="M7 7 17 17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                    <path d="M17 7 7 17" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="modal-body testing-info-modal-body">
+                <section className="agent-card agent-testing-info testing-info-section">
+                  <div className="agent-card-header testing-info-section-header">
+                    <h4>
+                      Agent Mode
+                      <span className="agent-settings-note">變更會在下一次 step 生效；目前進行中的 step 不會被中斷。</span>
+                    </h4>
+                  </div>
+
+                  <div className="agent-settings-grid">
+                    <label className="agent-settings-row">
+                      <span>Path Planner</span>
+                      <div className="agent-mode-switch" role="group" aria-label="Path Planner mode">
+                        <button
+                          type="button"
+                          className={`agent-mode-option ${agentModes.pathPlanner === 'llm' ? 'active' : ''}`}
+                          onClick={() => onAgentModeChange('pathPlanner', 'llm')}
+                          disabled={isSettingsBusy || agentModes.pathPlanner === 'llm'}
+                          aria-pressed={agentModes.pathPlanner === 'llm'}
+                        >
+                          LLM
+                        </button>
+                        <button
+                          type="button"
+                          className={`agent-mode-option ${agentModes.pathPlanner === 'mock' ? 'active' : ''}`}
+                          onClick={() => onAgentModeChange('pathPlanner', 'mock')}
+                          disabled={isSettingsBusy || agentModes.pathPlanner === 'mock'}
+                          aria-pressed={agentModes.pathPlanner === 'mock'}
+                        >
+                          Mock
+                        </button>
+                      </div>
+                    </label>
+
+                    <label className="agent-settings-row">
+                      <span>Step Narrator</span>
+                      <div className="agent-mode-switch" role="group" aria-label="Step Narrator mode">
+                        <button
+                          type="button"
+                          className={`agent-mode-option ${agentModes.stepNarrator === 'llm' ? 'active' : ''}`}
+                          onClick={() => onAgentModeChange('stepNarrator', 'llm')}
+                          disabled={isSettingsBusy || agentModes.stepNarrator === 'llm'}
+                          aria-pressed={agentModes.stepNarrator === 'llm'}
+                        >
+                          LLM
+                        </button>
+                        <button
+                          type="button"
+                          className={`agent-mode-option ${agentModes.stepNarrator === 'mock' ? 'active' : ''}`}
+                          onClick={() => onAgentModeChange('stepNarrator', 'mock')}
+                          disabled={isSettingsBusy || agentModes.stepNarrator === 'mock'}
+                          aria-pressed={agentModes.stepNarrator === 'mock'}
+                        >
+                          Mock
+                        </button>
+                      </div>
+                    </label>
+
+                    <label className="agent-settings-row">
+                      <span>Operator Loop</span>
+                      <div className="agent-mode-switch" role="group" aria-label="Operator Loop mode">
+                        <button
+                          type="button"
+                          className={`agent-mode-option ${agentModes.operatorLoop === 'llm' ? 'active' : ''}`}
+                          onClick={() => onAgentModeChange('operatorLoop', 'llm')}
+                          disabled={isSettingsBusy || agentModes.operatorLoop === 'llm'}
+                          aria-pressed={agentModes.operatorLoop === 'llm'}
+                        >
+                          LLM
+                        </button>
+                        <button
+                          type="button"
+                          className={`agent-mode-option ${agentModes.operatorLoop === 'mock' ? 'active' : ''}`}
+                          onClick={() => onAgentModeChange('operatorLoop', 'mock')}
+                          disabled={isSettingsBusy || agentModes.operatorLoop === 'mock'}
+                          aria-pressed={agentModes.operatorLoop === 'mock'}
+                        >
+                          Mock
+                        </button>
+                      </div>
+                    </label>
+                  </div>
+                </section>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null
+
   return (
     <div className="panel agent-panel">
       <div className="agent-panel-title">
@@ -359,6 +493,25 @@ export const AgentPanel = ({
               <rect x="4" y="5" width="16" height="14" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
               <path d="M8 9h8" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
               <path d="M8 13h5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="agent-icon-btn"
+            onClick={() => setShowAgentSettingsModal(true)}
+            title="Agent Settings"
+            aria-label="Agent Settings"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M12 4.2v2.1" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="M12 17.7v2.1" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="M4.2 12h2.1" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="M17.7 12h2.1" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="m6.6 6.6 1.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="m15.9 15.9 1.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="m17.4 6.6-1.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <path d="m8.1 15.9-1.5 1.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
             </svg>
           </button>
           <button
@@ -512,6 +665,7 @@ export const AgentPanel = ({
       </div>
 
       {testingInfoModal}
+      {agentSettingsModal}
     </div>
   )
 }

@@ -34,6 +34,7 @@ export const computeCoverageSummary = (
 }
 
 export const buildEmptySnapshot = (): PlannedRunSnapshot => ({
+  runId: null,
   running: false,
   completed: true,
   currentPathId: null,
@@ -54,6 +55,11 @@ export const buildEmptySnapshot = (): PlannedRunSnapshot => ({
     coveredEdges: 0,
     uncoveredNodeIds: [],
     uncoveredEdgeIds: [],
+  },
+  agentModes: {
+    pathPlanner: 'llm',
+    stepNarrator: 'llm',
+    operatorLoop: 'llm',
   },
 })
 
@@ -88,6 +94,7 @@ export const buildRuntimeSnapshot = (runtime: RuntimeState, forceCompleted = fal
   }
 
   return {
+    runId: runtime.runId,
     running: !completed,
     completed,
     currentPathId: currentPath?.id ?? null,
@@ -102,5 +109,6 @@ export const buildRuntimeSnapshot = (runtime: RuntimeState, forceCompleted = fal
     nodeStatuses: runtime.nodeStatuses,
     edgeStatuses: runtime.edgeStatuses,
     coverage,
+    agentModes: runtime.agentModes,
   }
 }

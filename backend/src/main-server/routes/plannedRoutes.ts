@@ -2,12 +2,18 @@ import { Router } from 'express'
 import { createLogger } from '../common/logger'
 import { PlannedRunner, type PlannedRunnerRequest } from '../planned-runner'
 import type { PlannedLiveEventInput } from '../planned-runner/types'
+import type { RunnerAgentModes } from '../planned-runner/types'
 import { PlannedLiveEventBus } from '../planned-runner/live-events/PlannedLiveEventBus'
 
 const log = createLogger('api/planned')
 
 export const createPlannedRoutes = (runner: PlannedRunner, liveEventBus: PlannedLiveEventBus): Router => {
   const router = Router()
+
+  type PlannedRunnerSettingsUpdateRequest = {
+    runId: string
+    agentModes: Partial<RunnerAgentModes>
+  }
 
   router.get('/events', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream')
@@ -39,6 +45,36 @@ export const createPlannedRoutes = (runner: PlannedRunner, liveEventBus: Planned
 
     liveEventBus.publish(payload)
     res.json({ ok: true })
+  })
+
+  router.get('/settings', (_req, res) => {
+    try {
+      const settings = runner.getAgentSettings()
+      res.json({ ok: true, ...settings })
+    } catch (error) {
+      log.log('settings get failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
+      res.status(500).json({ ok: false, error: error instanceof Error ? error.message : 'Unknown error' })
+    }
+  })
+
+  router.put('/settings', (req, res) => {
+    try {
+      const payload = req.body as PlannedRunnerSettingsUpdateRequest
+      if (!payload || typeof payload.runId !== 'string' || !payload.runId.trim() || typeof payload.agentModes !== 'object') {
+        res.status(400).json({ ok: false, error: 'runId and agentModes are required' })
+        return
+      }
+
+      const settings = runner.updateAgentSettings(payload.runId, payload.agentModes)
+      res.json({ ok: true, ...settings })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      const status = message.startsWith('Run not found') || message.startsWith('No active run') ? 404 : 500
+      log.log('settings update failed', { error: message })
+      res.status(status).json({ ok: false, error: message })
+    }
   })
 
   router.post('/start', async (req, res) => {
