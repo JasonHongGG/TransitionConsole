@@ -20,6 +20,7 @@ export interface LoopDecisionInput {
     runId: string
     pathId: string
     stepId: string
+    stepOrder: number
     targetUrl: string
     specRaw: string | null
     userTestingInfo?: ExecutorContext['userTestingInfo']
@@ -70,9 +71,19 @@ export interface LoopFunctionResponse {
   screenshotBase64?: string
 }
 
+export interface LoopAppendFunctionResponsesInput {
+  runId: string
+  pathId: string
+  stepId: string
+  stepOrder: number
+  narrativeSummary: string
+  iteration: number
+  responses: LoopFunctionResponse[]
+}
+
 export interface OperatorLoopAgent {
   decide(input: LoopDecisionInput): Promise<LoopDecision>
-  appendFunctionResponses?(runId: string, pathId: string, responses: LoopFunctionResponse[]): Promise<void>
+  appendFunctionResponses?(input: LoopAppendFunctionResponsesInput): Promise<void>
   cleanupRun?(runId: string): Promise<void>
   resetReplayCursor?(): Promise<void>
 }

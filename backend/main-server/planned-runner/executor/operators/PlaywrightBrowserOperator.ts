@@ -478,6 +478,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           runId: context.runId,
           pathId: context.pathId,
           stepId: context.stepId,
+          stepOrder: context.currentPathStepIndex + 1,
           targetUrl: context.targetUrl,
           specRaw: context.specRaw,
           userTestingInfo: context.userTestingInfo,
@@ -656,7 +657,15 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         }
 
         if (this.loopAgent.appendFunctionResponses) {
-          await this.loopAgent.appendFunctionResponses(context.runId, context.pathId, functionResponses)
+          await this.loopAgent.appendFunctionResponses({
+            runId: context.runId,
+            pathId: context.pathId,
+            stepId: context.stepId,
+            stepOrder: context.currentPathStepIndex + 1,
+            narrativeSummary: narrative.summary,
+            iteration,
+            responses: functionResponses,
+          })
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'tool execution failed'
@@ -672,7 +681,15 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             },
             screenshotBase64: lastState?.screenshot?.toString('base64'),
           }
-          await this.loopAgent.appendFunctionResponses(context.runId, context.pathId, [...functionResponses, failedResponse])
+          await this.loopAgent.appendFunctionResponses({
+            runId: context.runId,
+            pathId: context.pathId,
+            stepId: context.stepId,
+            stepOrder: context.currentPathStepIndex + 1,
+            narrativeSummary: narrative.summary,
+            iteration,
+            responses: [...functionResponses, failedResponse],
+          })
         }
         trace.push({
           iteration,

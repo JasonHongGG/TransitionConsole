@@ -146,19 +146,20 @@ app.post('/api/ai/agents/operator-loop/decide', async (req, res) => {
 app.post('/api/ai/agents/operator-loop/append-function-responses', async (req, res) => {
   try {
     const body = req.body as OperatorLoopAppendFunctionResponsesRequest
-    const runId = body.runId
-    const pathId = body.pathId
-    const responses = body.responses
 
     log.log('operator loop append function responses request', {
-      runId,
-      pathId,
-      responses: responses.length,
+      runId: body.runId,
+      pathId: body.pathId,
+      stepId: body.stepId,
+      stepOrder: body.stepOrder,
+      iteration: body.iteration,
+      responses: body.responses.length,
     })
-    await agents.operatorLoop.appendFunctionResponses(runId, pathId, responses)
+    await agents.operatorLoop.appendFunctionResponses(body)
     log.log('operator loop append function responses completed', {
-      runId,
-      pathId,
+      runId: body.runId,
+      pathId: body.pathId,
+      stepId: body.stepId,
     })
     res.json({ ok: true })
   } catch (error) {

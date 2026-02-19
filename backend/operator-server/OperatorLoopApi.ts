@@ -1,4 +1,4 @@
-import type { LoopDecision, LoopDecisionInput, LoopFunctionResponse, OperatorLoopAgent } from '../main-server/planned-runner/executor/contracts'
+import type { LoopAppendFunctionResponsesInput, LoopDecision, LoopDecisionInput, OperatorLoopAgent } from '../main-server/planned-runner/executor/contracts'
 import type {
   OperatorLoopAppendFunctionResponsesRequest,
   OperatorLoopAppendFunctionResponsesResponse,
@@ -41,11 +41,11 @@ export class OperatorLoopApi implements OperatorLoopAgent {
     )
   }
 
-  async appendFunctionResponses(runId: string, pathId: string, responses: LoopFunctionResponse[]): Promise<void> {
+  async appendFunctionResponses(input: LoopAppendFunctionResponsesInput): Promise<void> {
     await postJson<OperatorLoopAppendFunctionResponsesRequest, OperatorLoopAppendFunctionResponsesResponse>(
       this.aiBaseUrl,
       '/api/ai/agents/operator-loop/append-function-responses',
-      { runId, pathId, responses },
+      input,
     )
   }
 

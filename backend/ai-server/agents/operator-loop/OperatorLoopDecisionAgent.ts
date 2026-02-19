@@ -2,14 +2,11 @@ import type { AiRuntime } from '../../runtime/types'
 import type { AiRuntimeMessageAttachment } from '../../runtime/types'
 import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
-import type { LoopDecision, LoopDecisionInput, LoopFunctionCall, LoopFunctionResponse } from '../../../main-server/planned-runner/executor/contracts'
+import type { LoopAppendFunctionResponsesInput, LoopDecision, LoopDecisionInput, LoopFunctionCall } from '../../../main-server/planned-runner/executor/contracts'
 import type { OperatorLoopDecisionAgent as OperatorLoopDecisionAgentContract } from '../types'
 import { OPERATOR_LOOP_PROMPT } from './prompt'
 import { OperatorLoopMockReplay } from './mockReplay/OperatorLoopMockReplay'
-import crypto from 'node:crypto'
-import os from 'node:os'
-import path from 'node:path'
-import { promises as fs } from 'node:fs'
+import { RuntimeScreenshotLogger } from './RuntimeScreenshotLogger'
 
 type LoopDecisionEnvelope = {
   decision?: {
@@ -36,20 +33,16 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
   private readonly runtime: AiRuntime
   private readonly model: string
   private readonly timeoutMs: number
-  private readonly maxScreenshotBase64Chars: number
-  private readonly maxFunctionResponseScreenshotTurns: number
   private readonly maxHistoryTurns: number
   private readonly useMockReplay: boolean
   private readonly mockReplay: OperatorLoopMockReplay
+  private readonly runtimeScreenshotLogger = new RuntimeScreenshotLogger()
   private readonly conversationHistory = new Map<string, ConversationTurn[]>()
-  private readonly screenshotDirsBySession = new Map<string, string>()
 
   constructor(runtime: AiRuntime) {
     this.runtime = runtime
     this.model = process.env.OPERATOR_LOOP_MODEL ?? process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
     this.timeoutMs = Number(process.env.OPERATOR_LOOP_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
-    this.maxScreenshotBase64Chars = Number(process.env.OPERATOR_LOOP_SCREENSHOT_B64_MAX ?? 200000)
-    this.maxFunctionResponseScreenshotTurns = Number(process.env.OPERATOR_LOOP_MAX_RECENT_SCREENSHOT_TURNS ?? 3)
     this.maxHistoryTurns = Number(process.env.OPERATOR_LOOP_MAX_HISTORY_TURNS ?? 12)
     this.useMockReplay = (process.env.OPERATOR_LOOP_PROVIDER ?? 'llm').trim().toLowerCase() === 'mock-replay'
     this.mockReplay = new OperatorLoopMockReplay({
@@ -75,66 +68,6 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     }
 
     this.conversationHistory.set(key, current)
-  }
-
-  private ensureScreenshotDir(runId: string, pathId: string): string {
-    const session = this.sessionKey(runId, pathId)
-    const existing = this.screenshotDirsBySession.get(session)
-    if (existing) return existing
-
-    const dir = path.join(os.tmpdir(), 'transitor', 'operator-loop', runId, pathId)
-    this.screenshotDirsBySession.set(session, dir)
-    return dir
-  }
-
-  private async writeScreenshotAttachment(input: LoopDecisionInput): Promise<AiRuntimeMessageAttachment | null> {
-    const base64 = input.screenshotBase64
-    if (!base64) return null
-
-    if (base64.length > this.maxScreenshotBase64Chars) {
-      return null
-    }
-
-    const dir = this.ensureScreenshotDir(input.context.runId, input.context.pathId)
-    await fs.mkdir(dir, { recursive: true })
-
-    const stepHash = crypto.createHash('sha1').update(input.context.stepId).digest('hex').slice(0, 10)
-    const fileName = `step-${stepHash}-iter-${input.iteration}.png`
-    const filePath = path.join(dir, fileName)
-
-    const buffer = Buffer.from(base64, 'base64')
-    await fs.writeFile(filePath, buffer)
-
-    return {
-      type: 'file',
-      path: filePath,
-      displayName: 'screenshot.png',
-    }
-  }
-
-  private compactHistoryScreenshots(key: string): void {
-    const history = this.getHistory(key)
-    let screenshotTurnCount = 0
-
-    for (let index = history.length - 1; index >= 0; index -= 1) {
-      const turn = history[index]
-      if (turn.role !== 'user' || turn.type !== 'function_response') continue
-      if (!Array.isArray(turn.payload)) continue
-
-      const responses = turn.payload as LoopFunctionResponse[]
-      const hasScreenshot = responses.some((item) => Boolean(item.screenshotBase64))
-      if (!hasScreenshot) continue
-
-      screenshotTurnCount += 1
-      if (screenshotTurnCount <= this.maxFunctionResponseScreenshotTurns) continue
-
-      history[index] = {
-        ...turn,
-        payload: responses.map((item) => ({ ...item, screenshotBase64: undefined })),
-      }
-    }
-
-    this.conversationHistory.set(key, history)
   }
 
   private normalizeFunctionCalls(envelope: LoopDecisionEnvelope): LoopFunctionCall[] | undefined {
@@ -181,8 +114,22 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     const key = this.sessionKey(input.context.runId, input.context.pathId)
     const screenshotBase64 = input.screenshotBase64
 
-    const screenshotAttachment = await this.writeScreenshotAttachment(input)
-    const attachments = screenshotAttachment ? [screenshotAttachment] : undefined
+    const decisionScreenshotPath = await this.runtimeScreenshotLogger.saveDecisionInput({
+      runId: input.context.runId,
+      pathId: input.context.pathId,
+      stepOrder: input.context.stepOrder,
+      narrativeSummary: input.narrative.summary,
+      iteration: input.iteration,
+      screenshotBase64: input.screenshotBase64,
+    })
+
+    const attachments: AiRuntimeMessageAttachment[] | undefined = decisionScreenshotPath
+      ? [{
+          type: 'file',
+          path: decisionScreenshotPath,
+          displayName: 'screenshot.png',
+        }]
+      : undefined
 
     const payload = {
       context: input.context,
@@ -193,14 +140,14 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       actionCursor: input.actionCursor,
       narrative: input.narrative,
       validations: input.narrative.validations,
-      screenshot: screenshotAttachment
+      screenshot: decisionScreenshotPath
         ? {
             mimeType: 'image/png',
             attachment: 'screenshot.png',
           }
         : {
             omitted: true,
-            reason: `screenshotBase64 exceeds OPERATOR_LOOP_SCREENSHOT_B64_MAX (${this.maxScreenshotBase64Chars})`,
+            reason: 'decision screenshot persistence failed',
           },
       conversationHistory: this.getHistory(key),
     }
@@ -299,18 +246,29 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     }
   }
 
-  async appendFunctionResponses(runId: string, pathId: string, responses: LoopFunctionResponse[]): Promise<void> {
+  async appendFunctionResponses(input: LoopAppendFunctionResponsesInput): Promise<void> {
     if (this.useMockReplay) {
       return
     }
 
-    const key = this.sessionKey(runId, pathId)
+    await this.runtimeScreenshotLogger.saveFunctionResponses({
+      runId: input.runId,
+      pathId: input.pathId,
+      stepOrder: input.stepOrder,
+      narrativeSummary: input.narrativeSummary,
+      iteration: input.iteration,
+      responses: input.responses.map((item) => ({
+        name: item.name,
+        screenshotBase64: item.screenshotBase64,
+      })),
+    })
+
+    const key = this.sessionKey(input.runId, input.pathId)
     this.pushHistory(key, {
       role: 'user',
       type: 'function_response',
-      payload: responses.map((item) => ({ ...item, screenshotBase64: undefined })),
+      payload: input.responses.map((item) => ({ ...item, screenshotBase64: undefined })),
     })
-    this.compactHistoryScreenshots(key)
   }
 
   async cleanupRun(runId: string): Promise<void> {
@@ -320,18 +278,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
 
     const keys = Array.from(this.conversationHistory.keys()).filter((key) => key.startsWith(`${runId}:`))
     keys.forEach((key) => this.conversationHistory.delete(key))
-
-    const screenshotDirs = Array.from(this.screenshotDirsBySession.entries()).filter(([key]) => key.startsWith(`${runId}:`))
-    screenshotDirs.forEach(([key]) => this.screenshotDirsBySession.delete(key))
-    await Promise.all(
-      screenshotDirs.map(async ([, screenshotDir]) => {
-        try {
-          await fs.rm(screenshotDir, { recursive: true, force: true })
-        } catch {
-          // ignore
-        }
-      }),
-    )
+    this.runtimeScreenshotLogger.cleanupRun(runId)
   }
 
   async reset(): Promise<void> {

@@ -2,7 +2,7 @@ import type {
   StepNarrativeInstruction,
 } from '../../main-server/planned-runner/types'
 import type { StepNarratorGenerateRequest } from '../../main-server/shared/contracts'
-import type { LoopDecision, LoopDecisionInput, LoopFunctionResponse } from '../../main-server/planned-runner/executor/contracts'
+import type { LoopAppendFunctionResponsesInput, LoopDecision, LoopDecisionInput } from '../../main-server/planned-runner/executor/contracts'
 import type { PathPlannerContext, PlannedPathDraft } from '../../main-server/planned-runner/planner/plannerProvider/types'
 
 export interface PathPlannerAgent {
@@ -17,7 +17,7 @@ export interface StepNarratorAgent {
 
 export interface OperatorLoopDecisionAgent {
   decide(input: LoopDecisionInput): Promise<LoopDecision>
-  appendFunctionResponses(runId: string, pathId: string, responses: LoopFunctionResponse[]): Promise<void>
+  appendFunctionResponses(input: LoopAppendFunctionResponsesInput): Promise<void>
   cleanupRun(runId: string): Promise<void>
   reset(): Promise<void>
 }
