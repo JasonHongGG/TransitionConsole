@@ -27,9 +27,7 @@ export const startMainServer = (): void => {
       ? new PassOnlyStepExecutor()
       : new AgentStepExecutor({
           narrator: new StepNarratorApi({ aiBaseUrl: process.env.AI_SERVER_BASE_URL }),
-          operator: process.env.PLANNED_RUNNER_REAL_BROWSER === 'true'
-            ? new BrowserOperatorApi({ operatorBaseUrl: process.env.OPERATOR_SERVER_BASE_URL })
-            : undefined,
+          operator: new BrowserOperatorApi({ operatorBaseUrl: process.env.OPERATOR_SERVER_BASE_URL }),
           publishLiveEvent: (event) => {
             liveEventBus.publish(event)
           },

@@ -1,5 +1,5 @@
-import type { PathPlanner, PathPlannerContext, PlannedPathDraft } from '../planner/plannerProvider/types'
-import type { PathPlannerGenerateRequest, PathPlannerGenerateResponse, PathPlannerResetResponse } from '../../shared/contracts'
+import type { PathPlanner, PathPlannerContext, PlannedPathDraft } from '../planner/types'
+import type { PathPlannerGenerateRequest, PathPlannerGenerateResponse, PathPlannerResetResponse } from '../../type/contracts'
 import { postApiJson } from './apiClient'
 
 export class PathPlannerApi implements PathPlanner {

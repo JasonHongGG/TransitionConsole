@@ -1,6 +1,6 @@
 import type { ExecutorContext, PlannedTransitionStep, StepNarrativeInstruction } from '../types'
 import type { StepNarrator } from '../executor/contracts'
-import type { StepNarratorGenerateRequest, StepNarratorGenerateResponse, StepNarratorResetResponse } from '../../shared/contracts'
+import type { StepNarratorGenerateRequest, StepNarratorGenerateResponse, StepNarratorResetResponse } from '../../type/contracts'
 import { postApiJson } from './apiClient'
 
 export class StepNarratorApi implements StepNarrator {

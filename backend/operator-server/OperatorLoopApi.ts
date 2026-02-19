@@ -1,5 +1,8 @@
-import type { LoopAppendFunctionResponsesInput, LoopDecision, LoopDecisionInput, OperatorLoopAgent } from '../main-server/planned-runner/executor/contracts'
 import type {
+  LoopAppendFunctionResponsesInput,
+  LoopDecision,
+  LoopDecisionInput,
+  OperatorLoopAgent,
   OperatorLoopAppendFunctionResponsesRequest,
   OperatorLoopAppendFunctionResponsesResponse,
   OperatorLoopCleanupRunRequest,
@@ -7,7 +10,7 @@ import type {
   OperatorLoopDecideRequest,
   OperatorLoopDecideResponse,
   OperatorLoopResetResponse,
-} from '../main-server/shared/contracts'
+} from './type/operatorLoopContracts'
 
 const postJson = async <TRequest extends object, TResponse>(baseUrl: string, path: string, body: TRequest): Promise<TResponse> => {
   const response = await fetch(`${baseUrl}${path}`, {

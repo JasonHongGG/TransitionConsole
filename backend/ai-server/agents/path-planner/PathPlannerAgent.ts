@@ -1,4 +1,4 @@
-import type { PathPlannerContext, PlannedPathDraft } from '../../../main-server/planned-runner/planner/plannerProvider/types'
+import type { PathPlannerContext, PlannedPathDraft } from '../../../main-server/planned-runner/planner/types'
 import type { AiRuntime } from '../../runtime/types'
 import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'

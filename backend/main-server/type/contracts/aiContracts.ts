@@ -1,6 +1,5 @@
 import type { DiagramValidation, StepNarrativeInstruction } from '../../planned-runner/types'
-import type { LoopAppendFunctionResponsesInput, LoopDecision, LoopDecisionInput } from '../../planned-runner/executor/contracts'
-import type { PathPlannerContext, PlannedPathDraft } from '../../planned-runner/planner/plannerProvider/types'
+import type { PathPlannerContext, PlannedPathDraft } from '../../planned-runner/planner/types'
 
 export interface ApiOkResponse {
   ok: boolean
@@ -106,18 +105,3 @@ export interface StepNarratorGenerateResponse {
 }
 
 export type StepNarratorResetResponse = ApiOkResponse
-
-export type OperatorLoopDecideRequest = LoopDecisionInput
-export type OperatorLoopDecideResponse = LoopDecision
-
-export type OperatorLoopAppendFunctionResponsesRequest = LoopAppendFunctionResponsesInput
-
-export type OperatorLoopAppendFunctionResponsesResponse = ApiOkResponse
-
-export interface OperatorLoopCleanupRunRequest {
-  runId: string
-}
-
-export type OperatorLoopCleanupRunResponse = ApiOkResponse
-
-export type OperatorLoopResetResponse = ApiOkResponse

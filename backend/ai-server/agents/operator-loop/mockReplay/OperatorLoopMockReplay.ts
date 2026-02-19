@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { createLogger } from '../../../../common/logger'
-import type { LoopDecision } from '../../../../main-server/planned-runner/executor/contracts'
+import type { LoopDecision } from '../../../../operator-server/type'
 import { loadOperatorLoopMockReplayItems, type OperatorLoopMockReplayItem } from './operatorLoopMockReplayReader'
 
 const log = createLogger('mock-replay-operator-loop')

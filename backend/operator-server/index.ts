@@ -2,10 +2,14 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import { createLogger } from '../common/logger'
-import { PlaywrightBrowserOperator } from '../main-server/planned-runner/executor/operators/PlaywrightBrowserOperator'
-import type { OperatorCleanupRunRequest, OperatorResetReplayResponse, OperatorStepRunRequest } from '../main-server/shared/contracts'
+import { PlaywrightBrowserOperator } from './operators/PlaywrightBrowserOperator'
+import type {
+  OperatorCleanupRunRequest,
+  OperatorResetReplayResponse,
+  OperatorStepRunRequest,
+  PlannedLiveEventInput,
+} from './type'
 import { OperatorLoopApi } from './OperatorLoopApi'
-import type { PlannedLiveEventInput } from '../main-server/planned-runner/types'
 
 const log = createLogger('operator-server')
 const app = express()

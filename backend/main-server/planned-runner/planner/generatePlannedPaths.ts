@@ -1,4 +1,4 @@
-import type { PathPlanner, PlannerHistoryPath } from './plannerProvider/types'
+import type { PathPlanner, PlannerHistoryPath } from './types'
 import type {
   DiagramConnector,
   DiagramLike,

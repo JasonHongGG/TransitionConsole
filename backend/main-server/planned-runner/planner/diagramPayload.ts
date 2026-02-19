@@ -1,4 +1,4 @@
-import type { PlannerDiagramPayload, PlannerDiagramState, PlannerDiagramTransition } from './plannerProvider/types'
+import type { PlannerDiagramPayload, PlannerDiagramState, PlannerDiagramTransition } from './types'
 import type { DiagramConnector, DiagramLike, ElementExecutionStatus } from '../types'
 import { isWalked } from './common'
 

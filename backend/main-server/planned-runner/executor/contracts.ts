@@ -1,9 +1,7 @@
 import type {
-  ExecutionFailureCode,
   ExecutorContext,
   StepNarrativeInstruction,
   OperatorTraceItem,
-  OperatorTerminationReason,
   PlannedTransitionStep,
   StepValidationSpec,
   StepExecutionResult,
@@ -12,88 +10,6 @@ import type {
 
 export interface StepNarrator {
   generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction>
-  resetReplayCursor?(): Promise<void>
-}
-
-export interface LoopDecisionInput {
-  context: {
-    runId: string
-    pathId: string
-    stepId: string
-    stepOrder: number
-    targetUrl: string
-    specRaw: string | null
-    userTestingInfo?: ExecutorContext['userTestingInfo']
-  }
-  step: {
-    edgeId: string
-    from: {
-      stateId: string
-      diagramId: string
-    }
-    to: {
-      stateId: string
-      diagramId: string
-    }
-    summary?: string
-    semanticGoal?: string
-  }
-  runtimeState: {
-    url: string
-    title: string
-    iteration: number
-    actionCursor: number
-  }
-  screenshotBase64: string
-  narrative: StepNarrativeInstruction
-}
-
-export interface LoopFunctionCall {
-  name: string
-  args: Record<string, unknown>
-  description?: string
-}
-
-export interface LoopDecision {
-  kind: 'complete' | 'act' | 'fail'
-  reason: string
-  progressSummary?: string
-  functionCalls?: LoopFunctionCall[]
-  failureCode?: ExecutionFailureCode
-  terminationReason?: OperatorTerminationReason
-}
-
-export interface LoopFunctionResponse {
-  name: string
-  arguments: Record<string, unknown>
-  response: {
-    url?: string
-    status: 'success' | 'failed'
-    message?: string
-    result?: unknown
-  }
-  screenshotBase64?: string
-}
-
-export interface LoopAppendFunctionResponsesInput {
-  runId: string
-  pathId: string
-  stepId: string
-  stepOrder: number
-  narrativeSummary: string
-  runtimeState: {
-    url: string
-    title: string
-    iteration: number
-    actionCursor: number
-  }
-  responses: LoopFunctionResponse[]
-}
-
-export interface OperatorLoopAgent {
-  decide(input: LoopDecisionInput): Promise<LoopDecision>
-  appendFunctionResponses?(input: LoopAppendFunctionResponsesInput): Promise<void>
-  cleanupRun?(runId: string): Promise<void>
   resetReplayCursor?(): Promise<void>
 }
 
@@ -116,82 +32,4 @@ export interface BrowserOperator {
   ): Promise<BrowserOperatorRunResult>
   cleanupRun?(runId: string): Promise<void>
   resetReplayCursor?(): Promise<void>
-}
-
-export type NetworkRecord = { method: string; url: string; status: number | null }
-
-export interface OverlayElement {
-  id: string
-  hidden: boolean
-  style: Record<string, string>
-}
-
-export interface DocumentLike {
-  getElementById: (id: string) => OverlayElement | null
-  createElement: (tagName: string) => OverlayElement
-  body: {
-    appendChild: (node: OverlayElement) => void
-  }
-}
-
-export interface BrowserPage {
-  goto: (url: string, options?: { waitUntil?: 'domcontentloaded' | 'load'; timeout?: number }) => Promise<unknown>
-  goBack: () => Promise<unknown>
-  goForward: () => Promise<unknown>
-  evaluate: <Arg>(
-    pageFunction: (arg: Arg) => unknown,
-    arg: Arg,
-  ) => Promise<unknown>
-  waitForTimeout: (ms: number) => Promise<void>
-  screenshot: (options: { path?: string; fullPage?: boolean; type?: 'png' | 'jpeg' }) => Promise<unknown>
-  url: () => string
-  title: () => Promise<string>
-  mouse: {
-    click: (x: number, y: number) => Promise<void>
-    move: (x: number, y: number) => Promise<void>
-    wheel: (deltaX: number, deltaY: number) => Promise<void>
-    down: () => Promise<void>
-    up: () => Promise<void>
-  }
-  locator: (selector: string) => {
-    first: () => {
-      click: (options?: { timeout?: number }) => Promise<void>
-      fill: (value: string, options?: { timeout?: number }) => Promise<void>
-      isVisible: (options?: { timeout?: number }) => Promise<boolean>
-      count: () => Promise<number>
-      textContent: () => Promise<string | null>
-    }
-    count: () => Promise<number>
-  }
-  getByRole: (role: string, options: { name?: string | RegExp }) => {
-    first: () => {
-      click: (options?: { timeout?: number }) => Promise<void>
-    }
-  }
-  keyboard: {
-    down: (key: string) => Promise<void>
-    up: (key: string) => Promise<void>
-    press: (key: string) => Promise<void>
-    type: (text: string) => Promise<void>
-  }
-}
-
-export interface BrowserSession {
-  browser: {
-    close: () => Promise<void>
-  }
-  context: {
-    close: () => Promise<void>
-    newPage: () => Promise<BrowserPage>
-    on: (event: string, handler: (...args: unknown[]) => void) => void
-  }
-  page: BrowserPage
-  network: NetworkRecord[]
-}
-
-export interface OperatorObservation {
-  url: string
-  title: string
-  domSummary: string
-  networkSummary: string
 }

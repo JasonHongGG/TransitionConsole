@@ -5,7 +5,8 @@ import type {
   PlannedTransitionStep,
   StepValidationSpec,
   StepValidationResult,
-} from '../../types'
+  PlannedLiveEventInput,
+} from '../type/operatorExecutionContracts'
 import type {
   BrowserOperator,
   BrowserOperatorRunResult,
@@ -15,9 +16,8 @@ import type {
   LoopFunctionCall,
   LoopFunctionResponse,
   OperatorLoopAgent,
-} from '../contracts'
-import type { PlannedLiveEventInput } from '../../types'
-import { OperatorLoopApi } from './OperatorLoopApi'
+} from './contracts'
+import { OperatorLoopApi } from '../OperatorLoopApi'
 
 type ToolPayload = Record<string, unknown>
 

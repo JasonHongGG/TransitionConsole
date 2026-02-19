@@ -10,7 +10,6 @@ import type {
   StepNarrativeInstruction,
 } from '../types'
 import type { BrowserOperator, StepNarrator } from './contracts'
-import { PlaywrightBrowserOperator, SimulatedBrowserOperator } from './operators'
 
 const log = createLogger('planned-executor')
 
@@ -30,9 +29,11 @@ export class AgentStepExecutor implements StepExecutor {
     if (!options?.narrator) {
       throw new Error('AgentStepExecutor requires narrator injection (use StepNarratorApi)')
     }
+    if (!options?.operator) {
+      throw new Error('AgentStepExecutor requires operator injection (use BrowserOperatorApi)')
+    }
     this.narrator = options.narrator
-    const realOperatorEnabled = process.env.PLANNED_RUNNER_REAL_BROWSER === 'true'
-    this.operator = options?.operator ?? (realOperatorEnabled ? new PlaywrightBrowserOperator() : new SimulatedBrowserOperator())
+    this.operator = options.operator
     this.narratorMode = (process.env.STEP_NARRATOR_MODE ?? 'agent').trim().toLowerCase() === 'input' ? 'input' : 'agent'
     this.publishLiveEvent = options?.publishLiveEvent
   }

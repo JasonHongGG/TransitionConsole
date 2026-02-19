@@ -1,7 +1,7 @@
 import type { AiRuntime } from '../../runtime/types'
 import { VALIDATION_TYPES } from '../../../main-server/planned-runner/types'
 import type { StepValidationSpec, StepNarrativeInstruction } from '../../../main-server/planned-runner/types'
-import type { StepNarratorGenerateRequest } from '../../../main-server/shared/contracts'
+import type { StepNarratorGenerateRequest } from '../../../main-server/type/contracts'
 import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
 import type { StepNarratorAgent as StepNarratorAgentContract } from '../types'

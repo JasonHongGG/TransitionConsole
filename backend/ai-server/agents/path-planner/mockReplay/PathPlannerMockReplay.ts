@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { createLogger } from '../../../../common/logger'
-import type { PathPlannerContext, PlannedPathDraft } from '../../../../main-server/planned-runner/planner/plannerProvider/types'
+import type { PathPlannerContext, PlannedPathDraft } from '../../../../main-server/planned-runner/planner/types'
 import { loadPathPlannerMockReplayItems, type PathPlannerMockReplayItem } from './pathPlannerMockReplayReader'
 
 const log = createLogger('mock-replay-path-planner')

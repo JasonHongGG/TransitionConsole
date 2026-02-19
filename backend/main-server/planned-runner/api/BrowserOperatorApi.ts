@@ -10,7 +10,7 @@ import type {
   OperatorResetReplayResponse,
   OperatorStepRunRequest,
   OperatorStepRunResponse,
-} from '../../shared/contracts'
+} from '../../../operator-server/type'
 import { postApiJson } from './apiClient'
 
 export class BrowserOperatorApi implements BrowserOperator {

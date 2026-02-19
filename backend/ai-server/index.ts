@@ -3,12 +3,14 @@ import express from 'express'
 import cors from 'cors'
 import { createLogger } from '../common/logger'
 import type {
+  PathPlannerGenerateRequest,
+  StepNarratorGenerateRequest,
+} from '../main-server/type/contracts'
+import type {
   OperatorLoopAppendFunctionResponsesRequest,
   OperatorLoopCleanupRunRequest,
   OperatorLoopDecideRequest,
-  PathPlannerGenerateRequest,
-  StepNarratorGenerateRequest,
-} from '../main-server/shared/contracts'
+} from '../operator-server/type'
 import { createAiRuntime } from './runtime/AiRuntimeFactory'
 import { createAiAgents } from './agents/AiAgentFactory'
 

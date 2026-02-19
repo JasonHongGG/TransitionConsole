@@ -1,7 +1,7 @@
 import type {
   LoopDecision,
   LoopFunctionCall,
-} from '../../../../main-server/planned-runner/executor/contracts'
+} from '../../../../operator-server/type'
 import { loadSortedMockJsonFiles } from '../../common/mockReplayFileLoader'
 
 type ParsedOperatorResponse = {

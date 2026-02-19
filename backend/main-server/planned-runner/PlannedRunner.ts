@@ -1,5 +1,5 @@
 import { createLogger } from '../common/logger'
-import type { PathPlanner } from './planner/plannerProvider/types'
+import type { PathPlanner } from './planner/types'
 import { StubStepExecutor } from './executor'
 import { buildRuntimeGraph } from './graph'
 import { generatePlannedPaths, withReindexedPaths } from './planner'
