@@ -52,7 +52,8 @@ export const startMainServer = (): void => {
   app.use('/api/planned', createPlannedRoutes(plannedRunner, liveEventBus))
 
   app.listen(port, () => {
-    log.log(`Main server listening on ${port}`, {
+    log.log('Main server listening', {
+      port,
       mode: 'split',
       executorMode,
       aiBaseUrl: process.env.AI_SERVER_BASE_URL ?? 'http://localhost:7081',

@@ -209,7 +209,8 @@ app.post('/api/ai/agents/operator-loop/reset', async (_req, res) => {
 
 const port = Number(process.env.AI_SERVER_PORT ?? 7081)
 app.listen(port, () => {
-  log.log(`AI server listening on ${port}`, {
+  log.log('AI server listening', {
+    port,
     provider: providerId,
   })
 })

@@ -104,7 +104,7 @@ export class CopilotSdkRuntime implements AiRuntime {
           sendAndWaitMs: sendElapsed,
           destroySessionMs: destroyElapsed,
         }
-        log.log(`generate profiling ${JSON.stringify(profilePayload)}`)
+        log.log('generate profiling', profilePayload)
       }
 
       return finalEvent?.data?.content ?? ''

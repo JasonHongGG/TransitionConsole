@@ -118,5 +118,7 @@ app.post('/api/operator/step-executor/reset-replay', async (_req, res) => {
 
 const port = Number(process.env.OPERATOR_SERVER_PORT ?? 7082)
 app.listen(port, () => {
-  log.log(`Operator server listening on ${port}`)
+  log.log('Operator server listening', {
+    port,
+  })
 })
