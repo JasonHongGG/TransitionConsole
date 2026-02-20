@@ -1,5 +1,27 @@
 import type { UserTestingInfo } from './operatorExecutionContracts'
 
+export interface LoopValidationInput {
+  id: string
+  type: string
+  description: string
+  expected?: string
+  selector?: string
+  timeoutMs?: number
+}
+
+export interface LoopConfirmedValidation {
+  id: string
+  status: 'pass' | 'fail'
+  reason: string
+}
+
+export interface LoopValidationUpdate {
+  id: string
+  status: 'pass' | 'fail'
+  reason: string
+  actual?: string
+}
+
 export interface LoopDecisionInput {
   agentMode?: 'llm' | 'mock'
   context: {
@@ -34,14 +56,8 @@ export interface LoopDecisionInput {
   narrative: {
     summary: string
     taskDescription: string
-    validations: Array<{
-      id: string
-      type: string
-      description: string
-      expected?: string
-      selector?: string
-      timeoutMs?: number
-    }>
+    pendingValidations: LoopValidationInput[]
+    confirmedValidations: LoopConfirmedValidation[]
   }
 }
 
@@ -64,7 +80,8 @@ export type LoopTerminationReason = 'completed' | 'max-iterations' | 'operator-e
 export interface LoopDecision {
   kind: 'complete' | 'act' | 'fail'
   reason: string
-  progressSummary?: string
+  progressSummary: string
+  validationUpdates: LoopValidationUpdate[]
   functionCalls?: LoopFunctionCall[]
   failureCode?: LoopFailureCode
   terminationReason?: LoopTerminationReason

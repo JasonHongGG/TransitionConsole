@@ -8,12 +8,20 @@ import type {
   StepExecutionResult,
   StepExecutor,
   StepNarrativeInstruction,
+  StepValidationSummary,
 } from '../types'
 import type { BrowserOperator, StepNarrator } from './contracts'
 
 const log = createLogger('planned-executor')
 
 const toElapsedSeconds = (elapsedMs: number): number => Math.max(1, Math.ceil(elapsedMs / 1000))
+
+const summarizeValidationResults = (total: number, pass: number, fail: number, pending: number): StepValidationSummary => ({
+  total,
+  pass,
+  fail,
+  pending,
+})
 
 export class AgentStepExecutor implements StepExecutor {
   private readonly narrator: StepNarrator
@@ -188,6 +196,7 @@ export class AgentStepExecutor implements StepExecutor {
           failureCode: 'narrative-planner-failed',
           terminationReason: 'criteria-unmet',
           validationResults: [],
+          validationSummary: summarizeValidationResults(0, 0, 0, 0),
         }
       }
 
@@ -226,6 +235,7 @@ export class AgentStepExecutor implements StepExecutor {
         blockedReason: operated.blockedReason,
         failureCode: operated.failureCode,
         validationResults: operated.validationResults,
+        validationSummary: operated.validationSummary,
         narrative,
         validations,
         loopIterations: operated.trace.map((item) => ({
@@ -260,6 +270,7 @@ export class AgentStepExecutor implements StepExecutor {
             ? 'narrative-planner-failed'
             : 'unexpected-error',
         validationResults: [],
+        validationSummary: summarizeValidationResults(0, 0, 0, 0),
       }
     }
   }

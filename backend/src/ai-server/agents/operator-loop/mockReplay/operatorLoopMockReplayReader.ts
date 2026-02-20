@@ -17,6 +17,12 @@ type ParsedOperatorResponse = {
     description?: string
   }>
   progressSummary?: string
+  validationUpdates?: Array<{
+    id?: string
+    status?: 'pass' | 'fail'
+    reason?: string
+    actual?: string
+  }>
 }
 
 const parseFunctionCalls = (input: ParsedOperatorResponse['functionCalls']): LoopFunctionCall[] | undefined => {
@@ -33,7 +39,17 @@ const parseFunctionCalls = (input: ParsedOperatorResponse['functionCalls']): Loo
 }
 
 const parseDecision = (input: ParsedOperatorResponse | undefined): LoopDecision | null => {
-  if (!input?.decision?.kind || !input.decision.reason) return null
+  if (!input?.decision?.kind || !input.decision.reason || !input.progressSummary?.trim() || !Array.isArray(input.validationUpdates)) return null
+
+  const validationUpdates = input.validationUpdates
+    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    .filter((item) => Boolean(item.id && item.reason && (item.status === 'pass' || item.status === 'fail')))
+    .map((item) => ({
+      id: item.id!,
+      status: item.status!,
+      reason: item.reason!,
+      actual: item.actual,
+    }))
 
   if (input.decision.kind === 'act') {
     const functionCalls = parseFunctionCalls(input.functionCalls)
@@ -43,6 +59,7 @@ const parseDecision = (input: ParsedOperatorResponse | undefined): LoopDecision 
       kind: 'act',
       reason: input.decision.reason,
       progressSummary: input.progressSummary,
+      validationUpdates,
       functionCalls,
     }
   }
@@ -52,6 +69,7 @@ const parseDecision = (input: ParsedOperatorResponse | undefined): LoopDecision 
       kind: 'complete',
       reason: input.decision.reason,
       progressSummary: input.progressSummary,
+      validationUpdates,
       terminationReason: input.decision.terminationReason ?? 'completed',
     }
   }
@@ -60,6 +78,7 @@ const parseDecision = (input: ParsedOperatorResponse | undefined): LoopDecision 
     kind: 'fail',
     reason: input.decision.reason,
     progressSummary: input.progressSummary,
+    validationUpdates,
     failureCode: input.decision.failureCode ?? 'operator-no-progress',
     terminationReason: input.decision.terminationReason ?? 'criteria-unmet',
   }

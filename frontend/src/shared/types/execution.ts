@@ -2,7 +2,9 @@ export type TransitionResult = 'pass' | 'fail'
 
 export type ElementExecutionStatus = 'untested' | 'running' | 'pass' | 'fail'
 
-export type ValidationStatus = 'pass' | 'fail'
+export type ValidationStatus = 'pass' | 'fail' | 'pending'
+
+export type ValidationResolution = 'newly-verified' | 'reused-cache' | 'unverified'
 
 export type AgentMode = 'llm' | 'mock'
 
@@ -17,6 +19,16 @@ export interface StepValidationResult {
   label: string
   status: ValidationStatus
   reason: string
+  cacheKey: string
+  resolution: ValidationResolution
+  checkedAt: string
+}
+
+export interface StepValidationSummary {
+  total: number
+  pass: number
+  fail: number
+  pending: number
 }
 
 export type PlannedStepKind = 'transition' | 'connector'
@@ -77,6 +89,7 @@ export interface PlannedStepEvent {
   message: string
   blockedReason?: string
   validationResults: StepValidationResult[]
+  validationSummary: StepValidationSummary
 }
 
 export interface PlannedRunPlan {

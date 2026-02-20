@@ -3,6 +3,7 @@ import type {
   OperatorTraceItem,
   StepNarrativeInstruction,
   PlannedTransitionStep,
+  StepValidationSummary,
   StepValidationSpec,
   StepValidationResult,
   PlannedLiveEventInput,
@@ -30,6 +31,10 @@ type CurrentState = {
 type ToolExecutionResult = {
   state: CurrentState
   result?: unknown
+}
+
+type ValidationLedgerEntry = StepValidationResult & {
+  updatedIteration: number
 }
 
 const PLAYWRIGHT_KEY_MAP: Record<string, string> = {
@@ -449,18 +454,82 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
   private buildValidationResultsFromDecision(
     validations: StepValidationSpec[],
-    decision: 'complete' | 'fail',
-    reason: string,
+    ledger: Map<string, ValidationLedgerEntry>,
+    stepEdgeId: string,
+    finalIteration: number,
   ): StepValidationResult[] {
-    return validations.map((validation) => ({
-      id: validation.id,
-      label: validation.description,
-      validationType: validation.type,
-      status: decision === 'complete' ? 'pass' : 'fail',
-      reason: `copilot-decision:${reason}`,
-      expected: validation.expected,
-      actual: 'decided-by-copilot',
-    }))
+    const now = new Date().toISOString()
+    return validations.map((validation) => {
+      const cacheKey = `${stepEdgeId}::${validation.id}`
+      const existing = ledger.get(cacheKey)
+      if (!existing) {
+        return {
+          id: validation.id,
+          label: validation.description,
+          validationType: validation.type,
+          status: 'pending',
+          reason: 'not-yet-verified',
+          cacheKey,
+          resolution: 'unverified',
+          checkedAt: now,
+          expected: validation.expected,
+          actual: undefined,
+        }
+      }
+
+      return {
+        ...existing,
+        resolution: existing.updatedIteration === finalIteration ? 'newly-verified' : 'reused-cache',
+      }
+    })
+  }
+
+  private summarizeValidationResults(results: StepValidationResult[]): StepValidationSummary {
+    return results.reduce<StepValidationSummary>(
+      (summary, item) => {
+        summary.total += 1
+        if (item.status === 'pass') summary.pass += 1
+        else if (item.status === 'fail') summary.fail += 1
+        else summary.pending += 1
+        return summary
+      },
+      { total: 0, pass: 0, fail: 0, pending: 0 },
+    )
+  }
+
+  private applyValidationUpdates(
+    validationsById: Map<string, StepValidationSpec>,
+    ledger: Map<string, ValidationLedgerEntry>,
+    stepEdgeId: string,
+    updates: Array<{ id: string; status: 'pass' | 'fail'; reason: string; actual?: string }>,
+    iteration: number,
+  ): void {
+    const checkedAt = new Date().toISOString()
+
+    for (const update of updates) {
+      const validation = validationsById.get(update.id)
+      if (!validation) continue
+
+      const cacheKey = `${stepEdgeId}::${validation.id}`
+      const existing = ledger.get(cacheKey)
+      if (existing?.status === 'pass') {
+        continue
+      }
+
+      ledger.set(cacheKey, {
+        id: validation.id,
+        label: validation.description,
+        validationType: validation.type,
+        status: update.status,
+        reason: update.reason,
+        cacheKey,
+        resolution: 'newly-verified',
+        checkedAt,
+        expected: validation.expected,
+        actual: update.actual,
+        updatedIteration: iteration,
+      })
+    }
   }
 
   private normalizeFunctionCallsFromDecision(decision: { functionCalls?: LoopFunctionCall[] }): LoopFunctionCall[] {
@@ -482,6 +551,8 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     let lastState: CurrentState | null = await this.currentState(page)
     const maxLoopRounds = 12
     let actionCursor = 0
+    const validationsById = new Map(validations.map((validation) => [validation.id, validation] as const))
+    const validationLedger = new Map<string, ValidationLedgerEntry>()
 
     for (let iteration = 1; iteration <= maxLoopRounds; iteration += 1) {
       const titleSummary = lastState.title.replace(/\s+/g, ' ').slice(0, 120)
@@ -531,7 +602,31 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         },
         runtimeState,
         screenshotBase64: lastState.screenshot.toString('base64'),
-        narrative,
+        narrative: {
+          summary: narrative.summary,
+          taskDescription: narrative.taskDescription,
+          pendingValidations: validations
+            .filter((validation) => !validationLedger.has(`${step.edgeId}::${validation.id}`))
+            .map((validation) => ({
+              id: validation.id,
+              type: validation.type,
+              description: validation.description,
+              expected: validation.expected,
+              selector: validation.selector,
+              timeoutMs: validation.timeoutMs,
+            })),
+          confirmedValidations: validations
+            .map((validation) => {
+              const existing = validationLedger.get(`${step.edgeId}::${validation.id}`)
+              if (!existing || existing.status === 'pending') return null
+              return {
+                id: validation.id,
+                status: existing.status,
+                reason: existing.reason,
+              }
+            })
+            .filter((item): item is { id: string; status: 'pass' | 'fail'; reason: string } => Boolean(item)),
+        },
       })
       const decisionElapsedMs = Date.now() - decisionStartedAt
       const decisionElapsedSeconds = toElapsedSeconds(decisionElapsedMs)
@@ -565,8 +660,13 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         actionCursor,
       })
 
+      this.applyValidationUpdates(validationsById, validationLedger, step.edgeId, decision.validationUpdates, iteration)
+
+      const currentValidationResults = this.buildValidationResultsFromDecision(validations, validationLedger, step.edgeId, iteration)
+      const currentValidationSummary = this.summarizeValidationResults(currentValidationResults)
+
       if (decision.kind === 'complete') {
-        const validationResults = this.buildValidationResultsFromDecision(validations, 'complete', decision.reason)
+        const allPassed = currentValidationSummary.total > 0 && currentValidationSummary.pass === currentValidationSummary.total
         trace.push({
           iteration,
           url: runtimeState.url,
@@ -576,9 +676,25 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           detail: decision.reason,
         })
 
+        if (!allPassed) {
+          return {
+            result: 'fail',
+            blockedReason: 'step completion rejected: all validations must pass',
+            failureCode: 'validation-failed',
+            terminationReason: 'validation-failed',
+            validationResults: currentValidationResults,
+            validationSummary: currentValidationSummary,
+            trace,
+            evidence: {
+              domSummary: `current_url=${page.url()}`,
+            },
+          }
+        }
+
         return {
           result: 'pass',
-          validationResults,
+          validationResults: currentValidationResults,
+          validationSummary: currentValidationSummary,
           trace,
           evidence: {
             domSummary: `current_url=${page.url()}`,
@@ -588,13 +704,13 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
       if (decision.kind === 'fail') {
         const failureCode = decision.failureCode ?? 'operator-no-progress'
-        const validationResults = this.buildValidationResultsFromDecision(validations, 'fail', decision.reason)
         return {
           result: 'fail',
           blockedReason: decision.reason,
           failureCode,
           terminationReason: decision.terminationReason ?? 'criteria-unmet',
-          validationResults,
+          validationResults: currentValidationResults,
+          validationSummary: currentValidationSummary,
           trace,
           evidence: {
             domSummary: `current_url=${page.url()}`,
@@ -604,13 +720,13 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
       const nextFunctionCalls = this.normalizeFunctionCallsFromDecision(decision)
       if (nextFunctionCalls.length === 0) {
-        const validationResults = this.buildValidationResultsFromDecision(validations, 'fail', 'loop agent returned act without action payload')
         return {
           result: 'fail',
           blockedReason: 'loop agent returned act without action payload',
           failureCode: 'operator-no-progress',
           terminationReason: 'criteria-unmet',
-          validationResults,
+          validationResults: currentValidationResults,
+          validationSummary: currentValidationSummary,
           trace,
           evidence: {
             domSummary: `current_url=${page.url()}`,
@@ -709,7 +825,6 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'tool execution failed'
-        const validationResults = this.buildValidationResultsFromDecision(validations, 'fail', message)
         if (this.loopAgent.appendFunctionResponses) {
           const failedResponse: LoopFunctionResponse = {
             name: activeFunctionCall?.name ?? 'unknown_tool',
@@ -778,7 +893,8 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           blockedReason: message,
           failureCode: 'operator-action-failed',
           terminationReason: 'operator-error',
-          validationResults,
+          validationResults: currentValidationResults,
+          validationSummary: currentValidationSummary,
           trace,
           evidence: {
             domSummary: `current_url=${lastState?.url ?? page.url()}`,
@@ -787,13 +903,15 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
       }
     }
 
-    const finalValidationResults = this.buildValidationResultsFromDecision(validations, 'fail', 'max iterations reached')
+    const finalValidationResults = this.buildValidationResultsFromDecision(validations, validationLedger, step.edgeId, maxLoopRounds)
+    const finalValidationSummary = this.summarizeValidationResults(finalValidationResults)
     return {
       result: 'fail',
       blockedReason: 'Max iterations reached before Copilot completed the step',
       failureCode: 'operator-timeout',
       terminationReason: 'max-iterations',
       validationResults: finalValidationResults,
+      validationSummary: finalValidationSummary,
       trace,
       evidence: {
         domSummary: `current_url=${lastState?.url ?? page.url()}`,

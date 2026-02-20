@@ -2206,6 +2206,12 @@
   border-color: rgba(244, 103, 103, 0.35);
 }
 
+.validation-status-tag.pending {
+  color: #f8e8b0;
+  background: rgba(230, 178, 62, 0.16);
+  border-color: rgba(230, 178, 62, 0.35);
+}
+
 .validation-label,
 .validation-reason {
   font-size: 9px;

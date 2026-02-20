@@ -6,6 +6,7 @@ import type {
   PlannedTransitionStep,
   StepEvidence,
   StepNarrativeInstruction,
+  StepValidationSummary,
   StepValidationSpec,
   StepValidationResult,
 } from '../type/operatorExecutionContracts'
@@ -33,6 +34,7 @@ export interface BrowserOperatorRunResult {
   failureCode?: ExecutionFailureCode
   terminationReason?: OperatorTerminationReason
   validationResults: StepValidationResult[]
+  validationSummary: StepValidationSummary
   trace: OperatorTraceItem[]
   evidence?: StepEvidence
 }

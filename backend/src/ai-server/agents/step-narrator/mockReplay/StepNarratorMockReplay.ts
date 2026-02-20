@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { createLogger } from '../../../../common/logger'
 import type { StepNarrativeInstruction } from '../../../../main-server/planned-runner/types'
+import { resolveMockDir } from '../../../common/resolveMockDir'
 import { loadStepNarratorMockReplayItems, type StepNarratorMockReplayItem } from './stepNarratorMockReplayReader'
 
 const log = createLogger('mock-replay-step-narrator')
@@ -17,7 +18,7 @@ export class StepNarratorMockReplay {
   private items: StepNarratorMockReplayItem[] = []
 
   constructor(options: StepNarratorMockReplayOptions = {}) {
-    this.mockDir = path.resolve(process.cwd(), options.mockDir ?? path.join('mock-data', 'step-narrator'))
+    this.mockDir = resolveMockDir(options.mockDir ?? path.join('mock-data', 'step-narrator'), 'step-narrator')
     this.loop = options.loop ?? true
 
     log.log('initialized', {

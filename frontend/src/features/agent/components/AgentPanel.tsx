@@ -620,6 +620,9 @@ export const AgentPanel = ({
                 <p className="agent-validation-summary">
                   [{latestEvent.result.toUpperCase()}] {latestEvent.step.label} : {latestEvent.pathName}
                 </p>
+                <p className="agent-validation-summary">
+                  Summary: pass {latestEvent.validationSummary.pass} / fail {latestEvent.validationSummary.fail} / pending {latestEvent.validationSummary.pending} / total {latestEvent.validationSummary.total}
+                </p>
                 {latestEvent.blockedReason ? <p className="agent-validation-summary">Blocked: {latestEvent.blockedReason}</p> : null}
                 {hasValidationResults ? (
                   <ul>
@@ -629,7 +632,7 @@ export const AgentPanel = ({
                           {validation.status.toUpperCase()}
                         </span>
                         <span className="validation-label">{validation.label}</span>
-                        <span className="validation-reason">{validation.reason}</span>
+                        <span className="validation-reason">{validation.resolution} · {validation.reason}</span>
                       </li>
                     ))}
                   </ul>

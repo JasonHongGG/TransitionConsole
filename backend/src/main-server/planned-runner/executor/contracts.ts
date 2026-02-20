@@ -19,6 +19,7 @@ export interface BrowserOperatorRunResult {
   failureCode?: StepExecutionResult['failureCode']
   terminationReason?: StepExecutionResult['terminationReason']
   validationResults: StepValidationResult[]
+  validationSummary: StepExecutionResult['validationSummary']
   trace: OperatorTraceItem[]
   evidence: StepExecutionResult['evidence']
 }

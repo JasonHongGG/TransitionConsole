@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { createLogger } from '../../../../common/logger'
 import type { PathPlannerContext, PlannedPathDraft } from '../../../../main-server/planned-runner/planner/types'
+import { resolveMockDir } from '../../../common/resolveMockDir'
 import { loadPathPlannerMockReplayItems, type PathPlannerMockReplayItem } from './pathPlannerMockReplayReader'
 
 const log = createLogger('mock-replay-path-planner')
@@ -17,7 +18,7 @@ export class PathPlannerMockReplay {
   private items: PathPlannerMockReplayItem[] = []
 
   constructor(options: PathPlannerMockReplayOptions = {}) {
-    this.mockDir = path.resolve(process.cwd(), options.mockDir ?? path.join('mock-data', 'path-planner'))
+    this.mockDir = resolveMockDir(options.mockDir ?? path.join('mock-data', 'path-planner'), 'path-planner')
     this.loop = options.loop ?? true
 
     log.log('initialized', {

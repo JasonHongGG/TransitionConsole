@@ -4,7 +4,9 @@ export type ElementExecutionStatus = 'untested' | 'running' | 'pass' | 'fail'
 
 export type PlannedStepKind = 'transition' | 'connector'
 
-export type ValidationStatus = 'pass' | 'fail'
+export type ValidationStatus = 'pass' | 'fail' | 'pending'
+
+export type ValidationResolution = 'newly-verified' | 'reused-cache' | 'unverified'
 
 export const VALIDATION_TYPES = [
   'url-equals',
@@ -75,9 +77,19 @@ export interface StepValidationResult {
   label: string
   status: ValidationStatus
   reason: string
+  cacheKey: string
+  resolution: ValidationResolution
+  checkedAt: string
   validationType?: ValidationType
   actual?: string
   expected?: string
+}
+
+export interface StepValidationSummary {
+  total: number
+  pass: number
+  fail: number
+  pending: number
 }
 
 export interface StepValidationSpec {
@@ -224,6 +236,7 @@ export interface PlannedStepEvent {
   message: string
   blockedReason?: string
   validationResults: StepValidationResult[]
+  validationSummary: StepValidationSummary
 }
 
 export type PlannedLiveEventLevel = 'info' | 'success' | 'error'
@@ -333,6 +346,7 @@ export interface StepExecutionResult {
   result: TransitionResult
   blockedReason?: string
   validationResults: StepValidationResult[]
+  validationSummary: StepValidationSummary
   narrative?: StepNarrativeInstruction
   validations?: StepValidationSpec[]
   loopIterations?: OperatorLoopIteration[]

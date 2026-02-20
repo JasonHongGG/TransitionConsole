@@ -9,7 +9,9 @@ export type ValidationType =
   | 'network-failed'
   | 'semantic-check'
 
-export type ValidationStatus = 'pass' | 'fail'
+export type ValidationStatus = 'pass' | 'fail' | 'pending'
+
+export type ValidationResolution = 'newly-verified' | 'reused-cache' | 'unverified'
 
 export type ExecutionFailureCode =
   | 'narrative-planner-failed'
@@ -35,9 +37,19 @@ export interface StepValidationResult {
   label: string
   status: ValidationStatus
   reason: string
+  cacheKey: string
+  resolution: ValidationResolution
+  checkedAt: string
   validationType?: ValidationType
   actual?: string
   expected?: string
+}
+
+export interface StepValidationSummary {
+  total: number
+  pass: number
+  fail: number
+  pending: number
 }
 
 export interface StepNarrativeInstruction {
@@ -127,6 +139,7 @@ export interface OperatorStepRunResponse {
   failureCode?: ExecutionFailureCode
   terminationReason?: OperatorTerminationReason
   validationResults: StepValidationResult[]
+  validationSummary: StepValidationSummary
   trace: OperatorTraceItem[]
   evidence: StepEvidence | undefined
 }

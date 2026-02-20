@@ -373,6 +373,12 @@ export class PlannedRunner {
         result: 'fail',
         blockedReason: error instanceof Error ? error.message : 'executor error',
         validationResults: [],
+        validationSummary: {
+          total: 0,
+          pass: 0,
+          fail: 0,
+          pending: 0,
+        },
       }
     }
 
@@ -417,6 +423,7 @@ export class PlannedRunner {
       message: `${currentPath.name} :: ${step.label}`,
       blockedReason: exec.blockedReason,
       validationResults: exec.validationResults,
+      validationSummary: exec.validationSummary,
     }
 
     return {

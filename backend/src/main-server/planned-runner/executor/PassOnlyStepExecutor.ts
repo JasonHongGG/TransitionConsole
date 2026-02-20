@@ -4,6 +4,7 @@ import type {
   PlannedTransitionStep,
   StepExecutionResult,
   StepExecutor,
+  StepValidationSummary,
   StepValidationResult,
 } from '../types'
 
@@ -11,15 +12,26 @@ const log = createLogger('planned-executor-pass-only')
 
 export class PassOnlyStepExecutor implements StepExecutor {
   async execute(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepExecutionResult> {
+    const checkedAt = new Date().toISOString()
     const validationResults: StepValidationResult[] = context.stepValidations.map((validation, index) => ({
       id: `${step.edgeId}.pass-only.${index + 1}`,
       label: validation.description,
       status: 'pass',
       reason: 'pass-only-executor',
+      cacheKey: `${step.edgeId}::${validation.id}`,
+      resolution: 'newly-verified',
+      checkedAt,
       validationType: validation.type,
       expected: validation.expected,
       actual: 'pass-only-executor',
     }))
+
+    const validationSummary: StepValidationSummary = {
+      total: validationResults.length,
+      pass: validationResults.length,
+      fail: 0,
+      pending: 0,
+    }
 
     log.log('step bypassed by pass-only executor', {
       runId: context.runId,
@@ -32,6 +44,7 @@ export class PassOnlyStepExecutor implements StepExecutor {
     return {
       result: 'pass',
       validationResults,
+      validationSummary,
       narrative: {
         summary: step.label,
         taskDescription: `pass-only mode: ${step.label}`,

@@ -22,6 +22,12 @@ type LoopDecisionEnvelope = {
     description?: string
   }>
   progressSummary?: string
+  validationUpdates?: Array<{
+    id?: string
+    status?: 'pass' | 'fail'
+    reason?: string
+    actual?: string
+  }>
 }
 
 type ConversationDecisionPayload = {
@@ -32,7 +38,13 @@ type ConversationDecisionPayload = {
     terminationReason?: LoopDecision['terminationReason']
   }
   functionCalls: LoopFunctionCall[]
-  progressSummary?: string
+  progressSummary: string
+  validationUpdates: Array<{
+    id: string
+    status: 'pass' | 'fail'
+    reason: string
+    actual?: string
+  }>
 }
 
 type ConversationFunctionResponsePayloadItem = {
@@ -112,6 +124,27 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       : []
 
     return explicit.length > 0 ? explicit : undefined
+  }
+
+  private normalizeValidationUpdates(envelope: LoopDecisionEnvelope): Array<{
+    id: string
+    status: 'pass' | 'fail'
+    reason: string
+    actual?: string
+  }> | null {
+    if (!Array.isArray(envelope.validationUpdates)) {
+      return null
+    }
+
+    return envelope.validationUpdates
+      .filter((item): item is NonNullable<typeof item> => Boolean(item))
+      .filter((item) => Boolean(item.id && item.reason && (item.status === 'pass' || item.status === 'fail')))
+      .map((item) => ({
+        id: item.id!,
+        status: item.status!,
+        reason: item.reason!,
+        actual: item.actual,
+      }))
   }
 
 
@@ -207,10 +240,14 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       parsedResponse: parsed,
     })
 
-    if (!parsed?.decision?.kind || !parsed.decision.reason || !parsed.progressSummary?.trim()) {
+    const validationUpdates = parsed ? this.normalizeValidationUpdates(parsed) : null
+
+    if (!parsed?.decision?.kind || !parsed.decision.reason || !parsed.progressSummary?.trim() || !validationUpdates) {
       return {
         kind: 'fail',
         reason: 'LLM operator loop returned malformed decision payload',
+        progressSummary: 'operator payload malformed',
+        validationUpdates: [],
         failureCode: 'operator-action-failed',
         terminationReason: 'operator-error',
       }
@@ -229,6 +266,8 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         return {
           kind: 'fail',
           reason: 'LLM operator loop returned act decision without valid functionCalls',
+          progressSummary: parsed.progressSummary,
+          validationUpdates,
           failureCode: 'operator-action-failed',
           terminationReason: 'operator-error',
         }
@@ -241,6 +280,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
           decision: normalizedDecision,
           functionCalls,
           progressSummary: parsed.progressSummary,
+          validationUpdates,
         },
       })
 
@@ -248,6 +288,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         kind: 'act',
         reason: normalizedDecision.reason,
         progressSummary: parsed.progressSummary,
+        validationUpdates,
         functionCalls,
       }
     }
@@ -259,6 +300,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         decision: normalizedDecision,
         functionCalls: [],
         progressSummary: parsed.progressSummary,
+        validationUpdates,
       },
     })
 
@@ -267,6 +309,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         kind: 'complete',
         reason: normalizedDecision.reason,
         progressSummary: parsed.progressSummary,
+        validationUpdates,
         terminationReason: normalizedDecision.terminationReason ?? 'completed',
       }
     }
@@ -275,6 +318,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       kind: 'fail',
       reason: normalizedDecision.reason,
       progressSummary: parsed.progressSummary,
+      validationUpdates,
       failureCode: normalizedDecision.failureCode ?? 'operator-no-progress',
       terminationReason: normalizedDecision.terminationReason ?? 'criteria-unmet',
     }

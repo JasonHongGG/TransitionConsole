@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { createLogger } from '../../../../common/logger'
 import type { LoopDecision } from '../../../../operator-server/type'
+import { resolveMockDir } from '../../../common/resolveMockDir'
 import { loadOperatorLoopMockReplayItems, type OperatorLoopMockReplayItem } from './operatorLoopMockReplayReader'
 
 const log = createLogger('mock-replay-operator-loop')
@@ -17,7 +18,7 @@ export class OperatorLoopMockReplay {
   private items: OperatorLoopMockReplayItem[] = []
 
   constructor(options: OperatorLoopMockReplayOptions = {}) {
-    this.mockDir = path.resolve(process.cwd(), options.mockDir ?? path.join('mock-data', 'operator-loop'))
+    this.mockDir = resolveMockDir(options.mockDir ?? path.join('mock-data', 'operator-loop'), 'operator-loop')
     this.loop = options.loop ?? true
 
     log.log('initialized', {
