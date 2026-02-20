@@ -10,6 +10,7 @@ interface AgentPanelProps {
   nextStateId: string | null
   latestEvent: PlannedStepEvent | null
   running: boolean
+  stopRequested: boolean
   isBusy: boolean
   statusMessage: string
   statusTone: 'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'
@@ -60,6 +61,7 @@ export const AgentPanel = ({
   nextStateId,
   latestEvent,
   running,
+  stopRequested,
   isBusy,
   statusMessage,
   statusTone,
@@ -441,14 +443,13 @@ export const AgentPanel = ({
             type="button"
             className="agent-icon-btn primary"
             onClick={running ? onStop : onStart}
-            disabled={isBusy}
-            title={running ? 'Pause' : 'Start'}
-            aria-label={running ? 'Pause' : 'Start'}
+            disabled={running ? stopRequested : isBusy}
+            title={running ? (stopRequested ? 'Stopping...' : 'Stop') : 'Start'}
+            aria-label={running ? (stopRequested ? 'Stopping...' : 'Stop') : 'Start'}
           >
             {running ? (
               <svg viewBox="0 0 24 24" aria-hidden="true">
-                <rect x="7" y="6" width="3.6" height="12" rx="1" fill="currentColor" />
-                <rect x="13.4" y="6" width="3.6" height="12" rx="1" fill="currentColor" />
+                <rect x="7" y="7" width="10" height="10" rx="1.6" fill="currentColor" />
               </svg>
             ) : (
               <svg viewBox="0 0 24 24" aria-hidden="true">

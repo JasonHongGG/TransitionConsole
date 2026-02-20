@@ -448,6 +448,7 @@ function App() {
                 currentStateId={agentRunner.currentStateId}
                 latestEvent={agentRunner.latestEvent}
                 running={agentRunner.running}
+                stopRequested={agentRunner.stopRequested}
                 isBusy={agentRunner.isBusy}
                 nextStateId={agentRunner.nextStateId}
                 statusMessage={agentRunner.statusMessage}

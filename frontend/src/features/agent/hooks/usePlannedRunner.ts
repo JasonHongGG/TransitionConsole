@@ -48,6 +48,7 @@ export interface TemporaryRunnerSettings {
 
 export interface PlannedRunnerState {
   running: boolean
+  stopRequested: boolean
   isBusy: boolean
   statusMessage: string
   statusTone: 'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'
@@ -123,6 +124,7 @@ export const usePlannedRunner = (
   const endpointBase = `${apiBase}/api/planned`
 
   const [running, setRunningState] = useState(false)
+  const [stopRequested, setStopRequestedState] = useState(false)
   const [isBusy, setIsBusy] = useState(false)
   const [statusMessage, setStatusMessage] = useState('Idle')
   const [statusTone, setStatusTone] = useState<'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'>('idle')
@@ -155,6 +157,12 @@ export const usePlannedRunner = (
   const [plannedStatus, setPlannedStatus] = useState<PlannedRunnerStatus | null>(null)
   const maxKnownPathCountRef = useRef(0)
   const eventSourceRef = useRef<EventSource | null>(null)
+  const stopRequestedRef = useRef(false)
+
+  const setStopRequested = useCallback((next: boolean) => {
+    stopRequestedRef.current = next
+    setStopRequestedState(next)
+  }, [])
 
   const appendLiveEvent = useCallback((event: PlannedLiveEvent) => {
     const entry = toAgentLogEntry(event)
@@ -414,6 +422,7 @@ export const usePlannedRunner = (
     if (diagrams.length === 0) return false
     if (!ensureTargetUrl()) return false
     connectLiveEvents()
+    setStopRequested(false)
     setIsBusy(true)
     setLastError(null)
     setStatusTone('waiting')
@@ -451,32 +460,6 @@ export const usePlannedRunner = (
     }
   }, [applySnapshot, connectLiveEvents, diagrams.length, endpointBase, ensureTargetUrl, formatHttpFailure, formatRequestError, requestPayload])
 
-  const stop = useCallback(async () => {
-    setIsBusy(true)
-    setLastError(null)
-    setStatusTone('waiting')
-    try {
-      const response = await fetch(`${endpointBase}/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-      if (!response.ok) {
-        const failureMessage = `Failed to pause planned run (${response.status}).`
-        setLastError(failureMessage)
-        setStatusTone('error')
-        setStatusMessage('Pause failed.')
-        return
-      }
-      setRunningState(false)
-      setStatusTone('paused')
-      setStatusMessage('Paused.')
-    } catch (error) {
-      const failureMessage = formatRequestError(error)
-      setLastError(failureMessage)
-      setStatusTone('error')
-      setStatusMessage('Pause failed: backend unavailable.')
-    } finally {
-      setIsBusy(false)
-    }
-  }, [endpointBase, formatRequestError])
-
   const runSingleStep = useCallback(async (): Promise<boolean> => {
     if (!ensureTargetUrl()) return false
     setIsBusy(true)
@@ -508,6 +491,7 @@ export const usePlannedRunner = (
     } catch (error) {
       const failureMessage = formatRequestError(error)
       setRunningState(false)
+      setStopRequested(false)
       setLastError(failureMessage)
       setStatusTone('error')
       setStatusMessage('Step failed: backend unavailable.')
@@ -545,6 +529,7 @@ export const usePlannedRunner = (
       }
 
       setRunningState(false)
+      setStopRequested(false)
       setCompleted(false)
       setFullCoveragePassed(null)
       setRunId(null)
@@ -606,18 +591,31 @@ export const usePlannedRunner = (
     const runAll = async () => {
       const ready = await ensureSession()
       if (!ready || cancelled) {
+        setStopRequested(false)
         setRunningState(false)
         return
       }
 
       while (!cancelled) {
+        if (stopRequestedRef.current) {
+          break
+        }
+
         const shouldContinue = await runSingleStep()
-        if (!shouldContinue || cancelled) {
+        if (!shouldContinue || cancelled || stopRequestedRef.current) {
           break
         }
       }
 
       if (!cancelled) {
+        if (stopRequestedRef.current) {
+          setStopRequested(false)
+          setRunningState(false)
+          setStatusTone('paused')
+          setStatusMessage('Paused. Step mode ready.')
+          return
+        }
+
         setRunningState(false)
       }
     }
@@ -627,7 +625,7 @@ export const usePlannedRunner = (
     return () => {
       cancelled = true
     }
-  }, [ensureSession, runSingleStep, running])
+  }, [ensureSession, runSingleStep, running, setStopRequested])
 
   const getTemporarySettings = useCallback<() => TemporaryRunnerSettings>(() => ({
     targetUrl,
@@ -650,6 +648,7 @@ export const usePlannedRunner = (
 
   return {
     running,
+    stopRequested,
     isBusy,
     statusMessage,
     statusTone,
@@ -684,9 +683,17 @@ export const usePlannedRunner = (
     setRunning: (next) => {
       if (next) {
         if (!ensureTargetUrl()) return
+        setStopRequested(false)
         setRunningState(true)
       } else {
-        void stop()
+        if (!running) {
+          return
+        }
+
+        setLastError(null)
+        setStopRequested(true)
+        setStatusTone('waiting')
+        setStatusMessage('Stop requested. Finishing current step...')
       }
     },
     reset: () => {
