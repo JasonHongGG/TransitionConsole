@@ -158,6 +158,8 @@ export const usePlannedRunner = (
   const maxKnownPathCountRef = useRef(0)
   const eventSourceRef = useRef<EventSource | null>(null)
   const stopRequestedRef = useRef(false)
+  const ensureSessionRef = useRef<() => Promise<boolean>>(async () => false)
+  const runSingleStepRef = useRef<() => Promise<boolean>>(async () => false)
 
   const setStopRequested = useCallback((next: boolean) => {
     stopRequestedRef.current = next
@@ -509,6 +511,14 @@ export const usePlannedRunner = (
     return start()
   }, [plannedStatus, start])
 
+  useEffect(() => {
+    ensureSessionRef.current = ensureSession
+  }, [ensureSession])
+
+  useEffect(() => {
+    runSingleStepRef.current = runSingleStep
+  }, [runSingleStep])
+
   const reset = useCallback(async () => {
     setIsBusy(true)
     setStatusTone('waiting')
@@ -589,10 +599,16 @@ export const usePlannedRunner = (
     let cancelled = false
 
     const runAll = async () => {
-      const ready = await ensureSession()
-      if (!ready || cancelled) {
-        setStopRequested(false)
-        setRunningState(false)
+      const ready = await ensureSessionRef.current()
+      if (!ready) {
+        if (!cancelled) {
+          setStopRequested(false)
+          setRunningState(false)
+        }
+        return
+      }
+
+      if (cancelled) {
         return
       }
 
@@ -601,7 +617,7 @@ export const usePlannedRunner = (
           break
         }
 
-        const shouldContinue = await runSingleStep()
+        const shouldContinue = await runSingleStepRef.current()
         if (!shouldContinue || cancelled || stopRequestedRef.current) {
           break
         }
@@ -625,7 +641,7 @@ export const usePlannedRunner = (
     return () => {
       cancelled = true
     }
-  }, [ensureSession, runSingleStep, running, setStopRequested])
+  }, [running, setStopRequested])
 
   const getTemporarySettings = useCallback<() => TemporaryRunnerSettings>(() => ({
     targetUrl,
