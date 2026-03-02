@@ -573,20 +573,44 @@ export class PlannedRunner {
     this.runtime.executedPathHistory = Array.from(historicalBySignature.values())
 
     const replanStartedAt = Date.now()
-    const plan = await generatePlannedPaths(
-      this.pathPlanner,
-      this.runtime.runId,
-      this.runtime.sourceDiagrams,
-      this.runtime.sourceConnectors,
-      this.runtime.allEdges,
-      this.runtime.entryStateIds,
-      this.runtime.targetUrl,
-      this.runtime.specRaw,
-      this.runtime.nodeStatuses,
-      this.runtime.edgeStatuses,
-      this.runtime.executedPathHistory,
-      this.runtime.agentModes.pathPlanner,
-    )
+    let plan: Awaited<ReturnType<typeof generatePlannedPaths>>
+    try {
+      plan = await generatePlannedPaths(
+        this.pathPlanner,
+        this.runtime.runId,
+        this.runtime.sourceDiagrams,
+        this.runtime.sourceConnectors,
+        this.runtime.allEdges,
+        this.runtime.entryStateIds,
+        this.runtime.targetUrl,
+        this.runtime.specRaw,
+        this.runtime.nodeStatuses,
+        this.runtime.edgeStatuses,
+        this.runtime.executedPathHistory,
+        this.runtime.agentModes.pathPlanner,
+      )
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'replan failed'
+      if (message.includes('AI planner produced no valid paths')) {
+        this.runtime.completed = true
+        log.log('run completed: planner returned no additional valid paths', {
+          runId: this.runtime.runId,
+          replanCount: this.runtime.replanCount,
+          executedPathHistory: this.runtime.executedPathHistory.length,
+        })
+        this.emitLiveEvent({
+          type: 'run.completed',
+          level: 'info',
+          message: 'Run completed: planner returned no additional valid paths',
+          runId: this.runtime.runId,
+        })
+        if (this.executor.onRunStop) {
+          await this.executor.onRunStop(this.runtime.runId)
+        }
+        return
+      }
+      throw error
+    }
     const replanElapsedMs = Date.now() - replanStartedAt
     const replanElapsedSeconds = toElapsedSeconds(replanElapsedMs)
 
