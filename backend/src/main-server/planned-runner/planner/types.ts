@@ -78,6 +78,10 @@ export interface PlannerPathCandidate {
   draft: PlannerGeneratedPath
   edges: RuntimeEdge[]
   signature: string
+  pathLength: number
+  newEdgeIds: string[]
+  newNodeIds: string[]
+  touchedNodeIds: string[]
   newEdgeCount: number
   newNodeCount: number
   hasNewCoverage: boolean
