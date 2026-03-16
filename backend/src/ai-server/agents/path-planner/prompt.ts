@@ -13,6 +13,9 @@ export const PATH_PLANNER_SYSTEM_PROMPT = `【系統角色】
 9. walked=true 代表「已在前次 batch 或既有執行中覆蓋過」；本次規劃必須以覆蓋 walked=false 的 state/transition 為主，不可把已覆蓋路徑重複輸出。
 10. 同一次輸出的多條 path，必須盡量降低彼此重疊；若兩條 path 的主要 edge 序列高度相同，僅保留較短且新增覆蓋較高者。
 11. previouslyPlannedPaths 是歷次規劃（前幾輪 assistantPayload.paths）累積清單；本輪輸出不得與其中任一路徑的 edgeIds 序列完全相同。
+12. 在仍有可達的低重疊候選時，必須優先挑選「與 walked=true 或 previouslyPlannedPaths 已覆蓋 edge 集合交集最小」的 path；只有在沒有其他可行候選時，才可大量重用已測過的 edge。
+13. 規劃排序時，優先序為：先最小化和歷史已覆蓋 edge 的重疊，再最小化本輪 paths 彼此的重疊，再最大化新增 walked=false edge/state 覆蓋，最後才最小化 path 長度。
+14. 若某功能已有一條歷史 path 涵蓋其主要前置流程，則下一輪應優先選擇能探索其他未覆蓋功能分支的 path，而不是只在相同前置流程後面補一小段差異；例如已測過登入成功時，若註冊路徑可達且重疊更低，應優先於登入失敗路徑。
 
 【目標】
 在 maxPaths 限制內，回傳多條語意合理的測試路徑；每條路徑都應有明確名稱(name)與測試意圖(semanticGoal)，並盡可能補足未走過區域。
@@ -125,6 +128,8 @@ Format:
 - 每條 path 至少要包含 1 個 walked=false 的 transition；若確實不存在任何可達的 walked=false transition，才可回傳已覆蓋路徑，且需最短。
 - 若可行，優先讓每條 path 的「第一個未走過 transition」彼此不同，以提升跨 batch 新增覆蓋。
 - 每條 path 需與 previouslyPlannedPaths 全部項目做比對；edgeIds 序列完全相同者禁止輸出。
+- 若存在多條都可行且都有新增覆蓋的 path，優先選擇與歷史已測 edge 重疊最少者；不要因為某條 path 只差一小段未測分支，就讓它長時間反覆共享同一大段已測前綴。
+- 只有在所有可達候選都必須共用相同已測 edge 時，才可接受重疊；此時仍應選擇能帶來最多新增 walked=false coverage、且總長度較短的 path。
 - 輸出前請先自行逐條驗證每條 path 的連通性與起點合法性，不合法就重排 edgeIds。
 - 若無法完美最佳化，仍必須回傳符合上述 schema 的有效 JSON。`
 
