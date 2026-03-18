@@ -1,5 +1,6 @@
 import type { PathPlanner, PathPlannerContext, PlannedPathDraft } from '../planner/types'
 import type { PathPlannerGenerateRequest, PathPlannerGenerateResponse, PathPlannerResetResponse } from '../../type/contracts'
+import { servicePorts, toLocalBaseUrl } from '../../../common/network'
 import { postApiJson } from './apiClient'
 
 export class PathPlannerApi implements PathPlanner {
@@ -7,7 +8,7 @@ export class PathPlannerApi implements PathPlanner {
   private readonly timeoutMs: number
 
   constructor(options?: { aiBaseUrl?: string; timeoutMs?: number }) {
-    this.aiBaseUrl = options?.aiBaseUrl ?? process.env.AI_SERVER_BASE_URL ?? 'http://localhost:7081'
+    this.aiBaseUrl = options?.aiBaseUrl ?? toLocalBaseUrl(servicePorts.aiServer)
     this.timeoutMs = options?.timeoutMs ?? Number(process.env.PATH_PLANNER_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
   }
 

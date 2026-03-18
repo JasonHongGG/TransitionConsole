@@ -4,7 +4,7 @@ import type { AiRuntime } from '../../runtime/types'
 import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
 import type { PathPlannerAgent } from '../types'
-import { PATH_PLANNER_SYSTEM_PROMPT, PATH_PLANNER_USER_INSTRUCTION } from './prompt'
+import { resolvePathPlannerPromptVariant } from './prompt'
 import { PathPlannerMockReplay } from './mockReplay/PathPlannerMockReplay'
 
 type PathPlannerEnvelope = {
@@ -22,6 +22,9 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
   private readonly mockReplayPlanner: PathPlannerMockReplay
   private readonly defaultMode: AgentMode
   private readonly model: string
+  private readonly promptVariantId: string
+  private readonly promptUserInstruction: string
+  private readonly promptSystemPrompt: string
   private readonly timeoutMs: number
 
   constructor(runtime: AiRuntime) {
@@ -29,6 +32,10 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
     this.model = process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
     this.timeoutMs = Number(process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
     this.defaultMode = (process.env.PATH_PLANNER_PROVIDER ?? 'llm').trim().toLowerCase() === 'mock-replay' ? 'mock' : 'llm'
+    const promptVariant = resolvePathPlannerPromptVariant(process.env.PATH_PLANNER_PROMPT_VARIANT)
+    this.promptVariantId = promptVariant.id
+    this.promptUserInstruction = promptVariant.userInstruction
+    this.promptSystemPrompt = promptVariant.systemPrompt
     this.mockReplayPlanner = new PathPlannerMockReplay({
       mockDir: process.env.PATH_PLANNER_MOCK_DIR,
       loop: (process.env.PATH_PLANNER_MOCK_LOOP ?? 'true').trim().toLowerCase() !== 'false',
@@ -47,7 +54,10 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
         runId: context.context.runId,
         pathId: context.context.pathId,
         stepId: context.context.stepId ?? undefined,
-        request: context,
+        request: {
+          promptVariant: this.promptVariantId,
+          payload: context,
+        },
         parsedResponse: { paths: drafts },
       })
       return drafts
@@ -68,8 +78,8 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
 
     const content = await this.runtime.generate({
       model: this.model,
-      systemPrompt: PATH_PLANNER_SYSTEM_PROMPT,
-      prompt: `${PATH_PLANNER_USER_INSTRUCTION}\n${JSON.stringify(payload)}`,
+      systemPrompt: this.promptSystemPrompt,
+      prompt: `${this.promptUserInstruction}\n${JSON.stringify(payload)}`,
       timeoutMs: this.timeoutMs,
     })
 
@@ -92,7 +102,10 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
       runId: context.context.runId,
       pathId: context.context.pathId,
       stepId: context.context.stepId ?? undefined,
-      request: payload,
+      request: {
+        promptVariant: this.promptVariantId,
+        payload,
+      },
       rawResponse: content,
       parsedResponse: { paths: normalizedDrafts },
     })

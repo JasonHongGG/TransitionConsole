@@ -11,6 +11,7 @@ import type {
   OperatorLoopCleanupRunRequest,
   OperatorLoopDecideRequest,
 } from '../operator-server/type'
+import { servicePorts } from '../common/network'
 import { createAiRuntime } from './runtime/AiRuntimeFactory'
 import { createAiAgents } from './agents/AiAgentFactory'
 
@@ -210,7 +211,7 @@ app.post('/api/ai/agents/operator-loop/reset', async (_req, res) => {
   }
 })
 
-const port = Number(process.env.AI_SERVER_PORT ?? 7081)
+const port = servicePorts.aiServer
 app.listen(port, () => {
   log.log('AI server listening', {
     port,

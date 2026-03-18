@@ -12,6 +12,7 @@ import type {
   OperatorStepRunRequest,
   OperatorStepRunResponse,
 } from '../../../operator-server/type'
+import { servicePorts, toLocalBaseUrl } from '../../../common/network'
 import { postApiJson } from './apiClient'
 
 export class BrowserOperatorApi implements BrowserOperator {
@@ -19,7 +20,7 @@ export class BrowserOperatorApi implements BrowserOperator {
   private readonly timeoutMs: number
 
   constructor(options?: { operatorBaseUrl?: string; timeoutMs?: number }) {
-    this.operatorBaseUrl = options?.operatorBaseUrl ?? process.env.OPERATOR_SERVER_BASE_URL ?? 'http://localhost:7082'
+    this.operatorBaseUrl = options?.operatorBaseUrl ?? toLocalBaseUrl(servicePorts.operatorServer)
     this.timeoutMs = options?.timeoutMs ?? Number(process.env.OPERATOR_LOOP_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
   }
 

@@ -11,6 +11,7 @@ import type {
   OperatorLoopDecideResponse,
   OperatorLoopResetResponse,
 } from './type/operatorLoopContracts'
+import { servicePorts, toLocalBaseUrl } from '../common/network'
 
 const postJson = async <TRequest extends object, TResponse>(baseUrl: string, path: string, body: TRequest): Promise<TResponse> => {
   const response = await fetch(`${baseUrl}${path}`, {
@@ -33,7 +34,7 @@ export class OperatorLoopApi implements OperatorLoopAgent {
   private readonly aiBaseUrl: string
 
   constructor(options?: { aiBaseUrl?: string }) {
-    this.aiBaseUrl = options?.aiBaseUrl ?? process.env.AI_SERVER_BASE_URL ?? 'http://localhost:7081'
+    this.aiBaseUrl = options?.aiBaseUrl ?? toLocalBaseUrl(servicePorts.aiServer)
   }
 
   async decide(input: LoopDecisionInput): Promise<LoopDecision> {

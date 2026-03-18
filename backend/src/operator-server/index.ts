@@ -11,13 +11,15 @@ import type {
   PlannedLiveEventInput,
 } from './type'
 import { OperatorLoopApi } from './OperatorLoopApi'
+import { servicePorts, toLocalBaseUrl } from '../common/network'
 
 const log = createLogger('operator-server')
 const app = express()
 app.use(cors())
 app.use(express.json({ limit: '10mb' }))
 
-const mainServerBaseUrl = process.env.MAIN_SERVER_BASE_URL ?? 'http://localhost:7070'
+const mainServerBaseUrl = toLocalBaseUrl(servicePorts.mainServer)
+const aiServerBaseUrl = toLocalBaseUrl(servicePorts.aiServer)
 
 const pushLiveEvent = async (event: PlannedLiveEventInput): Promise<void> => {
   try {
@@ -39,7 +41,7 @@ const pushLiveEvent = async (event: PlannedLiveEventInput): Promise<void> => {
 
 const operator = new PlaywrightBrowserOperator({
   loopAgent: new OperatorLoopApi({
-    aiBaseUrl: process.env.AI_SERVER_BASE_URL,
+    aiBaseUrl: aiServerBaseUrl,
   }),
   onLiveEvent: (event) => {
     void pushLiveEvent(event)
@@ -139,7 +141,7 @@ app.post('/api/operator/step-executor/reset-replay', async (_req, res) => {
   }
 })
 
-const port = Number(process.env.OPERATOR_SERVER_PORT ?? 7082)
+const port = servicePorts.operatorServer
 app.listen(port, () => {
   log.log('Operator server listening', {
     port,

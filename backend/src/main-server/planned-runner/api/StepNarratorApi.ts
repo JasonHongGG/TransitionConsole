@@ -1,6 +1,7 @@
 import type { ExecutorContext, PlannedTransitionStep, StepNarrativeInstruction } from '../types'
 import type { StepNarrator } from '../executor/contracts'
 import type { StepNarratorGenerateRequest, StepNarratorGenerateResponse, StepNarratorResetResponse } from '../../type/contracts'
+import { servicePorts, toLocalBaseUrl } from '../../../common/network'
 import { postApiJson } from './apiClient'
 
 export class StepNarratorApi implements StepNarrator {
@@ -8,7 +9,7 @@ export class StepNarratorApi implements StepNarrator {
   private readonly timeoutMs: number
 
   constructor(options?: { aiBaseUrl?: string; timeoutMs?: number }) {
-    this.aiBaseUrl = options?.aiBaseUrl ?? process.env.AI_SERVER_BASE_URL ?? 'http://localhost:7081'
+    this.aiBaseUrl = options?.aiBaseUrl ?? toLocalBaseUrl(servicePorts.aiServer)
     this.timeoutMs = options?.timeoutMs ?? Number(process.env.STEP_NARRATOR_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
   }
 

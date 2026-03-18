@@ -61,17 +61,16 @@ npm run dev
 ### frontend/.env
 
 - `VITE_PORT` (default `5173`)
-- `VITE_AGENT_API_BASE` (default `http://localhost:7070`)
+- `PORT_OFFSET` (default `0`, 整組服務 port 平移量)
+- `VITE_MAIN_SERVER_PORT` (default `7070`)
 
 ### backend/.env
 
+- `PORT_OFFSET` (default `0`, 整組服務 port 平移量)
 - Service ports:
 	- `MAIN_SERVER_PORT`
 	- `AI_SERVER_PORT`
 	- `OPERATOR_SERVER_PORT`
-- Internal URLs:
-	- `AI_SERVER_BASE_URL`
-	- `OPERATOR_SERVER_BASE_URL`
 - AI runtime:
 	- `AI_PROVIDER`
 	- `GITHUB_TOKEN`
@@ -81,6 +80,36 @@ npm run dev
 	- `PATH_PLANNER_TIMEOUT_MS`
 	- `PLANNED_RUNNER_NARRATIVE_TIMEOUT_MS`
 	- `PLANNED_RUNNER_OPERATOR_TIMEOUT_MS`
+
+## Run Multiple Instances
+
+If you want to run multiple copies of this workspace in parallel, set a different `PORT_OFFSET` for each copy.
+
+Recommended offsets:
+
+- instance A: `PORT_OFFSET=0`
+- instance B: `PORT_OFFSET=100`
+- instance C: `PORT_OFFSET=200`
+
+With the current defaults, each instance resolves ports like this:
+
+- frontend: `VITE_PORT + PORT_OFFSET`
+- frontend -> main-server target: `VITE_MAIN_SERVER_PORT + PORT_OFFSET`
+- main-server: `MAIN_SERVER_PORT + PORT_OFFSET`
+- ai-server: `AI_SERVER_PORT + PORT_OFFSET`
+- operator-server: `OPERATOR_SERVER_PORT + PORT_OFFSET`
+
+Example with `PORT_OFFSET=100`:
+
+- frontend: `5273` or `5100` if your `frontend/.env` uses `5000`
+- frontend -> main-server target: `7170`
+- main-server: `7170`
+- ai-server: `7181`
+- operator-server: `7182`
+
+This means each project copy only needs one change: set a different `PORT_OFFSET` in both `backend/.env` and `frontend/.env`.
+
+All service-to-service URLs are derived locally from ports, so you no longer need to maintain separate localhost base URL env vars.
 
 ## Input data
 

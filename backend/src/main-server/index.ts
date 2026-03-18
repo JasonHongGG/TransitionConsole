@@ -11,6 +11,7 @@ import { PathPlannerApi } from './planned-runner/api/PathPlannerApi'
 import { StepNarratorApi } from './planned-runner/api/StepNarratorApi'
 import { PlannedLiveEventBus } from './planned-runner/live-events/PlannedLiveEventBus'
 import type { RunnerAgentModes } from './planned-runner/types'
+import { servicePorts, toLocalBaseUrl } from '../common/network'
 
 const log = createLogger('main-server')
 
@@ -19,7 +20,9 @@ export const startMainServer = (): void => {
   app.use(cors())
   app.use(express.json({ limit: '2mb' }))
 
-  const port = Number(process.env.MAIN_SERVER_PORT ?? 7070)
+  const port = servicePorts.mainServer
+  const aiServerBaseUrl = toLocalBaseUrl(servicePorts.aiServer)
+  const operatorServerBaseUrl = toLocalBaseUrl(servicePorts.operatorServer)
   const liveEventBus = new PlannedLiveEventBus()
   const executorMode = (process.env.PLANNED_RUNNER_EXECUTOR_MODE ?? 'agent').trim().toLowerCase()
   const resolveMode = (provider: string | undefined): 'llm' | 'mock' =>
@@ -35,8 +38,8 @@ export const startMainServer = (): void => {
     executorMode === 'pass-only'
       ? new PassOnlyStepExecutor()
       : new AgentStepExecutor({
-          narrator: new StepNarratorApi({ aiBaseUrl: process.env.AI_SERVER_BASE_URL }),
-          operator: new BrowserOperatorApi({ operatorBaseUrl: process.env.OPERATOR_SERVER_BASE_URL }),
+          narrator: new StepNarratorApi({ aiBaseUrl: aiServerBaseUrl }),
+          operator: new BrowserOperatorApi({ operatorBaseUrl: operatorServerBaseUrl }),
           publishLiveEvent: (event) => {
             liveEventBus.publish(event)
           },
@@ -44,7 +47,7 @@ export const startMainServer = (): void => {
 
   const plannedRunner = new PlannedRunner({
     pathPlanner: new PathPlannerApi({
-      aiBaseUrl: process.env.AI_SERVER_BASE_URL,
+      aiBaseUrl: aiServerBaseUrl,
     }),
     executor,
     publishLiveEvent: (event) => {
@@ -64,8 +67,8 @@ export const startMainServer = (): void => {
       port,
       mode: 'split',
       executorMode,
-      aiBaseUrl: process.env.AI_SERVER_BASE_URL ?? 'http://localhost:7081',
-      operatorBaseUrl: process.env.OPERATOR_SERVER_BASE_URL ?? 'http://localhost:7082',
+      aiBaseUrl: aiServerBaseUrl,
+      operatorBaseUrl: operatorServerBaseUrl,
       defaultAgentModes,
     })
   })

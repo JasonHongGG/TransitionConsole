@@ -120,7 +120,7 @@ export const usePlannedRunner = (
   connectors: DiagramConnector[],
   specRaw: string | null,
 ): PlannedRunnerState => {
-  const apiBase = import.meta.env.VITE_AGENT_API_BASE ?? ''
+  const apiBase = `http://localhost:${__MAIN_SERVER_PORT__}`
   const endpointBase = `${apiBase}/api/planned`
 
   const [running, setRunningState] = useState(false)
