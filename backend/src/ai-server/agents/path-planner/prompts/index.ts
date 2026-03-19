@@ -13,7 +13,23 @@ export const PATH_PLANNER_DEFAULT_PROMPT_VARIANT: PathPlannerPromptVariantId = '
 
 export const resolvePathPlannerPromptVariant = (value?: string): PathPlannerPromptVariant => {
   const normalized = value?.trim().toLowerCase() ?? ''
-  const variantId = PATH_PLANNER_PROMPT_VARIANT_ALIASES[normalized] ?? PATH_PLANNER_DEFAULT_PROMPT_VARIANT
+  if (normalized.length === 0) {
+    const variant = PATH_PLANNER_PROMPT_VARIANTS[PATH_PLANNER_DEFAULT_PROMPT_VARIANT]
+
+    return {
+      id: PATH_PLANNER_DEFAULT_PROMPT_VARIANT,
+      ...variant,
+    }
+  }
+
+  const variantId = PATH_PLANNER_PROMPT_VARIANT_ALIASES[normalized]
+  if (!variantId) {
+    const supportedVariants = Object.keys(PATH_PLANNER_PROMPT_VARIANT_ALIASES).sort().join(', ')
+    throw new Error(
+      `Unknown PATH_PLANNER_PROMPT_VARIANT: ${value}. Supported values: ${supportedVariants}`,
+    )
+  }
+
   const variant = PATH_PLANNER_PROMPT_VARIANTS[variantId]
 
   return {

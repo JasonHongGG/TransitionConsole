@@ -20,8 +20,8 @@ const buildCandidate = (
     .filter((edge: RuntimeEdge | undefined): edge is RuntimeEdge => Boolean(edge))
 
   if (edges.length !== edgeIds.length) return null
-  if (edges[0].fromDiagramId !== 'page_entry') return null
-  if (edges[0].fromStateId !== context.requiredEntryStateId) return null
+  if (context.selectionPolicy.requirePageEntryStart && edges[0].fromDiagramId !== 'page_entry') return null
+  if (context.selectionPolicy.requireRequiredEntryState && edges[0].fromStateId !== context.requiredEntryStateId) return null
 
   const isConnected = edges.every((edge: RuntimeEdge, index: number) => index === 0 || edges[index - 1].toStateId === edge.fromStateId)
   if (!isConnected) return null
@@ -141,12 +141,16 @@ export const selectPlannedPaths = (
     .map((draft) => buildCandidate(draft, context))
     .filter((candidate): candidate is PlannerPathCandidate => Boolean(candidate))
 
-  const prioritizedCandidates = prioritizeCandidates(candidates)
+  const prioritizedCandidates = context.selectionPolicy.prioritizeNewCoverage
+    ? prioritizeCandidates(candidates)
+    : candidates
   const seenSignatures = new Set<string>(context.historicalSignatures)
   const plannedPaths: PlannedTransitionPath[] = []
   const coveredEdgeIds = new Set<string>(context.walkedEdgeIds)
   const coveredNodeIds = new Set<string>(context.walkedNodeIds)
-  const remainingCandidates = prioritizedCandidates.filter((candidate) => !seenSignatures.has(candidate.signature))
+  const remainingCandidates = context.selectionPolicy.dedupeHistoricalSignatures
+    ? prioritizedCandidates.filter((candidate) => !seenSignatures.has(candidate.signature))
+    : [...prioritizedCandidates]
 
   while (remainingCandidates.length > 0) {
     remainingCandidates.sort((left, right) =>
@@ -156,7 +160,9 @@ export const selectPlannedPaths = (
     const candidate = remainingCandidates.shift()
     if (!candidate) break
 
-    seenSignatures.add(candidate.signature)
+    if (context.selectionPolicy.dedupeHistoricalSignatures) {
+      seenSignatures.add(candidate.signature)
+    }
     plannedPaths.push(toPlannedPath(candidate, plannedPaths.length + 1))
 
     candidate.edges.forEach((edge) => {

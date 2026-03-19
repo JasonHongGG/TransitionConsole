@@ -10,6 +10,7 @@ import type {
 import { buildPlannerDiagrams } from './diagramPayload'
 import { isWalked, resolveGlobalEntryStateId } from './common'
 import { selectPlannedPaths } from './pathCandidates'
+import { resolvePlannerPathSelectionPolicy } from './selectionPolicy'
 
 export const generatePlannedPaths = async (
   planner: PathPlanner,
@@ -107,6 +108,7 @@ export const generatePlannedPaths = async (
       .filter(([, status]) => isWalked(status))
       .map(([nodeId]) => nodeId),
   )
+  const selectionPolicy = resolvePlannerPathSelectionPolicy()
 
   const paths = selectPlannedPaths(draftedPaths, {
     historicalSignatures,
@@ -114,6 +116,7 @@ export const generatePlannedPaths = async (
     requiredEntryStateId,
     walkedEdgeIds,
     walkedNodeIds,
+    selectionPolicy,
   })
 
   if (paths.length === 0) {

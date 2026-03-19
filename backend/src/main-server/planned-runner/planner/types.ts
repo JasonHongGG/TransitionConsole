@@ -92,8 +92,16 @@ export interface PlannerPathCandidateContext {
   requiredEntryStateId: string
   walkedEdgeIds: Set<string>
   walkedNodeIds: Set<string>
+  selectionPolicy: PlannerPathSelectionPolicy
 }
 
 export interface PlannerPathSelectionContext extends PlannerPathCandidateContext {
   historicalSignatures: Set<string>
+}
+
+export interface PlannerPathSelectionPolicy {
+  requirePageEntryStart: boolean
+  requireRequiredEntryState: boolean
+  prioritizeNewCoverage: boolean
+  dedupeHistoricalSignatures: boolean
 }
