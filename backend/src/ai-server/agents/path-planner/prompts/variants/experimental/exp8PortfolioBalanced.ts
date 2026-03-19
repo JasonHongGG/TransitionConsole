@@ -9,6 +9,8 @@ export const exp8PortfolioBalancedPromptVariant = createExperimentalVariant({
     '單條 path 仍應盡量延伸並保持使用者流程合理，但不可讓所有 path 都長得很像；整體組合要有明顯分工與互補。',
     '排序時，先看整體組合新增的未覆蓋 coverage 與功能面向多樣性，再看單條 path 的長度與風險價值。',
     '若某條候選 path 與現有已選路徑高度重疊，除非它能補上不同風險或不同功能面向，否則應改選更互補的 path。',
+    '例子：若 maxPaths=6，可思考為 2 條核心完整旅程、2 條新功能分支探索、2 條高風險例外情境，而不是 6 條幾乎相同的 happy path。',
+    '例子：若已選了一條完整報名旅程與一條退款失敗風險路徑，下一條更應補上未覆蓋功能分支，而不是再挑一條與前兩條高度重疊的登入主流程。',
   ],
   goal: '建立一個兼顧 coverage、完整旅程、分支探索與風險探索的平衡型最佳化策略，適合作為最終比較候選。',
   outputRules: [
@@ -17,5 +19,6 @@ export const exp8PortfolioBalancedPromptVariant = createExperimentalVariant({
     '每條 path 至少要包含 1 個 walked=false 的 transition。',
     '若完全不存在任何合法且可達的 walked=false transition，回傳 {"paths": []}。',
     '同一次輸出的多條 path 應形成互補組合：至少同時覆蓋核心旅程、未覆蓋分支或高風險情境中的多個面向。',
+    '例子：若輸出 4 條 path，理想上不應 4 條都只測同一登入主流程；至少應分散到核心旅程、分支探索與高風險情境中的多個面向。',
   ],
 })
