@@ -38,4 +38,9 @@ export const PATH_PLANNER_PROMPT_VARIANT_ALIASES: Record<string, PathPlannerProm
   exp8: 'exp8_portfolio_balanced',
   exp8_portfolio_balanced: 'exp8_portfolio_balanced',
   portfolio: 'exp8_portfolio_balanced',
+  '9': 'exp9_spec_essential_paths',
+  exp9: 'exp9_spec_essential_paths',
+  exp9_spec_essential_paths: 'exp9_spec_essential_paths',
+  spec: 'exp9_spec_essential_paths',
+  essential: 'exp9_spec_essential_paths',
 }

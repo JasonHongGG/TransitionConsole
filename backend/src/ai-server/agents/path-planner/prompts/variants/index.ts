@@ -7,6 +7,7 @@ import { exp5JourneyDeepeningPromptVariant } from './experimental/exp5JourneyDee
 import { exp6ComprehensivePromptVariant } from './experimental/exp6Comprehensive'
 import { exp7RiskFirstPromptVariant } from './experimental/exp7RiskFirst'
 import { exp8PortfolioBalancedPromptVariant } from './experimental/exp8PortfolioBalanced'
+import { exp9SpecEssentialPathsPromptVariant } from './experimental/exp9SpecEssentialPaths'
 import type { PathPlannerPromptBundle } from '../types'
 
 export const PATH_PLANNER_PROMPT_VARIANTS = {
@@ -19,4 +20,5 @@ export const PATH_PLANNER_PROMPT_VARIANTS = {
   exp6_comprehensive: exp6ComprehensivePromptVariant,
   exp7_risk_first: exp7RiskFirstPromptVariant,
   exp8_portfolio_balanced: exp8PortfolioBalancedPromptVariant,
+  exp9_spec_essential_paths: exp9SpecEssentialPathsPromptVariant,
 } as const satisfies Record<string, PathPlannerPromptBundle>
