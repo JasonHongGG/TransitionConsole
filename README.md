@@ -81,7 +81,7 @@ npm run dev
 	- `PLANNED_RUNNER_NARRATIVE_TIMEOUT_MS`
 	- `PLANNED_RUNNER_OPERATOR_TIMEOUT_MS`
 - Path planner prompt strategy:
-	- `PATH_PLANNER_PROMPT_VARIANT` (`implementation`, `exp1_meaningful`, `exp2_unwalked_required`, `exp3_unwalked_branch_first`, `exp4_unwalked_long_paths`, `exp5_journey_deepening`, `exp6_comprehensive`, `exp7_risk_first`, `exp8_portfolio_balanced`)
+	- `PATH_PLANNER_PROMPT_VARIANT` (`implementation`, `exp1_baseline`, `exp2_coverage_first`, `exp3_new_feature_first`, `exp4_long_path_first`, `exp5_scenario_first`, `exp6_risk_first`, `exp7_new_feature_long_path`, `exp8_new_feature_scenario`, `exp9_new_feature_risk`, `exp10_long_path_scenario`, `exp11_long_path_risk`, `exp12_scenario_risk`, `exp13_new_feature_long_path_scenario`, `exp14_new_feature_long_path_risk`, `exp15_new_feature_scenario_risk`, `exp16_long_path_scenario_risk`, `exp17_all_priorities`)
 
 ## Run Multiple Instances
 
