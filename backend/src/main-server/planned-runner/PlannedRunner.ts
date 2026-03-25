@@ -23,6 +23,15 @@ const log = createLogger('planned-runner')
 const createRunId = () => `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
 const toElapsedSeconds = (elapsedMs: number): number => Math.max(1, Math.ceil(elapsedMs / 1000))
 
+const parseOptionalPositiveInt = (raw: string | undefined): number | null => {
+  if (!raw) return null
+  const value = raw.trim()
+  if (value.length === 0) return null
+  const parsed = Number.parseInt(value, 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) return null
+  return parsed
+}
+
 const isAgentMode = (value: unknown): value is AgentMode => value === 'llm' || value === 'mock'
 
 const normalizeAgentModes = (
@@ -51,6 +60,7 @@ export class PlannedRunner {
   private readonly pathPlanner: PathPlanner
   private readonly publishLiveEvent?: (event: PlannedLiveEventInput) => void
   private readonly defaultAgentModes: RunnerAgentModes
+  private readonly maxCompletedPaths: number | null
 
   constructor(options: {
     executor?: StepExecutor
@@ -66,6 +76,39 @@ export class PlannedRunner {
       stepNarrator: 'llm',
       operatorLoop: 'llm',
     }
+
+    // When set, the runner will automatically stop after executing N paths.
+    // Intended for auto-run loops that repeatedly call `step()`.
+    this.maxCompletedPaths = parseOptionalPositiveInt(process.env.PLANNED_RUNNER_AUTO_MAX_PATHS)
+  }
+
+  private async maybeStopAfterMaxPaths(): Promise<boolean> {
+    if (!this.runtime) return false
+    if (this.runtime.completed) return true
+    if (!this.maxCompletedPaths) return false
+
+    if (this.runtime.completedPathsTotal < this.maxCompletedPaths) return false
+
+    this.runtime.completed = true
+    log.log('run completed: reached max completed paths limit', {
+      runId: this.runtime.runId,
+      completedPathsTotal: this.runtime.completedPathsTotal,
+      maxCompletedPaths: this.maxCompletedPaths,
+    })
+    this.emitLiveEvent({
+      type: 'run.completed',
+      level: 'info',
+      message: `Run completed: reached max paths limit (${this.maxCompletedPaths})`,
+      runId: this.runtime.runId,
+      meta: {
+        completedPathsTotal: this.runtime.completedPathsTotal,
+        maxCompletedPaths: this.maxCompletedPaths,
+      },
+    })
+    if (this.executor.onRunStop) {
+      await this.executor.onRunStop(this.runtime.runId)
+    }
+    return true
   }
 
   private emitLiveEvent(event: PlannedLiveEventInput): void {
@@ -263,6 +306,14 @@ export class PlannedRunner {
       }
     }
 
+    if (await this.maybeStopAfterMaxPaths()) {
+      return {
+        ok: true,
+        event: null,
+        snapshot: buildRuntimeSnapshot(this.runtime, true),
+      }
+    }
+
     const currentPath = this.runtime.plan.paths[this.runtime.pathIndex]
     if (!currentPath) {
       log.log('no current path, evaluating replan/complete', {
@@ -300,6 +351,15 @@ export class PlannedRunner {
       this.runtime.pathIndex += 1
       this.runtime.stepIndex = 0
       this.runtime.completedPathsTotal += 1
+
+      if (await this.maybeStopAfterMaxPaths()) {
+        return {
+          ok: true,
+          event: null,
+          snapshot: buildRuntimeSnapshot(this.runtime, true),
+        }
+      }
+
       const nextPath = this.runtime.plan.paths[this.runtime.pathIndex]
       this.runtime.currentStateId = nextPath?.steps[0]?.fromStateId ?? this.runtime.currentStateId
       return {
