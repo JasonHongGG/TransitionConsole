@@ -1,37 +1,31 @@
 import type {
   ExecutorContext,
+  PathExecutionResult,
+  PlannedTransitionPath,
   StepNarrativeInstruction,
-  OperatorTraceItem,
-  PlannedTransitionStep,
-  StepValidationSpec,
-  StepExecutionResult,
-  StepValidationResult,
 } from '../types'
 
-export interface StepNarrator {
-  generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction>
+export interface PathNarrator {
+  generate(path: PlannedTransitionPath, context: ExecutorContext): Promise<StepNarrativeInstruction>
   resetReplayCursor?(): Promise<void>
 }
 
 export interface BrowserOperatorRunResult {
-  result: 'pass' | 'fail'
-  blockedReason?: string
-  failureCode?: StepExecutionResult['failureCode']
-  terminationReason?: StepExecutionResult['terminationReason']
-  validationResults: StepValidationResult[]
-  validationSummary: StepExecutionResult['validationSummary']
-  trace: OperatorTraceItem[]
-  evidence: StepExecutionResult['evidence']
+  result: PathExecutionResult['result']
+  blockedReason?: PathExecutionResult['blockedReason']
+  failureCode?: PathExecutionResult['failureCode']
+  terminationReason?: PathExecutionResult['terminationReason']
+  transitionResults: PathExecutionResult['transitionResults']
+  finalStateId: PathExecutionResult['finalStateId']
 }
 
 export interface BrowserOperator {
-  run(
-    step: PlannedTransitionStep,
+  runPath(
+    path: PlannedTransitionPath,
     context: ExecutorContext,
     narrative: StepNarrativeInstruction,
-    validations: StepValidationSpec[],
   ): Promise<BrowserOperatorRunResult>
-  cleanupPath?(runId: string, pathId: string): Promise<void>
+  cleanupPath?(runId: string, pathExecutionId: string, pathId: string): Promise<void>
   cleanupRun?(runId: string): Promise<void>
   resetReplayCursor?(): Promise<void>
 }

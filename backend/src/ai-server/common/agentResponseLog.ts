@@ -2,7 +2,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 type AgentResponseLogOptions = {
-  agent: 'path-planner' | 'step-narrator' | 'operator-loop'
+  agent: 'path-planner' | 'path-narrator' | 'operator-loop'
   model?: string
   runId?: string
   pathId?: string

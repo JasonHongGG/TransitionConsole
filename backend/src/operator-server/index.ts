@@ -6,8 +6,8 @@ import { PlaywrightBrowserOperator } from './operators/PlaywrightBrowserOperator
 import type {
   OperatorCleanupPathRequest,
   OperatorCleanupRunRequest,
+  OperatorPathRunRequest,
   OperatorResetReplayResponse,
-  OperatorStepRunRequest,
   PlannedLiveEventInput,
 } from './type'
 import { OperatorLoopApi } from './OperatorLoopApi'
@@ -52,28 +52,26 @@ app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'operator-server' })
 })
 
-app.post('/api/operator/step-executor/run', async (req, res) => {
+app.post('/api/operator/path-executor/run', async (req, res) => {
   try {
-    const body = req.body as OperatorStepRunRequest
-    const step = body.step
+    const body = req.body as OperatorPathRunRequest
+    const path = body.path
     const context = body.context
     const narrative = body.narrative
-    const validations = body.validations
 
     log.log('operator run request', {
       runId: context.runId,
       pathId: context.pathId,
-      stepId: context.stepId,
-      edgeId: step.edgeId,
+      pathExecutionId: context.pathExecutionId,
+      transitions: path.steps.length,
       targetUrl: context.targetUrl,
     })
 
-    const output = await operator.run(step, context, narrative, validations)
+    const output = await operator.runPath(path, context, narrative)
     log.log('operator run completed', {
       runId: context.runId,
       pathId: context.pathId,
-      stepId: context.stepId,
-      edgeId: step.edgeId,
+      pathExecutionId: context.pathExecutionId,
       result: output.result,
     })
     res.json(output)
@@ -88,7 +86,7 @@ app.post('/api/operator/step-executor/run', async (req, res) => {
   }
 })
 
-app.post('/api/operator/step-executor/cleanup-run', async (req, res) => {
+app.post('/api/operator/path-executor/cleanup-run', async (req, res) => {
   try {
     const runId = (req.body as OperatorCleanupRunRequest).runId
     log.log('operator cleanup request', { runId })
@@ -106,12 +104,12 @@ app.post('/api/operator/step-executor/cleanup-run', async (req, res) => {
   }
 })
 
-app.post('/api/operator/step-executor/cleanup-path', async (req, res) => {
+app.post('/api/operator/path-executor/cleanup-path', async (req, res) => {
   try {
-    const { runId, pathId } = req.body as OperatorCleanupPathRequest
-    log.log('operator path cleanup request', { runId, pathId })
-    await operator.cleanupPath?.(runId, pathId)
-    log.log('operator path cleanup completed', { runId, pathId })
+    const { runId, pathExecutionId, pathId } = req.body as OperatorCleanupPathRequest
+    log.log('operator path cleanup request', { runId, pathExecutionId, pathId })
+    await operator.cleanupPath?.(runId, pathExecutionId)
+    log.log('operator path cleanup completed', { runId, pathExecutionId, pathId })
     res.json({ ok: true })
   } catch (error) {
     log.log('operator path cleanup failed', {
@@ -124,7 +122,7 @@ app.post('/api/operator/step-executor/cleanup-path', async (req, res) => {
   }
 })
 
-app.post('/api/operator/step-executor/reset-replay', async (_req, res) => {
+app.post('/api/operator/path-executor/reset-replay', async (_req, res) => {
   try {
     log.log('operator replay reset request')
     await operator.resetReplayCursor?.()

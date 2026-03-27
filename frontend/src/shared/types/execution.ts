@@ -10,8 +10,19 @@ export type AgentMode = 'llm' | 'mock'
 
 export interface RunnerAgentModes {
   pathPlanner: AgentMode
-  stepNarrator: AgentMode
+  pathNarrator: AgentMode
   operatorLoop: AgentMode
+}
+
+export type PlannedStepKind = 'transition' | 'connector'
+
+export interface StepValidationSpec {
+  id: string
+  type: string
+  description: string
+  expected?: string
+  selector?: string
+  timeoutMs?: number
 }
 
 export interface StepValidationResult {
@@ -22,6 +33,9 @@ export interface StepValidationResult {
   cacheKey: string
   resolution: ValidationResolution
   checkedAt: string
+  validationType?: string
+  actual?: string
+  expected?: string
 }
 
 export interface StepValidationSummary {
@@ -30,8 +44,6 @@ export interface StepValidationSummary {
   fail: number
   pending: number
 }
-
-export type PlannedStepKind = 'transition' | 'connector'
 
 export interface PlannedTransitionStep {
   id: string
@@ -42,7 +54,7 @@ export interface PlannedTransitionStep {
   fromDiagramId: string
   toDiagramId: string
   label: string
-  validations: string[]
+  validations: StepValidationSpec[]
   semantic: string
 }
 
@@ -62,11 +74,40 @@ export interface PlannedCoverageSummary {
   uncoveredEdgeIds: string[]
 }
 
+export type PathExecutionStatus = 'pending' | 'running' | 'pass' | 'fail'
+
+export interface PathExecutionSummary {
+  pathId: string
+  pathName: string
+  semanticGoal: string
+  batchNumber: number
+  pathExecutionId: string | null
+  attemptId: number | null
+  status: PathExecutionStatus
+  totalTransitions: number
+  completedTransitions: number
+  currentTransitionId: string | null
+  currentTransitionLabel: string | null
+  currentTransitionOrder: number | null
+  currentStateId: string | null
+  nextStateId: string | null
+  activeEdgeId: string | null
+  blockedReason?: string
+  result?: TransitionResult
+  startedAt?: string
+  completedAt?: string
+}
+
 export interface PlannedRunSnapshot {
   runId: string | null
   running: boolean
   completed: boolean
+  stopRequested: boolean
+  batchNumber: number
   currentPathId: string | null
+  currentPathName: string | null
+  currentPathExecutionId: string | null
+  currentAttemptId: number | null
   currentStepId: string | null
   currentStepOrder: number | null
   currentPathStepTotal: number | null
@@ -75,15 +116,22 @@ export interface PlannedRunSnapshot {
   activeEdgeId: string | null
   totalPaths: number
   completedPaths: number
+  failedPaths: number
+  pendingPaths: number
   nodeStatuses: Record<string, ElementExecutionStatus>
   edgeStatuses: Record<string, ElementExecutionStatus>
   coverage: PlannedCoverageSummary
   agentModes: RunnerAgentModes
+  paths: PathExecutionSummary[]
 }
+
+export type PlannedRunnerStatus = PlannedRunSnapshot
 
 export interface PlannedStepEvent {
   pathId: string
   pathName: string
+  pathExecutionId: string
+  attemptId: number
   step: PlannedTransitionStep
   result: TransitionResult
   message: string
@@ -94,17 +142,6 @@ export interface PlannedStepEvent {
 
 export interface PlannedRunPlan {
   paths: PlannedTransitionPath[]
-}
-
-export interface PlannedRunnerStatus {
-  plannedPaths: number
-  completedPaths: number
-  currentPathId: string | null
-  currentPathName: string | null
-  currentStepId: string | null
-  currentStepLabel: string | null
-  currentStepOrder: number | null
-  currentPathStepTotal: number | null
 }
 
 export interface CoverageState {
@@ -134,10 +171,18 @@ export interface PlannedLiveEvent {
   message: string
   runId?: string
   pathId?: string
+  pathExecutionId?: string
+  attemptId?: number
   stepId?: string
   edgeId?: string
   iteration?: number
   actionCursor?: number
+  currentStateId?: string | null
+  nextStateId?: string | null
+  currentStepOrder?: number | null
+  currentPathStepTotal?: number | null
+  pathOrder?: number | null
+  totalPaths?: number | null
   meta?: Record<string, unknown>
 }
 

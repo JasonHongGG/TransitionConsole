@@ -15,7 +15,8 @@ export interface PathPlannerGenerateResponse {
 
 export type PathPlannerResetResponse = ApiOkResponse
 
-export interface StepNarratorRequestStep {
+export interface PathNarratorRequestStep {
+  id: string
   edgeId: string
   from: {
     stateId: string
@@ -27,14 +28,22 @@ export interface StepNarratorRequestStep {
   }
   summary?: string
   semanticGoal?: string
+  validations?: DiagramValidation[]
 }
 
-export interface StepNarratorRequestState {
+export interface PathNarratorRequestPath {
+  id: string
+  name: string
+  semanticGoal: string
+  steps: PathNarratorRequestStep[]
+}
+
+export interface PathNarratorRequestState {
   id: string
   walked: boolean
 }
 
-export interface StepNarratorRequestTransition {
+export interface PathNarratorRequestTransition {
   id: string
   from: string
   to: string
@@ -45,7 +54,7 @@ export interface StepNarratorRequestTransition {
   }
 }
 
-export interface StepNarratorRequestConnector {
+export interface PathNarratorRequestConnector {
   id: string
   type: 'contains' | 'invokes'
   from: {
@@ -63,7 +72,7 @@ export interface StepNarratorRequestConnector {
   }
 }
 
-export interface StepNarratorRequestDiagram {
+export interface PathNarratorRequestDiagram {
   id: string
   name: string
   level: string
@@ -75,9 +84,9 @@ export interface StepNarratorRequestDiagram {
     deltaDiagramIdsByRole: Record<string, string>
     appliesToRoles: string[]
   }
-  states: StepNarratorRequestState[]
-  transitions: StepNarratorRequestTransition[]
-  connectors: StepNarratorRequestConnector[]
+  states: PathNarratorRequestState[]
+  transitions: PathNarratorRequestTransition[]
+  connectors: PathNarratorRequestConnector[]
   meta: {
     pageName: string | null
     featureName: string | null
@@ -86,23 +95,24 @@ export interface StepNarratorRequestDiagram {
   }
 }
 
-export interface StepNarratorRequestContext {
+export interface PathNarratorRequestContext {
   runId: string
   pathId: string
-  stepId: string
+  pathExecutionId: string
+  attemptId: number
   agentMode?: AgentMode
   targetUrl?: string
   specRaw: string
-  diagrams: StepNarratorRequestDiagram[]
+  diagrams: PathNarratorRequestDiagram[]
 }
 
-export interface StepNarratorGenerateRequest {
-  step: StepNarratorRequestStep
-  context: StepNarratorRequestContext
+export interface PathNarratorGenerateRequest {
+  path: PathNarratorRequestPath
+  context: PathNarratorRequestContext
 }
 
-export interface StepNarratorGenerateResponse {
+export interface PathNarratorGenerateResponse {
   narrative: StepNarrativeInstruction
 }
 
-export type StepNarratorResetResponse = ApiOkResponse
+export type PathNarratorResetResponse = ApiOkResponse

@@ -8,7 +8,7 @@ import { AgentStepExecutor } from './planned-runner/executor'
 import { PassOnlyStepExecutor } from './planned-runner/executor/PassOnlyStepExecutor'
 import { BrowserOperatorApi } from './planned-runner/api/BrowserOperatorApi'
 import { PathPlannerApi } from './planned-runner/api/PathPlannerApi'
-import { StepNarratorApi } from './planned-runner/api/StepNarratorApi'
+import { PathNarratorApi } from './planned-runner/api/PathNarratorApi'
 import { PlannedLiveEventBus } from './planned-runner/live-events/PlannedLiveEventBus'
 import type { RunnerAgentModes } from './planned-runner/types'
 import { servicePorts, toLocalBaseUrl } from '../common/network'
@@ -30,7 +30,7 @@ export const startMainServer = (): void => {
 
   const defaultAgentModes: RunnerAgentModes = {
     pathPlanner: resolveMode(process.env.PATH_PLANNER_PROVIDER),
-    stepNarrator: resolveMode(process.env.STEP_NARRATOR_PROVIDER),
+    pathNarrator: resolveMode(process.env.PATH_NARRATOR_PROVIDER),
     operatorLoop: resolveMode(process.env.OPERATOR_LOOP_PROVIDER),
   }
 
@@ -38,7 +38,7 @@ export const startMainServer = (): void => {
     executorMode === 'pass-only'
       ? new PassOnlyStepExecutor()
       : new AgentStepExecutor({
-          narrator: new StepNarratorApi({ aiBaseUrl: aiServerBaseUrl }),
+          narrator: new PathNarratorApi({ aiBaseUrl: aiServerBaseUrl }),
           operator: new BrowserOperatorApi({ operatorBaseUrl: operatorServerBaseUrl }),
           publishLiveEvent: (event) => {
             liveEventBus.publish(event)

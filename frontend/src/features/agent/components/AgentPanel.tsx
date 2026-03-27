@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { AgentLogEntry, CoverageState, Diagram, PlannedRunnerStatus, PlannedStepEvent, RunnerAgentModes, TestingAccount } from '../../../types'
+import type { AgentLogEntry, CoverageState, Diagram, PlannedRunnerStatus, RunnerAgentModes, TestingAccount } from '../../../types'
 
 interface AgentPanelProps {
   diagrams: Diagram[]
@@ -8,7 +8,6 @@ interface AgentPanelProps {
   logs: AgentLogEntry[]
   currentStateId: string | null
   nextStateId: string | null
-  latestEvent: PlannedStepEvent | null
   running: boolean
   stopRequested: boolean
   isBusy: boolean
@@ -20,7 +19,7 @@ interface AgentPanelProps {
   fullCoveragePassed: boolean | null
   onStart: () => void
   onStop: () => void
-  onStep: () => void
+  onRefresh: () => void
   onReset: () => void
   targetUrl: string
   onTargetUrlChange: (value: string) => void
@@ -59,7 +58,6 @@ export const AgentPanel = ({
   logs,
   currentStateId,
   nextStateId,
-  latestEvent,
   running,
   stopRequested,
   isBusy,
@@ -71,7 +69,7 @@ export const AgentPanel = ({
   fullCoveragePassed,
   onStart,
   onStop,
-  onStep,
+  onRefresh,
   onReset,
   targetUrl,
   onTargetUrlChange,
@@ -108,10 +106,12 @@ export const AgentPanel = ({
   const stateSummary = `${visitedStates} / ${totalStates}`
   const transitionSummary = `${passCount} / ${failCount} / ${totalTransitions}`
   const pathCurrentIndex =
-    plannedStatus && plannedStatus.plannedPaths > 0
+    plannedStatus && plannedStatus.totalPaths > 0
       ? Math.min(
-          plannedStatus.plannedPaths,
-          plannedStatus.currentPathId ? plannedStatus.completedPaths + 1 : plannedStatus.completedPaths,
+          plannedStatus.totalPaths,
+          plannedStatus.currentPathId
+            ? plannedStatus.completedPaths + plannedStatus.failedPaths + 1
+            : plannedStatus.completedPaths + plannedStatus.failedPaths,
         )
       : 0
 
@@ -124,8 +124,7 @@ export const AgentPanel = ({
       : 0
 
   const stepTotal = plannedStatus?.currentPathStepTotal ?? 0
-  const hasValidationResults = (latestEvent?.validationResults?.length ?? 0) > 0
-  const runModeLabel = running ? 'Auto' : 'Manual'
+  const runModeLabel = running ? 'Auto' : plannedStatus ? 'Standby' : 'Idle'
   const coverageLabel = completed ? (fullCoveragePassed ? 'Pass' : 'Not Pass') : 'In Progress'
   const plannerLabel = plannerRound > 0 ? `Round ${plannerRound}` : 'Not Started'
 
@@ -146,6 +145,33 @@ export const AgentPanel = ({
     focusMode === 'off' ? 'Focus: Off' : focusMode === 'current' ? 'Focus: Current Node' : 'Focus: Path'
 
   const nextStateLabel = nextStateId ?? 'N/A'
+  const activePath = useMemo(() => {
+    if (!plannedStatus) {
+      return null
+    }
+
+    if (plannedStatus.currentPathExecutionId) {
+      const currentByExecution = plannedStatus.paths.find(
+        (path) => path.pathExecutionId === plannedStatus.currentPathExecutionId,
+      )
+      if (currentByExecution) {
+        return currentByExecution
+      }
+    }
+
+    if (plannedStatus.currentPathId) {
+      const currentById = [...plannedStatus.paths]
+        .reverse()
+        .find((path) => path.pathId === plannedStatus.currentPathId)
+      if (currentById) {
+        return currentById
+      }
+    }
+
+    return [...plannedStatus.paths]
+      .reverse()
+      .find((path) => path.status !== 'pending') ?? null
+  }, [plannedStatus])
 
   const testingInfoModal =
     showTestingInfoModal && typeof document !== 'undefined'
@@ -331,7 +357,7 @@ export const AgentPanel = ({
                   <div className="agent-card-header testing-info-section-header">
                     <h4>
                       Agent Mode
-                      <span className="agent-settings-note">變更會在下一次 step 生效；目前進行中的 step 不會被中斷。</span>
+                      <span className="agent-settings-note">變更會在下一條 path 或下一次 resume 生效；目前進行中的 path 不會被中斷。</span>
                     </h4>
                   </div>
 
@@ -361,23 +387,23 @@ export const AgentPanel = ({
                     </label>
 
                     <label className="agent-settings-row">
-                      <span>Step Narrator</span>
-                      <div className="agent-mode-switch" role="group" aria-label="Step Narrator mode">
+                      <span>Path Narrator</span>
+                      <div className="agent-mode-switch" role="group" aria-label="Path Narrator mode">
                         <button
                           type="button"
-                          className={`agent-mode-option ${agentModes.stepNarrator === 'llm' ? 'active' : ''}`}
-                          onClick={() => onAgentModeChange('stepNarrator', 'llm')}
-                          disabled={isSettingsBusy || agentModes.stepNarrator === 'llm'}
-                          aria-pressed={agentModes.stepNarrator === 'llm'}
+                          className={`agent-mode-option ${agentModes.pathNarrator === 'llm' ? 'active' : ''}`}
+                          onClick={() => onAgentModeChange('pathNarrator', 'llm')}
+                          disabled={isSettingsBusy || agentModes.pathNarrator === 'llm'}
+                          aria-pressed={agentModes.pathNarrator === 'llm'}
                         >
                           LLM
                         </button>
                         <button
                           type="button"
-                          className={`agent-mode-option ${agentModes.stepNarrator === 'mock' ? 'active' : ''}`}
-                          onClick={() => onAgentModeChange('stepNarrator', 'mock')}
-                          disabled={isSettingsBusy || agentModes.stepNarrator === 'mock'}
-                          aria-pressed={agentModes.stepNarrator === 'mock'}
+                          className={`agent-mode-option ${agentModes.pathNarrator === 'mock' ? 'active' : ''}`}
+                          onClick={() => onAgentModeChange('pathNarrator', 'mock')}
+                          disabled={isSettingsBusy || agentModes.pathNarrator === 'mock'}
+                          aria-pressed={agentModes.pathNarrator === 'mock'}
                         >
                           Mock
                         </button>
@@ -460,14 +486,14 @@ export const AgentPanel = ({
           <button
             type="button"
             className="agent-icon-btn"
-            onClick={onStep}
-            disabled={isBusy || running}
-            title="Step"
-            aria-label="Step"
+            onClick={onRefresh}
+            disabled={isBusy}
+            title="Refresh Status"
+            aria-label="Refresh Status"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6 6h2.4v12H6z" fill="currentColor" />
-              <path d="M10 7v10a1 1 0 0 0 1.56.83l6.8-4.95a1 1 0 0 0 0-1.66l-6.8-4.95A1 1 0 0 0 10 7z" fill="currentColor" />
+              <path d="M19 12a7 7 0 1 1-2-4.9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M19 5v5h-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
           <button
@@ -588,15 +614,23 @@ export const AgentPanel = ({
           <div className="agent-keyval-column compact">
             <div className="agent-keyval-row">
               <dt>Path</dt>
-              <dd>{plannedStatus ? `${pathCurrentIndex}/${plannedStatus.plannedPaths}` : 'N/A'}</dd>
+              <dd>{plannedStatus ? `${pathCurrentIndex}/${plannedStatus.totalPaths}` : 'N/A'}</dd>
             </div>
             <div className="agent-keyval-row">
               <dt>Step</dt>
               <dd>{plannedStatus ? `${stepCurrentIndex}/${stepTotal}` : 'N/A'}</dd>
             </div>
+            <div className="agent-keyval-row">
+              <dt>Failed</dt>
+              <dd>{plannedStatus ? `${plannedStatus.failedPaths}` : 'N/A'}</dd>
+            </div>
           </div>
 
           <div className="agent-keyval-column wide">
+            <div className="agent-keyval-row">
+              <dt>Batch</dt>
+              <dd>{plannedStatus ? `${plannedStatus.batchNumber}` : 'N/A'}</dd>
+            </div>
             <div className="agent-keyval-row">
               <dt>Current State</dt>
               <dd>{plannedStatus ? (currentStateId ?? 'N/A') : 'N/A'}</dd>
@@ -612,36 +646,47 @@ export const AgentPanel = ({
       <div className="agent-detail-stack">
         <section className="agent-card agent-scroll-card">
           <div className="agent-card-header">
-            <h4>Validation Results</h4>
+            <h4>Path Detail</h4>
           </div>
           <div className="agent-scroll-region agent-validation-list">
-            {latestEvent ? (
+            {activePath ? (
               <>
                 <p className="agent-validation-summary">
-                  [{latestEvent.result.toUpperCase()}] {latestEvent.step.label} : {latestEvent.pathName}
+                  [{activePath.status.toUpperCase()}] {activePath.pathName}
                 </p>
                 <p className="agent-validation-summary">
-                  Summary: pass {latestEvent.validationSummary.pass} / fail {latestEvent.validationSummary.fail} / pending {latestEvent.validationSummary.pending} / total {latestEvent.validationSummary.total}
+                  Goal: {activePath.semanticGoal}
                 </p>
-                {latestEvent.blockedReason ? <p className="agent-validation-summary">Blocked: {latestEvent.blockedReason}</p> : null}
-                {hasValidationResults ? (
+                <p className="agent-validation-summary">
+                  Transition: {activePath.completedTransitions}/{activePath.totalTransitions}
+                  {activePath.currentTransitionLabel ? ` · ${activePath.currentTransitionLabel}` : ''}
+                </p>
+                {activePath.blockedReason ? <p className="agent-validation-summary">Blocked: {activePath.blockedReason}</p> : null}
+                {plannedStatus ? (
                   <ul>
-                    {(latestEvent.validationResults ?? []).map((validation) => (
-                      <li key={validation.id} className="agent-validation-row">
-                        <span className={`validation-status-tag ${validation.status}`}>
-                          {validation.status.toUpperCase()}
-                        </span>
-                        <span className="validation-label">{validation.label}</span>
-                        <span className="validation-reason">{validation.resolution} · {validation.reason}</span>
-                      </li>
-                    ))}
+                    <li className="agent-validation-row">
+                      <span className={`validation-status-tag ${activePath.status}`}>
+                        {activePath.status.toUpperCase()}
+                      </span>
+                      <span className="validation-label">Current Path ID</span>
+                      <span className="validation-reason">{activePath.pathId}</span>
+                    </li>
+                    <li className="agent-validation-row">
+                      <span className="validation-status-tag pending">BATCH</span>
+                      <span className="validation-label">Execution Context</span>
+                      <span className="validation-reason">
+                        batch {activePath.batchNumber}
+                        {activePath.attemptId ? ` · attempt ${activePath.attemptId}` : ''}
+                        {activePath.pathExecutionId ? ` · ${activePath.pathExecutionId}` : ''}
+                      </span>
+                    </li>
                   </ul>
                 ) : (
-                  <p className="muted">No validations for this step.</p>
+                  <p className="muted">No path detail available.</p>
                 )}
               </>
             ) : (
-              <p className="muted">No step executed yet.</p>
+              <p className="muted">No path running yet.</p>
             )}
           </div>
         </section>

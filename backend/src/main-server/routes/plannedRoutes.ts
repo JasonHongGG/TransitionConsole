@@ -103,21 +103,18 @@ export const createPlannedRoutes = (runner: PlannedRunner, liveEventBus: Planned
     }
   })
 
-  router.post('/step', async (_req, res) => {
+  router.get('/status', (_req, res) => {
     try {
-      log.log('step request received')
-      const result = await runner.step()
-      log.log('step request completed', {
+      const result = runner.getStatus()
+      log.log('status request completed', {
         ok: result.ok,
         completed: result.snapshot.completed,
         currentPathId: result.snapshot.currentPathId,
         currentStepId: result.snapshot.currentStepId,
-        eventResult: result.event?.result ?? null,
-        eventEdgeId: result.event?.step.edgeId ?? null,
       })
       res.json(result)
     } catch (error) {
-      log.log('step request failed', {
+      log.log('status request failed', {
         error: error instanceof Error ? error.message : 'Unknown error',
       })
       res.status(500).json({ ok: false, error: error instanceof Error ? error.message : 'Unknown error' })

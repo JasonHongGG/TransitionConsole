@@ -22,19 +22,43 @@ export interface LoopValidationUpdate {
   actual?: string
 }
 
+export interface LoopPathStep {
+  id: string
+  edgeId: string
+  summary: string
+  from: {
+    stateId: string
+    diagramId: string
+  }
+  to: {
+    stateId: string
+    diagramId: string
+  }
+}
+
 export interface LoopDecisionInput {
   agentMode?: 'llm' | 'mock'
   context: {
     runId: string
     pathId: string
-    stepId: string
-    stepOrder: number
+    pathExecutionId: string
+    attemptId: number
+    pathName: string
     targetUrl: string
     specRaw: string | null
     userTestingInfo?: UserTestingInfo
   }
-  step: {
+  path: {
+    id: string
+    name: string
+    semanticGoal: string
+    totalSteps: number
+    steps: LoopPathStep[]
+  }
+  currentTransition: {
+    stepId: string
     edgeId: string
+    stepOrder: number
     from: {
       stateId: string
       diagramId: string
@@ -51,13 +75,23 @@ export interface LoopDecisionInput {
     title: string
     iteration: number
     actionCursor: number
+    currentStepOrder: number
+    totalSteps: number
+    currentStateId: string
+    nextStateId: string
+    completedTransitions: number
   }
   screenshotBase64: string
   narrative: {
-    summary: string
-    taskDescription: string
+    pathSummary: string
+    executionStrategy?: string
+    currentTransitionSummary: string
     pendingValidations: LoopValidationInput[]
     confirmedValidations: LoopConfirmedValidation[]
+    remainingTransitions: Array<{
+      stepId: string
+      summary: string
+    }>
   }
 }
 
@@ -78,7 +112,7 @@ export type LoopFailureCode =
 export type LoopTerminationReason = 'completed' | 'max-iterations' | 'operator-error' | 'validation-failed' | 'criteria-unmet'
 
 export interface LoopDecision {
-  kind: 'complete' | 'act' | 'fail'
+  kind: 'complete' | 'advance' | 'act' | 'fail'
   reason: string
   progressSummary: string
   validationUpdates: LoopValidationUpdate[]
@@ -103,6 +137,8 @@ export interface LoopAppendFunctionResponsesInput {
   agentMode?: 'llm' | 'mock'
   runId: string
   pathId: string
+  pathExecutionId: string
+  attemptId: number
   stepId: string
   stepOrder: number
   narrativeSummary: string
@@ -111,6 +147,11 @@ export interface LoopAppendFunctionResponsesInput {
     title: string
     iteration: number
     actionCursor: number
+    currentStepOrder: number
+    totalSteps: number
+    currentStateId: string
+    nextStateId: string
+    completedTransitions: number
   }
   responses: LoopFunctionResponse[]
 }
@@ -118,6 +159,7 @@ export interface LoopAppendFunctionResponsesInput {
 export interface OperatorLoopAgent {
   decide(input: LoopDecisionInput): Promise<LoopDecision>
   appendFunctionResponses?(input: LoopAppendFunctionResponsesInput): Promise<void>
+  cleanupPath?(runId: string, pathExecutionId: string): Promise<void>
   cleanupRun?(runId: string): Promise<void>
   resetReplayCursor?(): Promise<void>
 }
@@ -136,5 +178,11 @@ export interface OperatorLoopCleanupRunRequest {
   runId: string
 }
 
+export interface OperatorLoopCleanupPathRequest {
+  runId: string
+  pathExecutionId: string
+}
+
 export type OperatorLoopCleanupRunResponse = ApiOkResponse
+export type OperatorLoopCleanupPathResponse = ApiOkResponse
 export type OperatorLoopResetResponse = ApiOkResponse

@@ -1,38 +1,46 @@
-import type { ExecutorContext, PlannedTransitionStep, StepNarrativeInstruction } from '../types'
-import type { StepNarrator } from '../executor/contracts'
-import type { StepNarratorGenerateRequest, StepNarratorGenerateResponse, StepNarratorResetResponse } from '../../type/contracts'
+import type { ExecutorContext, PlannedTransitionPath, StepNarrativeInstruction } from '../types'
+import type { PathNarrator } from '../executor/contracts'
+import type { PathNarratorGenerateRequest, PathNarratorGenerateResponse, PathNarratorResetResponse } from '../../type/contracts'
 import { servicePorts, toLocalBaseUrl } from '../../../common/network'
 import { postApiJson } from './apiClient'
 
-export class StepNarratorApi implements StepNarrator {
+export class PathNarratorApi implements PathNarrator {
   private readonly aiBaseUrl: string
   private readonly timeoutMs: number
 
   constructor(options?: { aiBaseUrl?: string; timeoutMs?: number }) {
     this.aiBaseUrl = options?.aiBaseUrl ?? toLocalBaseUrl(servicePorts.aiServer)
-    this.timeoutMs = options?.timeoutMs ?? Number(process.env.STEP_NARRATOR_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
+    this.timeoutMs = options?.timeoutMs ?? Number(process.env.PATH_NARRATOR_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
   }
 
-  private buildGenerateRequest(step: PlannedTransitionStep, context: ExecutorContext): StepNarratorGenerateRequest {
+  private buildGenerateRequest(path: PlannedTransitionPath, context: ExecutorContext): PathNarratorGenerateRequest {
     return {
-      step: {
-        edgeId: step.edgeId,
-        from: {
-          stateId: step.fromStateId,
-          diagramId: step.fromDiagramId,
-        },
-        to: {
-          stateId: step.toStateId,
-          diagramId: step.toDiagramId,
-        },
-        summary: step.label,
-        semanticGoal: step.semantic,
+      path: {
+        id: path.id,
+        name: path.name,
+        semanticGoal: path.semanticGoal,
+        steps: path.steps.map((step) => ({
+          id: step.id,
+          edgeId: step.edgeId,
+          from: {
+            stateId: step.fromStateId,
+            diagramId: step.fromDiagramId,
+          },
+          to: {
+            stateId: step.toStateId,
+            diagramId: step.toDiagramId,
+          },
+          summary: step.label,
+          semanticGoal: step.semantic,
+          validations: step.validations,
+        })),
       },
       context: {
         runId: context.runId,
         pathId: context.pathId,
-        stepId: context.stepId,
-        agentMode: context.agentModes.stepNarrator,
+        pathExecutionId: context.pathExecutionId,
+        attemptId: context.attemptId,
+        agentMode: context.agentModes.pathNarrator,
         targetUrl: context.targetUrl,
         specRaw: context.specRaw ?? '',
         diagrams: context.systemDiagrams.map((diagram) => ({
@@ -89,11 +97,11 @@ export class StepNarratorApi implements StepNarrator {
     }
   }
 
-  async generate(step: PlannedTransitionStep, context: ExecutorContext): Promise<StepNarrativeInstruction> {
-    const request = this.buildGenerateRequest(step, context)
-    const response = await postApiJson<StepNarratorGenerateRequest, StepNarratorGenerateResponse>(
+  async generate(path: PlannedTransitionPath, context: ExecutorContext): Promise<StepNarrativeInstruction> {
+    const request = this.buildGenerateRequest(path, context)
+    const response = await postApiJson<PathNarratorGenerateRequest, PathNarratorGenerateResponse>(
       this.aiBaseUrl,
-      '/api/ai/agents/step-narrator/generate',
+      '/api/ai/agents/path-narrator/generate',
       request,
       this.timeoutMs,
     )
@@ -102,9 +110,9 @@ export class StepNarratorApi implements StepNarrator {
   }
 
   async resetReplayCursor(): Promise<void> {
-    await postApiJson<Record<string, never>, StepNarratorResetResponse>(
+    await postApiJson<Record<string, never>, PathNarratorResetResponse>(
       this.aiBaseUrl,
-      '/api/ai/agents/step-narrator/reset',
+      '/api/ai/agents/path-narrator/reset',
       {},
       this.timeoutMs,
     )

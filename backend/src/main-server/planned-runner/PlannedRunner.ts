@@ -7,20 +7,23 @@ import { buildEmptySnapshot, buildRuntimeSnapshot, computeCoverageSummary } from
 import type {
   AgentMode,
   ElementExecutionStatus,
+  ExecutorContext,
+  PathExecutionSummary,
   PlannedLiveEventInput,
   PlannedPathHistoryItem,
   PlannedRunnerRequest,
-  RunnerAgentModes,
   PlannedStepEvent,
   PlannedStepResponse,
+  PlannedTransitionPath,
+  RunnerAgentModes,
   RuntimeState,
-  StepExecutionResult,
   StepExecutor,
 } from './types'
 
 const log = createLogger('planned-runner')
 
 const createRunId = () => `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+const createPathExecutionId = (pathId: string) => `px-${pathId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
 const toElapsedSeconds = (elapsedMs: number): number => Math.max(1, Math.ceil(elapsedMs / 1000))
 
 const parseOptionalPositiveInt = (raw: string | undefined): number | null => {
@@ -39,14 +42,14 @@ const normalizeAgentModes = (
   overrides?: Partial<RunnerAgentModes>,
 ): RunnerAgentModes => ({
   pathPlanner: isAgentMode(overrides?.pathPlanner) ? overrides.pathPlanner : defaults.pathPlanner,
-  stepNarrator: isAgentMode(overrides?.stepNarrator) ? overrides.stepNarrator : defaults.stepNarrator,
+  pathNarrator: isAgentMode(overrides?.pathNarrator) ? overrides.pathNarrator : defaults.pathNarrator,
   operatorLoop: isAgentMode(overrides?.operatorLoop) ? overrides.operatorLoop : defaults.operatorLoop,
 })
 
 const requestTargetUrl = (runtime: RuntimeState): string => runtime.targetUrl
 
-const toHistoryItems = (plan: RuntimeState['plan'], plannedRound: number): PlannedPathHistoryItem[] =>
-  plan.paths.map((path) => ({
+const toHistoryItems = (paths: PlannedTransitionPath[], plannedRound: number): PlannedPathHistoryItem[] =>
+  paths.map((path) => ({
     pathId: path.id,
     pathName: path.name,
     semanticGoal: path.semanticGoal,
@@ -61,6 +64,7 @@ export class PlannedRunner {
   private readonly publishLiveEvent?: (event: PlannedLiveEventInput) => void
   private readonly defaultAgentModes: RunnerAgentModes
   private readonly maxCompletedPaths: number | null
+  private activeLoop: Promise<void> | null = null
 
   constructor(options: {
     executor?: StepExecutor
@@ -73,13 +77,77 @@ export class PlannedRunner {
     this.publishLiveEvent = options.publishLiveEvent
     this.defaultAgentModes = options.defaultAgentModes ?? {
       pathPlanner: 'llm',
-      stepNarrator: 'llm',
+      pathNarrator: 'llm',
       operatorLoop: 'llm',
     }
-
-    // When set, the runner will automatically stop after executing N paths.
-    // Intended for auto-run loops that repeatedly call `step()`.
     this.maxCompletedPaths = parseOptionalPositiveInt(process.env.PLANNED_RUNNER_AUTO_MAX_PATHS)
+  }
+
+  private emitLiveEvent(event: PlannedLiveEventInput): void {
+    this.publishLiveEvent?.(event)
+  }
+
+  private createPathSummaries(paths: PlannedTransitionPath[], batchNumber: number): PathExecutionSummary[] {
+    return paths.map((path) => ({
+      pathId: path.id,
+      pathName: path.name,
+      semanticGoal: path.semanticGoal,
+      batchNumber,
+      pathExecutionId: null,
+      attemptId: null,
+      status: 'pending',
+      totalTransitions: path.steps.length,
+      completedTransitions: 0,
+      currentTransitionId: null,
+      currentTransitionLabel: null,
+      currentTransitionOrder: null,
+      currentStateId: path.steps[0]?.fromStateId ?? null,
+      nextStateId: path.steps[0]?.toStateId ?? null,
+      activeEdgeId: path.steps[0]?.edgeId ?? null,
+    }))
+  }
+
+  private upsertPathSummaries(nextSummaries: PathExecutionSummary[]): void {
+    if (!this.runtime) return
+    this.runtime.pathSummaries = [...this.runtime.pathSummaries, ...nextSummaries]
+  }
+
+  private updatePathSummary(pathId: string, batchNumber: number, updater: (summary: PathExecutionSummary) => PathExecutionSummary): void {
+    if (!this.runtime) return
+    this.runtime.pathSummaries = this.runtime.pathSummaries.map((summary) => {
+      if (summary.pathId !== pathId || summary.batchNumber !== batchNumber) {
+        return summary
+      }
+      return updater(summary)
+    })
+  }
+
+  private setActiveCursor(path: PlannedTransitionPath, pathExecutionId: string, attemptId: number, currentTransitionIndex: number | null): void {
+    if (!this.runtime) return
+    const step = currentTransitionIndex === null ? null : path.steps[currentTransitionIndex] ?? null
+    this.runtime.currentPathId = path.id
+    this.runtime.currentPathName = path.name
+    this.runtime.currentPathExecutionId = pathExecutionId
+    this.runtime.currentAttemptId = attemptId
+    this.runtime.currentStepId = step?.id ?? null
+    this.runtime.currentStepOrder = step ? currentTransitionIndex! + 1 : null
+    this.runtime.currentPathStepTotal = path.steps.length
+    this.runtime.currentStateId = step?.fromStateId ?? path.steps[path.steps.length - 1]?.toStateId ?? null
+    this.runtime.nextStateId = step?.toStateId ?? null
+    this.runtime.activeEdgeId = step?.edgeId ?? null
+  }
+
+  private clearActiveCursor(): void {
+    if (!this.runtime) return
+    this.runtime.currentPathId = null
+    this.runtime.currentPathName = null
+    this.runtime.currentPathExecutionId = null
+    this.runtime.currentAttemptId = null
+    this.runtime.currentStepId = null
+    this.runtime.currentStepOrder = null
+    this.runtime.currentPathStepTotal = null
+    this.runtime.activeEdgeId = null
+    this.runtime.nextStateId = null
   }
 
   private async maybeStopAfterMaxPaths(): Promise<boolean> {
@@ -87,32 +155,58 @@ export class PlannedRunner {
     if (this.runtime.completed) return true
     if (!this.maxCompletedPaths) return false
 
-    if (this.runtime.completedPathsTotal < this.maxCompletedPaths) return false
+    const finishedPaths = this.runtime.completedPathsTotal + this.runtime.failedPathsTotal
+    if (finishedPaths < this.maxCompletedPaths) return false
 
+    await this.completeRun('success', `Run completed: reached max paths limit (${this.maxCompletedPaths})`)
+    return true
+  }
+
+  private async completeRun(level: 'success' | 'error' | 'info', message: string): Promise<void> {
+    if (!this.runtime || this.runtime.completed) return
     this.runtime.completed = true
-    log.log('run completed: reached max completed paths limit', {
-      runId: this.runtime.runId,
-      completedPathsTotal: this.runtime.completedPathsTotal,
-      maxCompletedPaths: this.maxCompletedPaths,
-    })
+    this.runtime.loopActive = false
+    this.runtime.stopRequested = false
+    this.clearActiveCursor()
     this.emitLiveEvent({
       type: 'run.completed',
-      level: 'info',
-      message: `Run completed: reached max paths limit (${this.maxCompletedPaths})`,
+      level,
+      message,
       runId: this.runtime.runId,
-      meta: {
-        completedPathsTotal: this.runtime.completedPathsTotal,
-        maxCompletedPaths: this.maxCompletedPaths,
-      },
+      totalPaths: this.runtime.totalPlannedPaths,
     })
     if (this.executor.onRunStop) {
       await this.executor.onRunStop(this.runtime.runId)
     }
-    return true
   }
 
-  private emitLiveEvent(event: PlannedLiveEventInput): void {
-    this.publishLiveEvent?.(event)
+  private async finalizeStop(): Promise<void> {
+    if (!this.runtime) return
+    this.runtime.loopActive = false
+    this.runtime.stopRequested = false
+    this.clearActiveCursor()
+    this.emitLiveEvent({
+      type: 'run.stopped',
+      level: 'info',
+      message: 'Planned run stopped',
+      runId: this.runtime.runId,
+    })
+    if (this.executor.onRunStop) {
+      await this.executor.onRunStop(this.runtime.runId)
+    }
+  }
+
+  private ensureLoop(): void {
+    if (this.activeLoop) return
+    if (this.runtime) {
+      this.runtime.loopActive = true
+    }
+    this.activeLoop = this.runLoop().finally(() => {
+      if (this.runtime && !this.runtime.completed && !this.runtime.stopRequested) {
+        this.runtime.loopActive = false
+      }
+      this.activeLoop = null
+    })
   }
 
   getAgentSettings(): { runId: string | null; agentModes: RunnerAgentModes } {
@@ -126,6 +220,14 @@ export class PlannedRunner {
     return {
       runId: this.runtime.runId,
       agentModes: this.runtime.agentModes,
+    }
+  }
+
+  getStatus(): PlannedStepResponse {
+    return {
+      ok: true,
+      event: null,
+      snapshot: this.runtime ? buildRuntimeSnapshot(this.runtime, this.runtime.completed) : buildEmptySnapshot(),
     }
   }
 
@@ -147,10 +249,35 @@ export class PlannedRunner {
   }
 
   async start(request: PlannedRunnerRequest): Promise<PlannedStepResponse> {
-    // 強制驗證 targetUrl 必填且非空
     if (!request.targetUrl || typeof request.targetUrl !== 'string' || request.targetUrl.trim().length === 0) {
       throw new Error('PlannedRunner: targetUrl is required and must be a non-empty string.')
     }
+    if (this.runtime && !this.runtime.completed) {
+      if (this.runtime.loopActive) {
+        throw new Error(`Run already active: ${this.runtime.runId}`)
+      }
+
+      this.runtime.stopRequested = false
+      this.runtime.targetUrl = request.targetUrl
+      this.runtime.userTestingInfo = request.userTestingInfo
+      this.runtime.agentModes = normalizeAgentModes(this.runtime.agentModes, request.agentModes)
+
+      this.emitLiveEvent({
+        type: 'run.resumed',
+        level: 'info',
+        message: 'Planned run resumed',
+        runId: this.runtime.runId,
+      })
+
+      this.ensureLoop()
+
+      return {
+        ok: true,
+        event: null,
+        snapshot: buildRuntimeSnapshot(this.runtime),
+      }
+    }
+
     const runId = createRunId()
     const initialAgentModes = normalizeAgentModes(this.defaultAgentModes, request.agentModes)
 
@@ -171,13 +298,6 @@ export class PlannedRunner {
 
     const graph = buildRuntimeGraph(request.diagrams, request.connectors)
 
-    log.log('runtime graph built', {
-      runId,
-      edges: graph.edges.length,
-      nodes: graph.nodeIds.length,
-      entryStateIds: graph.entryStateIds.length,
-    })
-
     const nodeStatuses: Record<string, ElementExecutionStatus> = {}
     graph.nodeIds.forEach((nodeId) => {
       nodeStatuses[nodeId] = 'untested'
@@ -187,8 +307,6 @@ export class PlannedRunner {
     graph.edges.forEach((edge) => {
       edgeStatuses[edge.id] = 'untested'
     })
-
-    log.log('planning paths started', { runId })
 
     if (this.executor.onRunStart) {
       await this.executor.onRunStart(runId)
@@ -224,15 +342,11 @@ export class PlannedRunner {
       },
     })
 
-    log.log('planning paths completed', {
-      runId,
-      plannedPaths: plan.paths.length,
-    })
+    const currentBatchNumber = 1
+    const initialSummaries = this.createPathSummaries(plan.paths, currentBatchNumber)
 
     this.runtime = {
       runId,
-      plan,
-      executedPathHistory: [],
       sourceDiagrams: request.diagrams,
       sourceConnectors: request.connectors,
       allEdges: graph.edges,
@@ -241,33 +355,52 @@ export class PlannedRunner {
       targetUrl: request.targetUrl,
       userTestingInfo: request.userTestingInfo,
       agentModes: initialAgentModes,
-      pathIndex: 0,
-      stepIndex: 0,
+      currentBatchPaths: plan.paths,
+      currentBatchNumber,
+      currentBatchCursor: 0,
+      executedPathHistory: [],
+      pathSummaries: initialSummaries,
       totalPlannedPaths: plan.paths.length,
       completedPathsTotal: 0,
+      failedPathsTotal: 0,
       replanCount: 0,
       completed: false,
+      loopActive: false,
+      stopRequested: false,
+      currentPathId: null,
+      currentPathName: null,
+      currentPathExecutionId: null,
+      currentAttemptId: null,
+      currentStepId: null,
+      currentStepOrder: null,
+      currentPathStepTotal: null,
       currentStateId: plan.paths[0]?.steps[0]?.fromStateId ?? null,
+      nextStateId: plan.paths[0]?.steps[0]?.toStateId ?? null,
+      activeEdgeId: null,
       nodeStatuses,
       edgeStatuses,
     }
-
-    log.log('run initialized', {
-      runId,
-      totalPaths: plan.paths.length,
-      currentPathIndex: 0,
-      currentStepIndex: 0,
-    })
 
     this.emitLiveEvent({
       type: 'run.started',
       level: 'success',
       message: 'Planned run started',
       runId,
+      totalPaths: plan.paths.length,
+      pathOrder: 0,
+    })
+    this.emitLiveEvent({
+      type: 'batch.started',
+      level: 'info',
+      message: 'Path batch started',
+      runId,
+      totalPaths: plan.paths.length,
       meta: {
-        totalPaths: plan.paths.length,
+        batchNumber: currentBatchNumber,
       },
     })
+
+    this.ensureLoop()
 
     return {
       ok: true,
@@ -276,257 +409,253 @@ export class PlannedRunner {
     }
   }
 
-  async step(): Promise<PlannedStepResponse> {
-    if (!this.runtime) {
-      log.log('step requested but runtime is not started')
+  private async runLoop(): Promise<void> {
+    while (this.runtime && !this.runtime.completed) {
+      if (this.runtime.stopRequested && this.runtime.currentPathExecutionId === null) {
+        await this.finalizeStop()
+        return
+      }
+
+      if (await this.maybeStopAfterMaxPaths()) {
+        return
+      }
+
+      const currentPath = this.runtime.currentBatchPaths[this.runtime.currentBatchCursor]
+      if (!currentPath) {
+        await this.maybeReplanOrComplete()
+        if (this.runtime?.completed) {
+          return
+        }
+        continue
+      }
+
+      await this.executeCurrentPath(currentPath, this.runtime.currentBatchCursor)
+    }
+  }
+
+  private async executeCurrentPath(path: PlannedTransitionPath, pathIndexInBatch: number): Promise<void> {
+    if (!this.runtime) return
+
+    const attemptId = 1
+    const pathExecutionId = createPathExecutionId(path.id)
+    const startedAt = new Date().toISOString()
+
+    this.setActiveCursor(path, pathExecutionId, attemptId, 0)
+    this.updatePathSummary(path.id, this.runtime.currentBatchNumber, (summary) => ({
+      ...summary,
+      pathExecutionId,
+      attemptId,
+      status: 'running',
+      startedAt,
+      currentTransitionId: path.steps[0]?.id ?? null,
+      currentTransitionLabel: path.steps[0]?.label ?? null,
+      currentTransitionOrder: path.steps.length > 0 ? 1 : null,
+      currentStateId: path.steps[0]?.fromStateId ?? null,
+      nextStateId: path.steps[0]?.toStateId ?? null,
+      activeEdgeId: path.steps[0]?.edgeId ?? null,
+    }))
+
+    this.emitLiveEvent({
+      type: 'path.started',
+      level: 'info',
+      message: `Path started: ${path.name}`,
+      runId: this.runtime.runId,
+      pathId: path.id,
+      pathExecutionId,
+      attemptId,
+      currentStateId: path.steps[0]?.fromStateId ?? null,
+      nextStateId: path.steps[0]?.toStateId ?? null,
+      currentStepOrder: path.steps.length > 0 ? 1 : null,
+      currentPathStepTotal: path.steps.length,
+      pathOrder: pathIndexInBatch + 1,
+      totalPaths: this.runtime.currentBatchPaths.length,
+      meta: {
+        batchNumber: this.runtime.currentBatchNumber,
+      },
+    })
+
+    const context: ExecutorContext = {
+      runId: this.runtime.runId,
+      pathId: path.id,
+      pathName: path.name,
+      pathExecutionId,
+      attemptId,
+      semanticGoal: path.semanticGoal,
+      targetUrl: requestTargetUrl(this.runtime),
+      specRaw: this.runtime.specRaw,
+      userTestingInfo: this.runtime.userTestingInfo,
+      agentModes: { ...this.runtime.agentModes },
+      batchNumber: this.runtime.currentBatchNumber,
+      pathIndexInBatch,
+      totalPathsInBatch: this.runtime.currentBatchPaths.length,
+      currentPath: path,
+      systemDiagrams: this.runtime.sourceDiagrams,
+      systemConnectors: this.runtime.sourceConnectors,
+    }
+
+    const result = await this.executor.executePath(path, context)
+    const completedAt = new Date().toISOString()
+    let latestEvent: PlannedStepEvent | null = null
+
+    result.transitionResults.forEach((transitionResult, index) => {
+      const step = transitionResult.step
+      this.runtime!.nodeStatuses[step.fromStateId] = 'pass'
+      this.runtime!.edgeStatuses[step.edgeId] = transitionResult.result
+      this.runtime!.currentStateId = step.fromStateId
+      this.runtime!.nextStateId = step.toStateId
+      this.runtime!.activeEdgeId = step.edgeId
+      this.runtime!.currentStepId = step.id
+      this.runtime!.currentStepOrder = index + 1
+      this.runtime!.currentPathStepTotal = path.steps.length
+      if (transitionResult.result === 'pass') {
+        this.runtime!.nodeStatuses[step.toStateId] = 'pass'
+      }
+
+      latestEvent = {
+        pathId: path.id,
+        pathName: path.name,
+        pathExecutionId,
+        attemptId,
+        step,
+        result: transitionResult.result,
+        message: `${path.name} :: ${step.label}`,
+        blockedReason: transitionResult.blockedReason,
+        validationResults: transitionResult.validationResults,
+        validationSummary: transitionResult.validationSummary,
+      }
+    })
+
+    const completedTransitions = result.transitionResults.length
+    const finalTransition = result.transitionResults[result.transitionResults.length - 1]
+    this.updatePathSummary(path.id, this.runtime.currentBatchNumber, (summary) => ({
+      ...summary,
+      pathExecutionId,
+      attemptId,
+      status: result.result,
+      result: result.result,
+      blockedReason: result.blockedReason,
+      completedTransitions,
+      currentTransitionId: finalTransition?.step.id ?? null,
+      currentTransitionLabel: finalTransition?.step.label ?? null,
+      currentTransitionOrder: completedTransitions > 0 ? completedTransitions : null,
+      currentStateId: result.finalStateId,
+      nextStateId: null,
+      activeEdgeId: finalTransition?.step.edgeId ?? null,
+      completedAt,
+    }))
+
+    if (result.result === 'pass') {
+      this.runtime.completedPathsTotal += 1
       this.emitLiveEvent({
-        type: 'step.rejected',
-        level: 'error',
-        message: 'Step requested before run started',
+        type: 'path.completed',
+        level: 'success',
+        message: `Path completed: ${path.name}`,
+        runId: this.runtime.runId,
+        pathId: path.id,
+        pathExecutionId,
+        attemptId,
+        currentStateId: result.finalStateId,
+        currentStepOrder: completedTransitions,
+        currentPathStepTotal: path.steps.length,
+        pathOrder: pathIndexInBatch + 1,
+        totalPaths: this.runtime.currentBatchPaths.length,
       })
+    } else {
+      this.runtime.failedPathsTotal += 1
+      this.emitLiveEvent({
+        type: 'path.failed',
+        level: 'error',
+        message: result.blockedReason ?? `Path failed: ${path.name}`,
+        runId: this.runtime.runId,
+        pathId: path.id,
+        pathExecutionId,
+        attemptId,
+        currentStateId: result.finalStateId,
+        currentStepOrder: completedTransitions,
+        currentPathStepTotal: path.steps.length,
+        pathOrder: pathIndexInBatch + 1,
+        totalPaths: this.runtime.currentBatchPaths.length,
+        meta: {
+          failureCode: result.failureCode,
+          terminationReason: result.terminationReason,
+        },
+      })
+    }
+
+    this.runtime.executedPathHistory.push({
+      pathId: path.id,
+      pathName: path.name,
+      semanticGoal: path.semanticGoal,
+      edgeIds: path.steps.map((step) => step.edgeId),
+      plannedRound: this.runtime.replanCount,
+    })
+
+    if (this.executor.cleanupPath) {
+      try {
+        await this.executor.cleanupPath(this.runtime.runId, pathExecutionId, path.id)
+      } catch (error) {
+        log.log('path cleanup failed', {
+          runId: this.runtime.runId,
+          pathId: path.id,
+          pathExecutionId,
+          error: error instanceof Error ? error.message : 'path cleanup failed',
+        })
+      }
+    }
+
+    this.runtime.currentBatchCursor += 1
+    this.clearActiveCursor()
+    this.runtime.currentStateId = result.finalStateId
+
+    if (latestEvent) {
+      this.emitLiveEvent({
+        type: 'transition.completed',
+        level: latestEvent.result === 'pass' ? 'success' : 'error',
+        message: latestEvent.message,
+        runId: this.runtime.runId,
+        pathId: latestEvent.pathId,
+        pathExecutionId: latestEvent.pathExecutionId,
+        attemptId: latestEvent.attemptId,
+        stepId: latestEvent.step.id,
+        edgeId: latestEvent.step.edgeId,
+        currentStateId: latestEvent.step.fromStateId,
+        nextStateId: latestEvent.step.toStateId,
+        currentStepOrder: completedTransitions,
+        currentPathStepTotal: path.steps.length,
+      })
+    }
+  }
+
+  stop(): PlannedStepResponse {
+    if (!this.runtime) {
       return {
-        ok: false,
+        ok: true,
         event: null,
         snapshot: buildEmptySnapshot(),
       }
     }
 
-    if (this.runtime.completed) {
-      log.log('step requested but runtime already completed', { runId: this.runtime.runId })
-      this.emitLiveEvent({
-        type: 'step.skipped',
-        level: 'info',
-        message: 'Step requested after run completed',
-        runId: this.runtime.runId,
-      })
-      return {
-        ok: true,
-        event: null,
-        snapshot: buildRuntimeSnapshot(this.runtime, true),
-      }
-    }
-
-    if (await this.maybeStopAfterMaxPaths()) {
-      return {
-        ok: true,
-        event: null,
-        snapshot: buildRuntimeSnapshot(this.runtime, true),
-      }
-    }
-
-    const currentPath = this.runtime.plan.paths[this.runtime.pathIndex]
-    if (!currentPath) {
-      log.log('no current path, evaluating replan/complete', {
-        runId: this.runtime.runId,
-        pathIndex: this.runtime.pathIndex,
-      })
-
-      await this.maybeReplanOrComplete()
-
-      return {
-        ok: true,
-        event: null,
-        snapshot: this.runtime ? buildRuntimeSnapshot(this.runtime, this.runtime.completed) : buildEmptySnapshot(),
-      }
-    }
-
-    const step = currentPath.steps[this.runtime.stepIndex]
-    if (!step) {
-      log.log('path completed, advancing to next path', {
-        runId: this.runtime.runId,
-        pathId: currentPath.id,
-        pathName: currentPath.name,
-      })
-      if (this.executor.onPathCompleted) {
-        try {
-          await this.executor.onPathCompleted(this.runtime.runId, currentPath.id)
-        } catch (error) {
-          log.log('path cleanup failed', {
-            runId: this.runtime.runId,
-            pathId: currentPath.id,
-            error: error instanceof Error ? error.message : 'path cleanup failed',
-          })
-        }
-      }
-      this.runtime.pathIndex += 1
-      this.runtime.stepIndex = 0
-      this.runtime.completedPathsTotal += 1
-
-      if (await this.maybeStopAfterMaxPaths()) {
-        return {
-          ok: true,
-          event: null,
-          snapshot: buildRuntimeSnapshot(this.runtime, true),
-        }
-      }
-
-      const nextPath = this.runtime.plan.paths[this.runtime.pathIndex]
-      this.runtime.currentStateId = nextPath?.steps[0]?.fromStateId ?? this.runtime.currentStateId
-      return {
-        ok: true,
-        event: null,
-        snapshot: buildRuntimeSnapshot(this.runtime),
-      }
-    }
-
-    this.runtime.edgeStatuses[step.edgeId] = 'running'
-    this.runtime.nodeStatuses[step.fromStateId] = 'pass'
-
+    this.runtime.stopRequested = true
     this.emitLiveEvent({
-      type: 'step.started',
+      type: 'run.stop-requested',
       level: 'info',
-      message: `Step started: ${step.label}`,
+      message: 'Stop requested. Finishing current path...',
       runId: this.runtime.runId,
-      pathId: currentPath.id,
-      stepId: step.id,
-      edgeId: step.edgeId,
-      meta: {
-        fromStateId: step.fromStateId,
-        toStateId: step.toStateId,
-      },
     })
 
-    log.log('step execution started', {
-      runId: this.runtime.runId,
-      pathId: currentPath.id,
-      pathName: currentPath.name,
-      stepId: step.id,
-      edgeId: step.edgeId,
-      fromStateId: step.fromStateId,
-      toStateId: step.toStateId,
-      label: step.label,
-      kind: step.kind,
-      validations: step.validations.length,
-    })
-
-    let exec: StepExecutionResult
-    try {
-      const stepAgentModes: RunnerAgentModes = { ...this.runtime.agentModes }
-      exec = {
-        ...(await this.executor.execute(step, {
-          runId: this.runtime.runId,
-          pathId: currentPath.id,
-          pathName: currentPath.name,
-          stepId: step.id,
-          semanticGoal: currentPath.semanticGoal,
-          targetUrl: requestTargetUrl(this.runtime),
-          specRaw: this.runtime.specRaw,
-          userTestingInfo: this.runtime.userTestingInfo,
-          agentModes: stepAgentModes,
-          stepValidations: step.validations,
-          currentPathStepIndex: this.runtime.stepIndex,
-          currentPathStepTotal: currentPath.steps.length,
-          pathEdgeIds: currentPath.steps.map((item) => item.edgeId),
-          systemDiagrams: this.runtime.sourceDiagrams,
-          systemConnectors: this.runtime.sourceConnectors,
-        })),
-      }
-    } catch (error) {
-      log.log('step execution threw error', {
-        runId: this.runtime.runId,
-        stepId: step.id,
-        edgeId: step.edgeId,
-        error: error instanceof Error ? error.message : 'executor error',
-      })
-
-      exec = {
-        result: 'fail',
-        blockedReason: error instanceof Error ? error.message : 'executor error',
-        validationResults: [],
-        validationSummary: {
-          total: 0,
-          pass: 0,
-          fail: 0,
-          pending: 0,
-        },
-      }
-    }
-
-    const result = exec.result
-
-    this.runtime.edgeStatuses[step.edgeId] = result
-    if (result === 'pass') {
-      this.runtime.nodeStatuses[step.toStateId] = 'pass'
-      this.runtime.currentStateId = step.toStateId
-    }
-
-    log.log('step execution completed', {
-      runId: this.runtime.runId,
-      pathId: currentPath.id,
-      stepId: step.id,
-      edgeId: step.edgeId,
-      result,
-      blockedReason: exec.blockedReason ?? null,
-      validationResults: exec.validationResults.length,
-    })
-
-    this.runtime.stepIndex += 1
-
-    this.emitLiveEvent({
-      type: 'step.completed',
-      level: result === 'pass' ? 'success' : 'error',
-      message: `Step ${result}: ${step.label}`,
-      runId: this.runtime.runId,
-      pathId: currentPath.id,
-      stepId: step.id,
-      edgeId: step.edgeId,
-      meta: {
-        blockedReason: exec.blockedReason,
-      },
-    })
-
-    const event: PlannedStepEvent = {
-      pathId: currentPath.id,
-      pathName: currentPath.name,
-      step,
-      result,
-      message: `${currentPath.name} :: ${step.label}`,
-      blockedReason: exec.blockedReason,
-      validationResults: exec.validationResults,
-      validationSummary: exec.validationSummary,
-    }
-
-    return {
-      ok: true,
-      event,
-      snapshot: buildRuntimeSnapshot(this.runtime),
-    }
-  }
-
-  stop(): PlannedStepResponse {
-    const runId = this.runtime?.runId ?? null
-    log.log('stop requested', {
-      runId,
-      hasRuntime: Boolean(this.runtime),
-      completed: this.runtime?.completed ?? true,
-    })
-
-    if (runId && this.executor.onRunStop) {
-      void this.executor.onRunStop(runId)
-    }
-
-    if (runId) {
-      this.emitLiveEvent({
-        type: 'run.stopped',
-        level: 'info',
-        message: 'Planned run stopped',
-        runId,
-      })
+    if (!this.activeLoop) {
+      this.ensureLoop()
     }
 
     return {
       ok: true,
       event: null,
-      snapshot: this.runtime ? buildRuntimeSnapshot(this.runtime) : buildEmptySnapshot(),
+      snapshot: buildRuntimeSnapshot(this.runtime),
     }
   }
 
   async reset(): Promise<PlannedStepResponse> {
     const runId = this.runtime?.runId ?? null
-    log.log('reset requested', {
-      runId,
-      hadRuntime: Boolean(this.runtime),
-    })
 
     if (runId && this.executor.onRunStop) {
       await this.executor.onRunStop(runId)
@@ -562,75 +691,45 @@ export class PlannedRunner {
     if (!this.runtime) return
 
     const coverage = computeCoverageSummary(this.runtime.nodeStatuses, this.runtime.edgeStatuses)
-
-    log.log('checking replan/complete conditions', {
-      runId: this.runtime.runId,
-      replanCount: this.runtime.replanCount,
-      uncoveredEdges: coverage.uncoveredEdgeIds.length,
-      uncoveredNodes: coverage.uncoveredNodeIds.length,
-    })
+    const currentBatchPaths = this.runtime.currentBatchPaths
+    const currentRunId = this.runtime.runId
 
     if (coverage.uncoveredEdgeIds.length === 0 && coverage.uncoveredNodeIds.length === 0) {
-      this.runtime.completed = true
-      log.log('run completed: full coverage reached', { runId: this.runtime.runId })
-      this.emitLiveEvent({
-        type: 'run.completed',
-        level: 'success',
-        message: 'Run completed with full coverage',
-        runId: this.runtime.runId,
-      })
-      if (this.executor.onRunStop) {
-        await this.executor.onRunStop(this.runtime.runId)
-      }
+      await this.completeRun('success', 'Run completed with full coverage')
+      return
+    }
+
+    if (this.runtime.stopRequested) {
+      await this.finalizeStop()
       return
     }
 
     if (this.runtime.replanCount >= 6) {
-      this.runtime.completed = true
-      log.log('run completed: reached max replan limit', {
-        runId: this.runtime.runId,
-        replanCount: this.runtime.replanCount,
-      })
-      this.emitLiveEvent({
-        type: 'run.completed',
-        level: 'error',
-        message: 'Run completed due to max replan limit',
-        runId: this.runtime.runId,
-      })
-      if (this.executor.onRunStop) {
-        await this.executor.onRunStop(this.runtime.runId)
-      }
+      await this.completeRun('error', 'Run completed due to max replan limit')
       return
     }
 
-    log.log('replan started', {
-      runId: this.runtime.runId,
-      remainingEdges: coverage.uncoveredEdgeIds.length,
-      replanCount: this.runtime.replanCount,
+    const historicalBySignature = new Map<string, PlannedPathHistoryItem>()
+    this.runtime.executedPathHistory.forEach((historyPath) => {
+      const signature = historyPath.edgeIds.join('>')
+      if (signature.length > 0) historicalBySignature.set(signature, historyPath)
     })
+    toHistoryItems(currentBatchPaths, this.runtime.replanCount).forEach((historyPath) => {
+      const signature = historyPath.edgeIds.join('>')
+      if (signature.length > 0) historicalBySignature.set(signature, historyPath)
+    })
+    this.runtime.executedPathHistory = Array.from(historicalBySignature.values())
 
     this.emitLiveEvent({
       type: 'replan.started',
       level: 'info',
       message: 'Replan started',
-      runId: this.runtime.runId,
+      runId: currentRunId,
       meta: {
+        batchNumber: this.runtime.currentBatchNumber,
         remainingEdges: coverage.uncoveredEdgeIds.length,
       },
     })
-
-    const historicalBySignature = new Map<string, PlannedPathHistoryItem>()
-    this.runtime.executedPathHistory.forEach((historyPath) => {
-      const signature = historyPath.edgeIds.join('>')
-      if (signature.length === 0) return
-      historicalBySignature.set(signature, historyPath)
-    })
-    toHistoryItems(this.runtime.plan, this.runtime.replanCount).forEach((historyPath) => {
-      const signature = historyPath.edgeIds.join('>')
-      if (signature.length === 0) return
-      historicalBySignature.set(signature, historyPath)
-    })
-    this.runtime.executedPathHistory = Array.from(historicalBySignature.values())
 
     const replanStartedAt = Date.now()
     let plan: Awaited<ReturnType<typeof generatePlannedPaths>>
@@ -652,21 +751,7 @@ export class PlannedRunner {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'replan failed'
       if (message.includes('AI planner produced no valid paths')) {
-        this.runtime.completed = true
-        log.log('run completed: planner returned no additional valid paths', {
-          runId: this.runtime.runId,
-          replanCount: this.runtime.replanCount,
-          executedPathHistory: this.runtime.executedPathHistory.length,
-        })
-        this.emitLiveEvent({
-          type: 'run.completed',
-          level: 'info',
-          message: 'Run completed: planner returned no additional valid paths',
-          runId: this.runtime.runId,
-        })
-        if (this.executor.onRunStop) {
-          await this.executor.onRunStop(this.runtime.runId)
-        }
+        await this.completeRun('info', 'Run completed: planner returned no additional valid paths')
         return
       }
       throw error
@@ -678,7 +763,7 @@ export class PlannedRunner {
       type: 'agent.generation.completed',
       level: 'success',
       message: `[path-planner] 生成完成，花費 ${replanElapsedSeconds}s`,
-      runId: this.runtime.runId,
+      runId: currentRunId,
       meta: {
         agentTag: 'path-planner',
         elapsedMs: replanElapsedMs,
@@ -688,27 +773,32 @@ export class PlannedRunner {
 
     const offset = this.runtime.totalPlannedPaths + 1
     const reindexedPaths = withReindexedPaths(plan.paths, offset)
-
-    this.runtime.plan = { paths: reindexedPaths }
-    this.runtime.pathIndex = 0
-    this.runtime.stepIndex = 0
+    this.runtime.currentBatchNumber += 1
+    this.runtime.currentBatchPaths = reindexedPaths
+    this.runtime.currentBatchCursor = 0
     this.runtime.totalPlannedPaths += reindexedPaths.length
     this.runtime.replanCount += 1
-
-    log.log('replan completed', {
-      runId: this.runtime.runId,
-      addedPaths: reindexedPaths.length,
-      totalPlannedPaths: this.runtime.totalPlannedPaths,
-      replanCount: this.runtime.replanCount,
-    })
+    this.upsertPathSummaries(this.createPathSummaries(reindexedPaths, this.runtime.currentBatchNumber))
 
     this.emitLiveEvent({
       type: 'replan.completed',
       level: 'info',
       message: 'Replan completed',
-      runId: this.runtime.runId,
+      runId: currentRunId,
+      totalPaths: reindexedPaths.length,
       meta: {
+        batchNumber: this.runtime.currentBatchNumber,
         addedPaths: reindexedPaths.length,
+      },
+    })
+    this.emitLiveEvent({
+      type: 'batch.started',
+      level: 'info',
+      message: 'Path batch started',
+      runId: currentRunId,
+      totalPaths: reindexedPaths.length,
+      meta: {
+        batchNumber: this.runtime.currentBatchNumber,
       },
     })
   }

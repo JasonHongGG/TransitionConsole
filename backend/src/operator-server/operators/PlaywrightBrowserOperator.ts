@@ -1,12 +1,14 @@
 import type {
   ExecutorContext,
-  OperatorTraceItem,
-  StepNarrativeInstruction,
-  PlannedTransitionStep,
-  StepValidationSummary,
-  StepValidationSpec,
-  StepValidationResult,
+  PathNarrativeTransitionInstruction,
+  PathTransitionResult,
   PlannedLiveEventInput,
+  PlannedTransitionPath,
+  PlannedTransitionStep,
+  StepNarrativeInstruction,
+  StepValidationResult,
+  StepValidationSpec,
+  StepValidationSummary,
 } from '../type/operatorExecutionContracts'
 import type {
   BrowserOperator,
@@ -117,8 +119,8 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     return this.playwrightModulePromise
   }
 
-  private sessionKey(runId: string, pathId: string): string {
-    return `${runId}:${pathId}`
+  private sessionKey(runId: string, pathExecutionId: string): string {
+    return `${runId}:${pathExecutionId}`
   }
 
   private async closeSessionByKey(key: string): Promise<void> {
@@ -140,11 +142,10 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
   }
 
   private async getOrCreateSession(context: ExecutorContext): Promise<BrowserSession> {
-    const key = this.sessionKey(context.runId, context.pathId)
+    const key = this.sessionKey(context.runId, context.pathExecutionId)
     const existing = this.sessions.get(key)
     if (existing) return existing
 
-    // targetUrl 必須存在且非空
     if (!context.targetUrl || typeof context.targetUrl !== 'string' || context.targetUrl.trim().length === 0) {
       throw new Error('PlaywrightBrowserOperator: targetUrl is required and must be a non-empty string.')
     }
@@ -159,7 +160,6 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     const contextInstance = await browser.newContext()
     const page = await contextInstance.newPage()
 
-    // 啟動時自動導向 targetUrl
     const normalizedUrl = context.targetUrl.startsWith('http://') || context.targetUrl.startsWith('https://')
       ? context.targetUrl
       : `https://${context.targetUrl}`
@@ -452,15 +452,20 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     }
   }
 
-  private buildValidationResultsFromDecision(
+  private validationCacheKey(context: ExecutorContext, step: PlannedTransitionStep, validationId: string): string {
+    return `${context.pathExecutionId}::${step.id}::${validationId}`
+  }
+
+  private buildValidationResults(
+    context: ExecutorContext,
+    step: PlannedTransitionStep,
     validations: StepValidationSpec[],
     ledger: Map<string, ValidationLedgerEntry>,
-    stepEdgeId: string,
     finalIteration: number,
   ): StepValidationResult[] {
     const now = new Date().toISOString()
     return validations.map((validation) => {
-      const cacheKey = `${stepEdgeId}::${validation.id}`
+      const cacheKey = this.validationCacheKey(context, step, validation.id)
       const existing = ledger.get(cacheKey)
       if (!existing) {
         return {
@@ -498,9 +503,10 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
   }
 
   private applyValidationUpdates(
+    context: ExecutorContext,
+    step: PlannedTransitionStep,
     validationsById: Map<string, StepValidationSpec>,
     ledger: Map<string, ValidationLedgerEntry>,
-    stepEdgeId: string,
     updates: Array<{ id: string; status: 'pass' | 'fail'; reason: string; actual?: string }>,
     iteration: number,
   ): void {
@@ -510,7 +516,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
       const validation = validationsById.get(update.id)
       if (!validation) continue
 
-      const cacheKey = `${stepEdgeId}::${validation.id}`
+      const cacheKey = this.validationCacheKey(context, step, validation.id)
       const existing = ledger.get(cacheKey)
       if (existing?.status === 'pass') {
         continue
@@ -532,6 +538,13 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     }
   }
 
+  private resolveTransitionNarrative(
+    narrative: StepNarrativeInstruction,
+    step: PlannedTransitionStep,
+  ): PathNarrativeTransitionInstruction | undefined {
+    return narrative.transitions?.find((item) => item.stepId === step.id || item.edgeId === step.edgeId)
+  }
+
   private normalizeFunctionCallsFromDecision(decision: { functionCalls?: LoopFunctionCall[] }): LoopFunctionCall[] {
     if (decision.functionCalls && decision.functionCalls.length > 0) {
       return decision.functionCalls
@@ -539,383 +552,532 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     return []
   }
 
-  async run(
-    step: PlannedTransitionStep,
+  async runPath(
+    path: PlannedTransitionPath,
     context: ExecutorContext,
     narrative: StepNarrativeInstruction,
-    validations: StepValidationSpec[],
   ): Promise<BrowserOperatorRunResult> {
     const session = await this.getOrCreateSession(context)
     const page = session.page
-    const trace: OperatorTraceItem[] = []
-    let lastState: CurrentState | null = await this.currentState(page)
-    const maxLoopRounds = 12
+    const transitionResults: PathTransitionResult[] = []
+    let lastState: CurrentState = await this.currentState(page)
     let actionCursor = 0
-    const validationsById = new Map(validations.map((validation) => [validation.id, validation] as const))
+    const maxLoopRounds = 12
     const validationLedger = new Map<string, ValidationLedgerEntry>()
+    let latestStableStateId = path.steps[0]?.fromStateId ?? null
 
-    for (let iteration = 1; iteration <= maxLoopRounds; iteration += 1) {
-      const titleSummary = lastState.title.replace(/\s+/g, ' ').slice(0, 120)
-      const runtimeState = {
-        url: page.url(),
-        title: titleSummary,
-        iteration,
-        actionCursor,
-      }
+    for (let stepIndex = 0; stepIndex < path.steps.length; stepIndex += 1) {
+      const step = path.steps[stepIndex]
+      const narrativeForStep = this.resolveTransitionNarrative(narrative, step)
+      const validations = narrativeForStep?.validations ?? step.validations
+      const validationsById = new Map(validations.map((validation) => [validation.id, validation] as const))
+      const trace: PathTransitionResult['trace'] = []
 
       this.emitLiveEvent({
-        type: 'operator.iteration.started',
+        type: 'transition.started',
         level: 'info',
-        message: `Operator iteration ${iteration} started`,
+        message: `Transition started: ${step.label}`,
         runId: context.runId,
         pathId: context.pathId,
-        stepId: context.stepId,
+        pathExecutionId: context.pathExecutionId,
+        attemptId: context.attemptId,
+        stepId: step.id,
         edgeId: step.edgeId,
-        iteration,
-        actionCursor,
+        currentStateId: step.fromStateId,
+        nextStateId: step.toStateId,
+        currentStepOrder: stepIndex + 1,
+        currentPathStepTotal: path.steps.length,
+        pathOrder: context.pathIndexInBatch + 1,
+        totalPaths: context.totalPathsInBatch,
       })
 
-      const decisionStartedAt = Date.now()
-      const decision = await this.loopAgent.decide({
-        agentMode: context.agentModes.operatorLoop,
-        context: {
+      for (let iteration = 1; iteration <= maxLoopRounds; iteration += 1) {
+        const titleSummary = lastState.title.replace(/\s+/g, ' ').slice(0, 120)
+        const runtimeState = {
+          url: page.url(),
+          title: titleSummary,
+          iteration,
+          actionCursor,
+          currentStepOrder: stepIndex + 1,
+          totalSteps: path.steps.length,
+          currentStateId: step.fromStateId,
+          nextStateId: step.toStateId,
+          completedTransitions: transitionResults.length,
+        }
+
+        this.emitLiveEvent({
+          type: 'operator.iteration.started',
+          level: 'info',
+          message: `Operator iteration ${iteration} started`,
           runId: context.runId,
           pathId: context.pathId,
-          stepId: context.stepId,
-          stepOrder: context.currentPathStepIndex + 1,
-          targetUrl: context.targetUrl,
-          specRaw: context.specRaw,
-          userTestingInfo: context.userTestingInfo,
-        },
-        step: {
+          pathExecutionId: context.pathExecutionId,
+          attemptId: context.attemptId,
+          stepId: step.id,
           edgeId: step.edgeId,
-          from: {
-            stateId: step.fromStateId,
-            diagramId: step.fromDiagramId,
-          },
-          to: {
-            stateId: step.toStateId,
-            diagramId: step.toDiagramId,
-          },
-          summary: step.label,
-          semanticGoal: step.semantic,
-        },
-        runtimeState,
-        screenshotBase64: lastState.screenshot.toString('base64'),
-        narrative: {
-          summary: narrative.summary,
-          taskDescription: narrative.taskDescription,
-          pendingValidations: validations
-            .filter((validation) => !validationLedger.has(`${step.edgeId}::${validation.id}`))
-            .map((validation) => ({
-              id: validation.id,
-              type: validation.type,
-              description: validation.description,
-              expected: validation.expected,
-              selector: validation.selector,
-              timeoutMs: validation.timeoutMs,
-            })),
-          confirmedValidations: validations
-            .map((validation) => {
-              const existing = validationLedger.get(`${step.edgeId}::${validation.id}`)
-              if (!existing || existing.status === 'pending') return null
-              return {
-                id: validation.id,
-                status: existing.status,
-                reason: existing.reason,
-              }
-            })
-            .filter((item): item is { id: string; status: 'pass' | 'fail'; reason: string } => Boolean(item)),
-        },
-      })
-      const decisionElapsedMs = Date.now() - decisionStartedAt
-      const decisionElapsedSeconds = toElapsedSeconds(decisionElapsedMs)
-
-      this.emitLiveEvent({
-        type: 'agent.generation.completed',
-        level: 'success',
-        message: `[operator-loop] 生成完成，花費 ${decisionElapsedSeconds}s`,
-        runId: context.runId,
-        pathId: context.pathId,
-        stepId: context.stepId,
-        edgeId: step.edgeId,
-        iteration,
-        actionCursor,
-        meta: {
-          agentTag: 'operator-loop',
-          elapsedMs: decisionElapsedMs,
-          elapsedSeconds: decisionElapsedSeconds,
-        },
-      })
-
-      this.emitLiveEvent({
-        type: 'operator.decision',
-        level: decision.kind === 'fail' ? 'error' : 'info',
-        message: decision.reason,
-        runId: context.runId,
-        pathId: context.pathId,
-        stepId: context.stepId,
-        edgeId: step.edgeId,
-        iteration,
-        actionCursor,
-      })
-
-      this.applyValidationUpdates(validationsById, validationLedger, step.edgeId, decision.validationUpdates, iteration)
-
-      const currentValidationResults = this.buildValidationResultsFromDecision(validations, validationLedger, step.edgeId, iteration)
-      const currentValidationSummary = this.summarizeValidationResults(currentValidationResults)
-
-      if (decision.kind === 'complete') {
-        const allPassed = currentValidationSummary.total > 0 && currentValidationSummary.pass === currentValidationSummary.total
-        trace.push({
           iteration,
-          url: runtimeState.url,
-          observation: JSON.stringify(runtimeState),
-          action: 'function_call:complete',
-          outcome: 'success',
-          detail: decision.reason,
+          actionCursor,
+          currentStateId: step.fromStateId,
+          nextStateId: step.toStateId,
+          currentStepOrder: stepIndex + 1,
+          currentPathStepTotal: path.steps.length,
         })
 
-        if (!allPassed) {
-          return {
-            result: 'fail',
-            blockedReason: 'step completion rejected: all validations must pass',
-            failureCode: 'validation-failed',
-            terminationReason: 'validation-failed',
+        const decisionStartedAt = Date.now()
+        const decision = await this.loopAgent.decide({
+          agentMode: context.agentModes.operatorLoop,
+          context: {
+            runId: context.runId,
+            pathId: context.pathId,
+            pathExecutionId: context.pathExecutionId,
+            attemptId: context.attemptId,
+            pathName: context.pathName,
+            targetUrl: context.targetUrl,
+            specRaw: context.specRaw,
+            userTestingInfo: context.userTestingInfo,
+          },
+          path: {
+            id: path.id,
+            name: path.name,
+            semanticGoal: path.semanticGoal,
+            totalSteps: path.steps.length,
+            steps: path.steps.map((pathStep) => ({
+              id: pathStep.id,
+              edgeId: pathStep.edgeId,
+              summary: pathStep.label,
+              from: {
+                stateId: pathStep.fromStateId,
+                diagramId: pathStep.fromDiagramId,
+              },
+              to: {
+                stateId: pathStep.toStateId,
+                diagramId: pathStep.toDiagramId,
+              },
+            })),
+          },
+          currentTransition: {
+            stepId: step.id,
+            edgeId: step.edgeId,
+            stepOrder: stepIndex + 1,
+            from: {
+              stateId: step.fromStateId,
+              diagramId: step.fromDiagramId,
+            },
+            to: {
+              stateId: step.toStateId,
+              diagramId: step.toDiagramId,
+            },
+            summary: narrativeForStep?.summary ?? step.label,
+            semanticGoal: step.semantic,
+          },
+          runtimeState,
+          screenshotBase64: lastState.screenshot.toString('base64'),
+          narrative: {
+            pathSummary: narrative.summary,
+            executionStrategy: narrative.executionStrategy,
+            currentTransitionSummary: narrativeForStep?.taskDescription ?? step.label,
+            pendingValidations: validations
+              .filter((validation) => !validationLedger.has(this.validationCacheKey(context, step, validation.id)))
+              .map((validation) => ({
+                id: validation.id,
+                type: validation.type,
+                description: validation.description,
+                expected: validation.expected,
+                selector: validation.selector,
+                timeoutMs: validation.timeoutMs,
+              })),
+            confirmedValidations: validations
+              .map((validation) => {
+                const existing = validationLedger.get(this.validationCacheKey(context, step, validation.id))
+                if (!existing || existing.status === 'pending') return null
+                return {
+                  id: validation.id,
+                  status: existing.status,
+                  reason: existing.reason,
+                }
+              })
+              .filter((item): item is { id: string; status: 'pass' | 'fail'; reason: string } => Boolean(item)),
+            remainingTransitions: path.steps.slice(stepIndex + 1).map((remainingStep) => ({
+              stepId: remainingStep.id,
+              summary: remainingStep.label,
+            })),
+          },
+        })
+        const decisionElapsedMs = Date.now() - decisionStartedAt
+        const decisionElapsedSeconds = toElapsedSeconds(decisionElapsedMs)
+
+        this.emitLiveEvent({
+          type: 'agent.generation.completed',
+          level: 'success',
+          message: `[operator-loop] 生成完成，花費 ${decisionElapsedSeconds}s`,
+          runId: context.runId,
+          pathId: context.pathId,
+          pathExecutionId: context.pathExecutionId,
+          attemptId: context.attemptId,
+          stepId: step.id,
+          edgeId: step.edgeId,
+          iteration,
+          actionCursor,
+          meta: {
+            agentTag: 'operator-loop',
+            elapsedMs: decisionElapsedMs,
+            elapsedSeconds: decisionElapsedSeconds,
+          },
+        })
+
+        this.emitLiveEvent({
+          type: 'operator.decision',
+          level: decision.kind === 'fail' ? 'error' : 'info',
+          message: decision.reason,
+          runId: context.runId,
+          pathId: context.pathId,
+          pathExecutionId: context.pathExecutionId,
+          attemptId: context.attemptId,
+          stepId: step.id,
+          edgeId: step.edgeId,
+          iteration,
+          actionCursor,
+        })
+
+        this.applyValidationUpdates(context, step, validationsById, validationLedger, decision.validationUpdates, iteration)
+
+        const currentValidationResults = this.buildValidationResults(context, step, validations, validationLedger, iteration)
+        const currentValidationSummary = this.summarizeValidationResults(currentValidationResults)
+
+        if (decision.kind === 'advance' || decision.kind === 'complete') {
+          const allPassed = currentValidationSummary.total > 0 && currentValidationSummary.pass === currentValidationSummary.total
+          trace.push({
+            iteration,
+            url: runtimeState.url,
+            observation: JSON.stringify(runtimeState),
+            action: decision.kind === 'complete' ? 'path_complete' : 'advance_transition',
+            outcome: allPassed ? 'success' : 'failed',
+            detail: decision.reason,
+          })
+
+          if (!allPassed) {
+            transitionResults.push({
+              step,
+              result: 'fail',
+              blockedReason: 'transition completion rejected: all validations must pass',
+              failureCode: 'validation-failed',
+              terminationReason: 'validation-failed',
+              validationResults: currentValidationResults,
+              validationSummary: currentValidationSummary,
+              trace,
+              evidence: {
+                domSummary: `current_url=${page.url()}`,
+              },
+            })
+            return {
+              result: 'fail',
+              blockedReason: 'transition completion rejected: all validations must pass',
+              failureCode: 'validation-failed',
+              terminationReason: 'validation-failed',
+              transitionResults,
+              finalStateId: latestStableStateId,
+            }
+          }
+
+          latestStableStateId = step.toStateId
+          transitionResults.push({
+            step,
+            result: 'pass',
             validationResults: currentValidationResults,
             validationSummary: currentValidationSummary,
             trace,
             evidence: {
               domSummary: `current_url=${page.url()}`,
             },
+          })
+
+          this.emitLiveEvent({
+            type: 'transition.advanced',
+            level: 'success',
+            message: `Transition completed: ${step.label}`,
+            runId: context.runId,
+            pathId: context.pathId,
+            pathExecutionId: context.pathExecutionId,
+            attemptId: context.attemptId,
+            stepId: step.id,
+            edgeId: step.edgeId,
+            currentStateId: step.fromStateId,
+            nextStateId: step.toStateId,
+            currentStepOrder: stepIndex + 1,
+            currentPathStepTotal: path.steps.length,
+          })
+
+          break
+        }
+
+        if (decision.kind === 'fail') {
+          transitionResults.push({
+            step,
+            result: 'fail',
+            blockedReason: decision.reason,
+            failureCode: decision.failureCode ?? 'operator-no-progress',
+            terminationReason: decision.terminationReason ?? 'criteria-unmet',
+            validationResults: currentValidationResults,
+            validationSummary: currentValidationSummary,
+            trace,
+            evidence: {
+              domSummary: `current_url=${page.url()}`,
+            },
+          })
+          return {
+            result: 'fail',
+            blockedReason: decision.reason,
+            failureCode: decision.failureCode ?? 'operator-no-progress',
+            terminationReason: decision.terminationReason ?? 'criteria-unmet',
+            transitionResults,
+            finalStateId: latestStableStateId,
           }
         }
 
-        return {
-          result: 'pass',
-          validationResults: currentValidationResults,
-          validationSummary: currentValidationSummary,
-          trace,
-          evidence: {
-            domSummary: `current_url=${page.url()}`,
-          },
-        }
-      }
-
-      if (decision.kind === 'fail') {
-        const failureCode = decision.failureCode ?? 'operator-no-progress'
-        return {
-          result: 'fail',
-          blockedReason: decision.reason,
-          failureCode,
-          terminationReason: decision.terminationReason ?? 'criteria-unmet',
-          validationResults: currentValidationResults,
-          validationSummary: currentValidationSummary,
-          trace,
-          evidence: {
-            domSummary: `current_url=${page.url()}`,
-          },
-        }
-      }
-
-      const nextFunctionCalls = this.normalizeFunctionCallsFromDecision(decision)
-      if (nextFunctionCalls.length === 0) {
-        return {
-          result: 'fail',
-          blockedReason: 'loop agent returned act without action payload',
-          failureCode: 'operator-no-progress',
-          terminationReason: 'criteria-unmet',
-          validationResults: currentValidationResults,
-          validationSummary: currentValidationSummary,
-          trace,
-          evidence: {
-            domSummary: `current_url=${page.url()}`,
-          },
-        }
-      }
-
-      const functionResponses: LoopFunctionResponse[] = []
-      let activeFunctionCall: LoopFunctionCall | null = null
-
-      try {
-        for (const functionCall of nextFunctionCalls) {
-          activeFunctionCall = functionCall
-          const toolName = functionCall.name.trim().toLowerCase()
-          const payload = functionCall.args
-
-          this.emitLiveEvent({
-            type: 'operator.tool.started',
-            level: 'info',
-            message: functionCall.description?.trim() || `Running tool: ${toolName}`,
-            runId: context.runId,
-            pathId: context.pathId,
-            stepId: context.stepId,
-            edgeId: step.edgeId,
-            iteration,
-            actionCursor,
-            meta: {
-              toolName,
+        const nextFunctionCalls = this.normalizeFunctionCallsFromDecision(decision)
+        if (nextFunctionCalls.length === 0) {
+          transitionResults.push({
+            step,
+            result: 'fail',
+            blockedReason: 'loop agent returned act without action payload',
+            failureCode: 'operator-no-progress',
+            terminationReason: 'criteria-unmet',
+            validationResults: currentValidationResults,
+            validationSummary: currentValidationSummary,
+            trace,
+            evidence: {
+              domSummary: `current_url=${page.url()}`,
             },
           })
+          return {
+            result: 'fail',
+            blockedReason: 'loop agent returned act without action payload',
+            failureCode: 'operator-no-progress',
+            terminationReason: 'criteria-unmet',
+            transitionResults,
+            finalStateId: latestStableStateId,
+          }
+        }
 
-          const execution = await this.executeTool(page, toolName, payload)
-          lastState = execution.state
+        const functionResponses: LoopFunctionResponse[] = []
+        let activeFunctionCall: LoopFunctionCall | null = null
 
-          functionResponses.push({
-            name: toolName,
-            arguments: payload,
-            response: {
+        try {
+          for (const functionCall of nextFunctionCalls) {
+            activeFunctionCall = functionCall
+            const toolName = functionCall.name.trim().toLowerCase()
+            const payload = functionCall.args
+
+            this.emitLiveEvent({
+              type: 'operator.tool.started',
+              level: 'info',
+              message: functionCall.description?.trim() || `Running tool: ${toolName}`,
+              runId: context.runId,
+              pathId: context.pathId,
+              pathExecutionId: context.pathExecutionId,
+              attemptId: context.attemptId,
+              stepId: step.id,
+              edgeId: step.edgeId,
+              iteration,
+              actionCursor,
+              meta: {
+                toolName,
+              },
+            })
+
+            const execution = await this.executeTool(page, toolName, payload)
+            lastState = execution.state
+
+            functionResponses.push({
+              name: toolName,
+              arguments: payload,
+              response: {
+                url: lastState.url,
+                status: 'success',
+                message: functionCall.description,
+                result: execution.result,
+              },
+              screenshotBase64: lastState.screenshot.toString('base64'),
+            })
+
+            trace.push({
+              iteration,
               url: lastState.url,
-              status: 'success',
-              message: functionCall.description,
-              result: execution.result,
-            },
-            screenshotBase64: lastState.screenshot.toString('base64'),
-          })
+              observation: JSON.stringify({
+                url: lastState.url,
+                title: lastState.title,
+                iteration,
+                actionCursor,
+              }),
+              action: `function_call:${toolName}`,
+              functionCall: {
+                name: functionCall.name,
+                args: functionCall.args,
+                description: functionCall.description,
+              },
+              outcome: 'success',
+              detail: decision.reason,
+            })
+
+            this.emitLiveEvent({
+              type: 'operator.tool.completed',
+              level: 'success',
+              message: functionCall.description?.trim() || `Tool completed: ${toolName}`,
+              runId: context.runId,
+              pathId: context.pathId,
+              pathExecutionId: context.pathExecutionId,
+              attemptId: context.attemptId,
+              stepId: step.id,
+              edgeId: step.edgeId,
+              iteration,
+              actionCursor,
+              meta: {
+                toolName,
+                url: lastState.url,
+              },
+            })
+
+            actionCursor += 1
+          }
+
+          if (this.loopAgent.appendFunctionResponses) {
+            await this.loopAgent.appendFunctionResponses({
+              agentMode: context.agentModes.operatorLoop,
+              runId: context.runId,
+              pathId: context.pathId,
+              pathExecutionId: context.pathExecutionId,
+              attemptId: context.attemptId,
+              stepId: step.id,
+              stepOrder: stepIndex + 1,
+              narrativeSummary: narrativeForStep?.summary ?? step.label,
+              runtimeState,
+              responses: functionResponses,
+            })
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'tool execution failed'
+          if (this.loopAgent.appendFunctionResponses) {
+            const failedResponse: LoopFunctionResponse = {
+              name: activeFunctionCall?.name ?? 'unknown_tool',
+              arguments: activeFunctionCall?.args ?? {},
+              response: {
+                url: lastState?.url ?? page.url(),
+                status: 'failed',
+                message,
+              },
+              screenshotBase64: lastState?.screenshot?.toString('base64'),
+            }
+            await this.loopAgent.appendFunctionResponses({
+              agentMode: context.agentModes.operatorLoop,
+              runId: context.runId,
+              pathId: context.pathId,
+              pathExecutionId: context.pathExecutionId,
+              attemptId: context.attemptId,
+              stepId: step.id,
+              stepOrder: stepIndex + 1,
+              narrativeSummary: narrativeForStep?.summary ?? step.label,
+              runtimeState: {
+                ...runtimeState,
+                url: lastState?.url ?? page.url(),
+                title: lastState?.title ?? titleSummary,
+              },
+              responses: [...functionResponses, failedResponse],
+            })
+          }
 
           trace.push({
             iteration,
-            url: lastState.url,
+            url: lastState?.url ?? page.url(),
             observation: JSON.stringify({
-              url: lastState.url,
-              title: lastState.title,
+              url: lastState?.url ?? page.url(),
+              title: lastState?.title ?? '',
               iteration,
               actionCursor,
             }),
-            action: `function_call:${toolName}`,
-            functionCall: {
-              name: functionCall.name,
-              args: functionCall.args,
-              description: functionCall.description,
-            },
-            outcome: 'success',
-            detail: decision.reason,
+            action: `function_call:${activeFunctionCall?.name ?? 'unknown_tool'}`,
+            functionCall: activeFunctionCall
+              ? {
+                  name: activeFunctionCall.name,
+                  args: activeFunctionCall.args,
+                  description: activeFunctionCall.description,
+                }
+              : undefined,
+            outcome: 'failed',
+            detail: message,
           })
 
           this.emitLiveEvent({
-            type: 'operator.tool.completed',
-            level: 'success',
-            message: functionCall.description?.trim() || `Tool completed: ${toolName}`,
+            type: 'operator.tool.failed',
+            level: 'error',
+            message,
             runId: context.runId,
             pathId: context.pathId,
-            stepId: context.stepId,
+            pathExecutionId: context.pathExecutionId,
+            attemptId: context.attemptId,
+            stepId: step.id,
             edgeId: step.edgeId,
             iteration,
             actionCursor,
             meta: {
-              toolName,
-              url: lastState.url,
+              toolName: activeFunctionCall?.name,
             },
           })
 
-          actionCursor += 1
-        }
-
-        if (this.loopAgent.appendFunctionResponses) {
-          await this.loopAgent.appendFunctionResponses({
-            agentMode: context.agentModes.operatorLoop,
-            runId: context.runId,
-            pathId: context.pathId,
-            stepId: context.stepId,
-            stepOrder: context.currentPathStepIndex + 1,
-            narrativeSummary: narrative.summary,
-            runtimeState,
-            responses: functionResponses,
-          })
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'tool execution failed'
-        if (this.loopAgent.appendFunctionResponses) {
-          const failedResponse: LoopFunctionResponse = {
-            name: activeFunctionCall?.name ?? 'unknown_tool',
-            arguments: activeFunctionCall?.args ?? {},
-            response: {
-              url: lastState?.url ?? page.url(),
-              status: 'failed',
-              message,
+          transitionResults.push({
+            step,
+            result: 'fail',
+            blockedReason: message,
+            failureCode: 'operator-action-failed',
+            terminationReason: 'operator-error',
+            validationResults: currentValidationResults,
+            validationSummary: currentValidationSummary,
+            trace,
+            evidence: {
+              domSummary: `current_url=${lastState?.url ?? page.url()}`,
             },
-            screenshotBase64: lastState?.screenshot?.toString('base64'),
+          })
+          return {
+            result: 'fail',
+            blockedReason: message,
+            failureCode: 'operator-action-failed',
+            terminationReason: 'operator-error',
+            transitionResults,
+            finalStateId: latestStableStateId,
           }
-          await this.loopAgent.appendFunctionResponses({
-            agentMode: context.agentModes.operatorLoop,
-            runId: context.runId,
-            pathId: context.pathId,
-            stepId: context.stepId,
-            stepOrder: context.currentPathStepIndex + 1,
-            narrativeSummary: narrative.summary,
-            runtimeState: {
-              url: lastState?.url ?? page.url(),
-              title: lastState?.title ?? titleSummary,
-              iteration,
-              actionCursor,
-            },
-            responses: [...functionResponses, failedResponse],
-          })
         }
-        trace.push({
-          iteration,
-          url: lastState?.url ?? page.url(),
-          observation: JSON.stringify({
-            url: lastState?.url ?? page.url(),
-            title: lastState?.title ?? '',
-            iteration,
-            actionCursor,
-          }),
-          action: `function_call:${activeFunctionCall?.name ?? 'unknown_tool'}`,
-          functionCall: activeFunctionCall
-            ? {
-                name: activeFunctionCall.name,
-                args: activeFunctionCall.args,
-                description: activeFunctionCall.description,
-              }
-            : undefined,
-          outcome: 'failed',
-          detail: message,
-        })
+      }
 
-        this.emitLiveEvent({
-          type: 'operator.tool.failed',
-          level: 'error',
-          message,
-          runId: context.runId,
-          pathId: context.pathId,
-          stepId: context.stepId,
-          edgeId: step.edgeId,
-          iteration,
-          actionCursor,
-          meta: {
-            toolName: activeFunctionCall?.name,
-          },
-        })
-
-        return {
+      if (transitionResults.length <= stepIndex) {
+        const finalValidationResults = this.buildValidationResults(context, step, validations, validationLedger, maxLoopRounds)
+        const finalValidationSummary = this.summarizeValidationResults(finalValidationResults)
+        transitionResults.push({
+          step,
           result: 'fail',
-          blockedReason: message,
-          failureCode: 'operator-action-failed',
-          terminationReason: 'operator-error',
-          validationResults: currentValidationResults,
-          validationSummary: currentValidationSummary,
-          trace,
+          blockedReason: 'Max iterations reached before Copilot completed the transition',
+          failureCode: 'operator-timeout',
+          terminationReason: 'max-iterations',
+          validationResults: finalValidationResults,
+          validationSummary: finalValidationSummary,
+          trace: [],
           evidence: {
             domSummary: `current_url=${lastState?.url ?? page.url()}`,
           },
+        })
+        return {
+          result: 'fail',
+          blockedReason: 'Max iterations reached before Copilot completed the transition',
+          failureCode: 'operator-timeout',
+          terminationReason: 'max-iterations',
+          transitionResults,
+          finalStateId: latestStableStateId,
         }
       }
     }
 
-    const finalValidationResults = this.buildValidationResultsFromDecision(validations, validationLedger, step.edgeId, maxLoopRounds)
-    const finalValidationSummary = this.summarizeValidationResults(finalValidationResults)
     return {
-      result: 'fail',
-      blockedReason: 'Max iterations reached before Copilot completed the step',
-      failureCode: 'operator-timeout',
-      terminationReason: 'max-iterations',
-      validationResults: finalValidationResults,
-      validationSummary: finalValidationSummary,
-      trace,
-      evidence: {
-        domSummary: `current_url=${lastState?.url ?? page.url()}`,
-      },
+      result: 'pass',
+      transitionResults,
+      finalStateId: path.steps[path.steps.length - 1]?.toStateId ?? latestStableStateId,
     }
   }
 
@@ -928,8 +1090,11 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     await Promise.all(entries.map(async ([key]) => this.closeSessionByKey(key)))
   }
 
-  async cleanupPath(runId: string, pathId: string): Promise<void> {
-    const key = this.sessionKey(runId, pathId)
+  async cleanupPath(runId: string, pathExecutionId: string): Promise<void> {
+    if (this.loopAgent.cleanupPath) {
+      await this.loopAgent.cleanupPath(runId, pathExecutionId)
+    }
+    const key = this.sessionKey(runId, pathExecutionId)
     await this.closeSessionByKey(key)
   }
 

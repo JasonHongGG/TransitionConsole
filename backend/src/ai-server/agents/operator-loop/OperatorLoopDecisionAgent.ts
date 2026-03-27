@@ -3,15 +3,20 @@ import type { AiRuntimeMessageAttachment } from '../../runtime/types'
 import type { AgentMode } from '../../../main-server/planned-runner/types'
 import { writeAgentResponseLog } from '../../common/agentResponseLog'
 import { extractJsonPayload } from '../../common/json'
-import type { LoopAppendFunctionResponsesInput, LoopDecision, LoopDecisionInput, LoopFunctionCall } from '../../../operator-server/type'
+import type {
+  LoopAppendFunctionResponsesInput,
+  LoopDecision,
+  LoopDecisionInput,
+  LoopFunctionCall,
+} from '../../../operator-server/type/operatorLoopContracts'
 import type { OperatorLoopDecisionAgent as OperatorLoopDecisionAgentContract } from '../types'
-import { OPERATOR_LOOP_PROMPT } from './prompt'
 import { OperatorLoopMockReplay } from './mockReplay/OperatorLoopMockReplay'
+import { OPERATOR_LOOP_PROMPT } from './prompt'
 import { RuntimeScreenshotLogger } from './RuntimeScreenshotLogger'
 
 type LoopDecisionEnvelope = {
   decision?: {
-    kind?: 'complete' | 'act' | 'fail'
+    kind?: 'complete' | 'advance' | 'act' | 'fail'
     reason?: string
     failureCode?: LoopDecision['failureCode']
     terminationReason?: LoopDecision['terminationReason']
@@ -32,7 +37,7 @@ type LoopDecisionEnvelope = {
 
 type ConversationDecisionPayload = {
   decision: {
-    kind: 'complete' | 'act' | 'fail'
+    kind: 'complete' | 'advance' | 'act' | 'fail'
     reason: string
     failureCode?: LoopDecision['failureCode']
     terminationReason?: LoopDecision['terminationReason']
@@ -92,8 +97,8 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     })
   }
 
-  private sessionKey(runId: string, pathId: string): string {
-    return `${runId}:${pathId}`
+  private sessionKey(runId: string, pathExecutionId: string): string {
+    return `${runId}:${pathExecutionId}`
   }
 
   private getHistory(key: string): ConversationTurn[] {
@@ -147,8 +152,6 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       }))
   }
 
-
-
   async decide(input: LoopDecisionInput): Promise<LoopDecision> {
     const mode = input.agentMode ?? this.defaultMode
 
@@ -161,28 +164,22 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         mode: 'mock-replay',
         runId: input.context.runId,
         pathId: input.context.pathId,
-        stepId: input.context.stepId,
-        request: {
-          context: input.context,
-          step: input.step,
-          runtimeState: input.runtimeState,
-          narrative: input.narrative,
-        },
+        request: input,
         parsedResponse: decision,
       })
 
-      return decision
+      return decision as LoopDecision
     }
 
-    const key = this.sessionKey(input.context.runId, input.context.pathId)
+    const key = this.sessionKey(input.context.runId, input.context.pathExecutionId)
     const screenshotBase64 = input.screenshotBase64
     const iteration = Number(input.runtimeState.iteration)
 
     const decisionScreenshotPath = await this.runtimeScreenshotLogger.saveDecisionInput({
       runId: input.context.runId,
       pathId: input.context.pathId,
-      stepOrder: input.context.stepOrder,
-      narrativeSummary: input.narrative.summary,
+      stepOrder: input.currentTransition.stepOrder,
+      narrativeSummary: input.narrative.currentTransitionSummary,
       iteration,
       screenshotBase64: input.screenshotBase64,
     })
@@ -197,7 +194,8 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
 
     const payload = {
       context: input.context,
-      step: input.step,
+      path: input.path,
+      currentTransition: input.currentTransition,
       runtimeState: input.runtimeState,
       narrative: input.narrative,
       screenshot: decisionScreenshotPath
@@ -227,10 +225,10 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       model: this.model,
       runId: input.context.runId,
       pathId: input.context.pathId,
-      stepId: input.context.stepId,
       request: {
         context: payload.context,
-        step: input.step,
+        path: payload.path,
+        currentTransition: payload.currentTransition,
         runtimeState: input.runtimeState,
         narrative: input.narrative,
         conversationHistoryTurns: this.getHistory(key).length,
@@ -304,6 +302,16 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       },
     })
 
+    if (normalizedDecision.kind === 'advance') {
+      return {
+        kind: 'advance',
+        reason: normalizedDecision.reason,
+        progressSummary: parsed.progressSummary,
+        validationUpdates,
+        terminationReason: normalizedDecision.terminationReason,
+      }
+    }
+
     if (normalizedDecision.kind === 'complete') {
       return {
         kind: 'complete',
@@ -344,7 +352,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       })),
     })
 
-    const key = this.sessionKey(input.runId, input.pathId)
+    const key = this.sessionKey(input.runId, input.pathExecutionId)
     this.pushHistory(key, {
       role: 'user',
       type: 'function_response',
@@ -354,6 +362,10 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         response: item.response,
       })),
     })
+  }
+
+  async cleanupPath(runId: string, pathExecutionId: string): Promise<void> {
+    this.conversationHistory.delete(this.sessionKey(runId, pathExecutionId))
   }
 
   async cleanupRun(runId: string): Promise<void> {

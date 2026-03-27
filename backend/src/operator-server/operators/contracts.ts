@@ -2,13 +2,9 @@ import type {
   ExecutionFailureCode,
   ExecutorContext,
   OperatorTerminationReason,
-  OperatorTraceItem,
-  PlannedTransitionStep,
-  StepEvidence,
+  PlannedTransitionPath,
+  PathTransitionResult,
   StepNarrativeInstruction,
-  StepValidationSummary,
-  StepValidationSpec,
-  StepValidationResult,
 } from '../type/operatorExecutionContracts'
 import type {
   LoopAppendFunctionResponsesInput,
@@ -33,20 +29,17 @@ export interface BrowserOperatorRunResult {
   blockedReason?: string
   failureCode?: ExecutionFailureCode
   terminationReason?: OperatorTerminationReason
-  validationResults: StepValidationResult[]
-  validationSummary: StepValidationSummary
-  trace: OperatorTraceItem[]
-  evidence?: StepEvidence
+  transitionResults: PathTransitionResult[]
+  finalStateId: string | null
 }
 
 export interface BrowserOperator {
-  run(
-    step: PlannedTransitionStep,
+  runPath(
+    path: PlannedTransitionPath,
     context: ExecutorContext,
     narrative: StepNarrativeInstruction,
-    validations: StepValidationSpec[],
   ): Promise<BrowserOperatorRunResult>
-  cleanupPath?(runId: string, pathId: string): Promise<void>
+  cleanupPath?(runId: string, pathExecutionId: string): Promise<void>
   cleanupRun?(runId: string): Promise<void>
   resetReplayCursor?(): Promise<void>
 }

@@ -36,12 +36,12 @@ const normalizeSettings = (input: unknown): TemporaryRunnerSettings | null => {
   const inputModesRaw = (input as { agentModes?: unknown }).agentModes
   const inputModes =
     inputModesRaw && typeof inputModesRaw === 'object'
-      ? (inputModesRaw as { pathPlanner?: unknown; stepNarrator?: unknown; operatorLoop?: unknown })
+      ? (inputModesRaw as { pathPlanner?: unknown; pathNarrator?: unknown; operatorLoop?: unknown })
       : undefined
 
   const agentModes = {
     pathPlanner: normalizeMode(inputModes?.pathPlanner),
-    stepNarrator: normalizeMode(inputModes?.stepNarrator),
+    pathNarrator: normalizeMode(inputModes?.pathNarrator),
     operatorLoop: normalizeMode(inputModes?.operatorLoop),
   }
 

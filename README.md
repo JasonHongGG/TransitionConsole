@@ -3,13 +3,13 @@
 TransitionConsole is a local development workspace for:
 - visualizing transition diagrams,
 - planning execution paths with AI,
-- running step-by-step browser/operator execution.
+- running path-oriented browser/operator execution.
 
 ## Architecture
 
 - `frontend/`: React + Vite UI
 - `backend/main-server/`: planned-runner orchestration (`/api/planned/*`)
-- `backend/ai-server/`: path-planner / step-narrator / operator-loop agents
+- `backend/ai-server/`: path-planner / path-narrator / operator-loop agents
 - `backend/operator-server/`: Playwright-based browser operator
 
 ## Quick start

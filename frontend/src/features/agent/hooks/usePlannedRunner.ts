@@ -5,10 +5,9 @@ import type {
   CoverageState,
   Diagram,
   DiagramConnector,
+  PlannedLiveEvent,
   PlannedRunSnapshot,
   PlannedRunnerStatus,
-  PlannedLiveEvent,
-  PlannedStepEvent,
   RunnerAgentModes,
   TestingAccount,
   TransitionResult,
@@ -27,9 +26,9 @@ interface PlannedRunnerRequest {
   agentModes?: RunnerAgentModes
 }
 
-interface PlannedStepResponse {
+interface PlannedRunnerResponse {
   ok: boolean
-  event: PlannedStepEvent | null
+  event: null
   snapshot: PlannedRunSnapshot
 }
 
@@ -63,7 +62,6 @@ export interface PlannedRunnerState {
   logs: AgentLogEntry[]
   coverage: CoverageState
   plannedStatus: PlannedRunnerStatus | null
-  latestEvent: PlannedStepEvent | null
   targetUrl: string
   testingNotes: string
   testAccounts: TestingAccount[]
@@ -81,8 +79,8 @@ export interface PlannedRunnerState {
   getTemporarySettings: () => TemporaryRunnerSettings
   applyTemporarySettings: (settings: TemporaryRunnerSettings) => void
   setRunning: (next: boolean) => void
+  refresh: () => void
   reset: () => void
-  step: () => void
 }
 
 const createEmptyTestAccount = (): TestingAccount => ({
@@ -113,6 +111,7 @@ const toAgentLogEntry = (event: PlannedLiveEvent): AgentLogEntry => ({
   message: event.message,
   category: classifyEventCategory(event.type),
   transitionId: event.edgeId,
+  stateId: event.currentStateId ?? undefined,
 })
 
 export const usePlannedRunner = (
@@ -140,11 +139,10 @@ export const usePlannedRunner = (
   const [testingNotes, setTestingNotes] = useState('')
   const [testAccounts, setTestAccountsState] = useState<TestingAccount[]>([])
   const [logs, setLogs] = useState<AgentLogEntry[]>([])
-  const [latestEvent, setLatestEvent] = useState<PlannedStepEvent | null>(null)
   const [runId, setRunId] = useState<string | null>(null)
   const [agentModes, setAgentModes] = useState<RunnerAgentModes>({
     pathPlanner: 'llm',
-    stepNarrator: 'llm',
+    pathNarrator: 'llm',
     operatorLoop: 'llm',
   })
   const [isSettingsBusy, setIsSettingsBusy] = useState(false)
@@ -155,14 +153,10 @@ export const usePlannedRunner = (
     edgeStatuses: {},
   })
   const [plannedStatus, setPlannedStatus] = useState<PlannedRunnerStatus | null>(null)
-  const maxKnownPathCountRef = useRef(0)
   const eventSourceRef = useRef<EventSource | null>(null)
-  const stopRequestedRef = useRef(false)
-  const ensureSessionRef = useRef<() => Promise<boolean>>(async () => false)
-  const runSingleStepRef = useRef<() => Promise<boolean>>(async () => false)
+  const pollInFlightRef = useRef(false)
 
   const setStopRequested = useCallback((next: boolean) => {
-    stopRequestedRef.current = next
     setStopRequestedState(next)
   }, [])
 
@@ -194,7 +188,7 @@ export const usePlannedRunner = (
       }
     }
     source.onerror = () => {
-      // Browser will auto-reconnect for SSE by default.
+      // Browser auto-reconnects SSE by default.
     }
 
     eventSourceRef.current = source
@@ -276,18 +270,16 @@ export const usePlannedRunner = (
     }
   }, [agentModes, diagrams, connectors, specRaw, targetUrl, testAccounts, testingNotes])
 
-  const applySnapshot = useCallback((snapshot: PlannedRunSnapshot, source: 'start' | 'step' | 'auto') => {
+  const applySnapshot = useCallback((snapshot: PlannedRunSnapshot, source: 'start' | 'status' | 'stop') => {
     setRunId(snapshot.runId)
     setAgentModes(snapshot.agentModes)
-
-    if (snapshot.totalPaths > maxKnownPathCountRef.current) {
-      setPlannerRound((prev) => (prev === 0 ? 1 : prev + 1))
-      maxKnownPathCountRef.current = snapshot.totalPaths
-    }
-
+    setPlannerRound(snapshot.batchNumber)
     setCurrentStateId(snapshot.currentStateId)
     setNextStateId(snapshot.nextStateId)
     setActiveEdgeId(snapshot.activeEdgeId)
+    setRunningState(snapshot.running)
+    setStopRequested(snapshot.stopRequested)
+
     setCoverage((prev) => {
       const visitedNodes = new Set(prev.visitedNodes)
       Object.entries(snapshot.nodeStatuses).forEach(([nodeId, status]) => {
@@ -311,19 +303,18 @@ export const usePlannedRunner = (
       }
     })
 
-    setPlannedStatus({
-      plannedPaths: snapshot.totalPaths,
-      completedPaths: snapshot.completedPaths,
-      currentPathId: snapshot.currentPathId,
-      currentPathName: snapshot.currentPathId,
-      currentStepId: snapshot.currentStepId,
-      currentStepLabel: snapshot.currentStepId,
-      currentStepOrder: snapshot.currentStepOrder,
-      currentPathStepTotal: snapshot.currentPathStepTotal,
-    })
+    if (!snapshot.runId) {
+      setPlannedStatus(null)
+      setCompleted(false)
+      setFullCoveragePassed(null)
+      setStatusTone('idle')
+      setStatusMessage('Idle')
+      return
+    }
+
+    setPlannedStatus(snapshot)
 
     if (snapshot.completed) {
-      setRunningState(false)
       setCompleted(true)
       const uncoveredTotal = snapshot.coverage.uncoveredEdgeIds.length + snapshot.coverage.uncoveredNodeIds.length
       const hasFailure = Object.values(snapshot.edgeStatuses).some((status) => status === 'fail')
@@ -337,29 +328,29 @@ export const usePlannedRunner = (
     setCompleted(false)
     setFullCoveragePassed(null)
 
-    if (snapshot.currentPathId && snapshot.currentStepId) {
-      setStatusTone(running ? 'running' : 'paused')
+    if (snapshot.stopRequested) {
+      setStatusTone(snapshot.running ? 'waiting' : 'paused')
+      setStatusMessage(snapshot.running ? 'Stop requested. Finishing current path...' : 'Paused. Press Start to resume.')
+      return
+    }
+
+    if (snapshot.running && snapshot.currentPathName) {
+      setStatusTone('running')
       setStatusMessage(
-        `Ready: ${snapshot.currentPathId} step ${snapshot.currentStepOrder ?? 0}/${snapshot.currentPathStepTotal ?? 0}`,
+        `Running: ${snapshot.currentPathName} transition ${snapshot.currentStepOrder ?? 0}/${snapshot.currentPathStepTotal ?? 0}`,
       )
       return
     }
 
-    if (source === 'start') {
-      setStatusTone('paused')
-      setStatusMessage('Planner ready. Press Step to execute the first action.')
+    if (snapshot.running) {
+      setStatusTone('running')
+      setStatusMessage(source === 'start' ? 'Path batch started.' : 'Executing planned paths...')
       return
     }
 
-    if (source === 'step' && !running) {
-      setStatusTone('paused')
-      setStatusMessage('Path transitioned/replanned. Press Step to continue.')
-      return
-    }
-
-    setStatusTone('running')
-    setStatusMessage('Executing planned paths...')
-  }, [running])
+    setStatusTone('paused')
+    setStatusMessage('Paused. Press Start to resume.')
+  }, [setStopRequested])
 
   const applyAgentModes = useCallback((nextModes: RunnerAgentModes) => {
     const previousModes = agentModes
@@ -420,15 +411,69 @@ export const usePlannedRunner = (
     return false
   }, [targetUrl])
 
-  const start = useCallback(async (): Promise<boolean> => {
+  const refreshStatus = useCallback(async (silent = false): Promise<boolean> => {
+    if (pollInFlightRef.current) {
+      return false
+    }
+
+    pollInFlightRef.current = true
+
+    if (!silent) {
+      setIsBusy(true)
+    }
+
+    try {
+      const response = await fetch(`${endpointBase}/status`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (!response.ok) {
+        const failureMessage = await formatHttpFailure(response, `Status request failed (${response.status}).`)
+        setLastError(failureMessage)
+        setStatusTone('error')
+        setStatusMessage('Status refresh failed.')
+        return false
+      }
+
+      const data = (await response.json()) as PlannedRunnerResponse
+      applySnapshot(data.snapshot, 'status')
+      return Boolean(data.snapshot.runId)
+    } catch (error) {
+      const failureMessage = formatRequestError(error)
+      setLastError(failureMessage)
+      setStatusTone('error')
+      setStatusMessage('Status refresh failed: backend unavailable.')
+      return false
+    } finally {
+      pollInFlightRef.current = false
+      if (!silent) {
+        setIsBusy(false)
+      }
+    }
+  }, [applySnapshot, endpointBase, formatHttpFailure, formatRequestError])
+
+  const startOrResume = useCallback(async (): Promise<boolean> => {
     if (diagrams.length === 0) return false
     if (!ensureTargetUrl()) return false
+
+    if (!plannedStatus || plannedStatus.completed) {
+      setLogs([])
+      setCoverage({
+        visitedNodes: new Set<string>(),
+        transitionResults: {},
+        nodeStatuses: {},
+        edgeStatuses: {},
+      })
+    }
+
     connectLiveEvents()
     setStopRequested(false)
     setIsBusy(true)
     setLastError(null)
     setStatusTone('waiting')
-    setStatusMessage('Waiting planner...')
+    setStatusMessage(plannedStatus && !plannedStatus.completed ? 'Resuming path batch...' : 'Starting path batch...')
+
     try {
       const response = await fetch(`${endpointBase}/start`, {
         method: 'POST',
@@ -447,9 +492,8 @@ export const usePlannedRunner = (
         return false
       }
 
-      const data = (await response.json()) as PlannedStepResponse
+      const data = (await response.json()) as PlannedRunnerResponse
       applySnapshot(data.snapshot, 'start')
-      setLatestEvent(null)
       return true
     } catch (error) {
       const failureMessage = formatRequestError(error)
@@ -460,76 +504,58 @@ export const usePlannedRunner = (
     } finally {
       setIsBusy(false)
     }
-  }, [applySnapshot, connectLiveEvents, diagrams.length, endpointBase, ensureTargetUrl, formatHttpFailure, formatRequestError, requestPayload])
+  }, [applySnapshot, connectLiveEvents, diagrams.length, endpointBase, ensureTargetUrl, formatHttpFailure, formatRequestError, plannedStatus, requestPayload, setStopRequested])
 
-  const runSingleStep = useCallback(async (): Promise<boolean> => {
-    if (!ensureTargetUrl()) return false
+  const requestStop = useCallback(async (): Promise<boolean> => {
+    if (!plannedStatus?.runId || !plannedStatus.running) {
+      return false
+    }
+
     setIsBusy(true)
     setLastError(null)
     setStatusTone('waiting')
-    setStatusMessage('Waiting planner/step execution...')
+    setStatusMessage('Stop requested. Finishing current path...')
+
     try {
-      const response = await fetch(`${endpointBase}/step`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      const response = await fetch(`${endpointBase}/stop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
       if (!response.ok) {
-        const failureMessage = await formatHttpFailure(response, `Step request failed (${response.status}).`)
-        setRunningState(false)
+        const failureMessage = await formatHttpFailure(response, `Stop request failed (${response.status}).`)
         setLastError(failureMessage)
         setStatusTone('error')
-        setStatusMessage('Step failed.')
+        setStatusMessage('Stop failed.')
         return false
       }
 
-      const data = (await response.json()) as PlannedStepResponse
-      applySnapshot(data.snapshot, running ? 'auto' : 'step')
-
-      if (data.event) {
-        setLatestEvent({
-          ...data.event,
-          validationResults: data.event.validationResults ?? [],
-        })
-      }
-
-      return !data.snapshot.completed
+      const data = (await response.json()) as PlannedRunnerResponse
+      applySnapshot(data.snapshot, 'stop')
+      return true
     } catch (error) {
       const failureMessage = formatRequestError(error)
-      setRunningState(false)
-      setStopRequested(false)
       setLastError(failureMessage)
       setStatusTone('error')
-      setStatusMessage('Step failed: backend unavailable.')
+      setStatusMessage('Stop failed: backend unavailable.')
       return false
     } finally {
       setIsBusy(false)
     }
-  }, [applySnapshot, endpointBase, ensureTargetUrl, formatHttpFailure, formatRequestError, running])
-
-  const ensureSession = useCallback(async (): Promise<boolean> => {
-    const hasActiveSnapshot = plannedStatus !== null
-    if (hasActiveSnapshot) {
-      return true
-    }
-    return start()
-  }, [plannedStatus, start])
-
-  useEffect(() => {
-    ensureSessionRef.current = ensureSession
-  }, [ensureSession])
-
-  useEffect(() => {
-    runSingleStepRef.current = runSingleStep
-  }, [runSingleStep])
+  }, [applySnapshot, endpointBase, formatHttpFailure, formatRequestError, plannedStatus])
 
   const reset = useCallback(async () => {
     setIsBusy(true)
     setStatusTone('waiting')
     setLastError(null)
-    setLogs([])
     disconnectLiveEvents()
+
     try {
-      if (running) {
-        await fetch(`${endpointBase}/stop`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-      }
-      const response = await fetch(`${endpointBase}/reset`, { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+      const response = await fetch(`${endpointBase}/reset`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
       if (!response.ok) {
         const failureMessage = `Failed to reset planned run (${response.status}).`
         setLastError(failureMessage)
@@ -544,13 +570,11 @@ export const usePlannedRunner = (
       setFullCoveragePassed(null)
       setRunId(null)
       setPlannerRound(0)
-      maxKnownPathCountRef.current = 0
       setCurrentStateId(null)
       setNextStateId(null)
       setActiveEdgeId(null)
       setPlannedStatus(null)
       setLogs([])
-      setLatestEvent(null)
       setStatusTone('idle')
       setStatusMessage('Idle')
       setCoverage({
@@ -564,11 +588,10 @@ export const usePlannedRunner = (
       setLastError(failureMessage)
       setStatusTone('error')
       setStatusMessage('Reset failed: backend unavailable.')
-    }
-    finally {
+    } finally {
       setIsBusy(false)
     }
-  }, [disconnectLiveEvents, endpointBase, formatRequestError, running])
+  }, [disconnectLiveEvents, endpointBase, formatRequestError, setStopRequested])
 
   useEffect(() => {
     return () => {
@@ -594,54 +617,33 @@ export const usePlannedRunner = (
   }, [statusTone])
 
   useEffect(() => {
-    if (!running) return
+    if (!plannedStatus?.runId) {
+      return
+    }
+
+    if (!plannedStatus.running && !plannedStatus.stopRequested) {
+      return
+    }
 
     let cancelled = false
 
-    const runAll = async () => {
-      const ready = await ensureSessionRef.current()
-      if (!ready) {
-        if (!cancelled) {
-          setStopRequested(false)
-          setRunningState(false)
-        }
-        return
-      }
-
+    const tick = async () => {
       if (cancelled) {
         return
       }
-
-      while (!cancelled) {
-        if (stopRequestedRef.current) {
-          break
-        }
-
-        const shouldContinue = await runSingleStepRef.current()
-        if (!shouldContinue || cancelled || stopRequestedRef.current) {
-          break
-        }
-      }
-
-      if (!cancelled) {
-        if (stopRequestedRef.current) {
-          setStopRequested(false)
-          setRunningState(false)
-          setStatusTone('paused')
-          setStatusMessage('Paused. Step mode ready.')
-          return
-        }
-
-        setRunningState(false)
-      }
+      await refreshStatus(true)
     }
 
-    void runAll()
+    void tick()
+    const timer = window.setInterval(() => {
+      void tick()
+    }, 1000)
 
     return () => {
       cancelled = true
+      window.clearInterval(timer)
     }
-  }, [running, setStopRequested])
+  }, [plannedStatus?.runId, plannedStatus?.running, plannedStatus?.stopRequested, refreshStatus])
 
   const getTemporarySettings = useCallback<() => TemporaryRunnerSettings>(() => ({
     targetUrl,
@@ -656,7 +658,7 @@ export const usePlannedRunner = (
     setTestAccounts((settings.testAccounts ?? []).map((account) => normalizeAccount(account)))
     const nextModes = settings.agentModes ?? {
       pathPlanner: 'llm',
-      stepNarrator: 'llm',
+      pathNarrator: 'llm',
       operatorLoop: 'llm',
     }
     applyAgentModes(nextModes)
@@ -679,7 +681,6 @@ export const usePlannedRunner = (
     logs,
     coverage,
     plannedStatus,
-    latestEvent,
     runId,
     agentModes,
     isSettingsBusy,
@@ -698,34 +699,17 @@ export const usePlannedRunner = (
     applyTemporarySettings,
     setRunning: (next) => {
       if (next) {
-        if (!ensureTargetUrl()) return
-        setStopRequested(false)
-        setRunningState(true)
-      } else {
-        if (!running) {
-          return
-        }
-
-        setLastError(null)
-        setStopRequested(true)
-        setStatusTone('waiting')
-        setStatusMessage('Stop requested. Finishing current step...')
+        void startOrResume()
+        return
       }
+
+      void requestStop()
+    },
+    refresh: () => {
+      void refreshStatus()
     },
     reset: () => {
       void reset()
-    },
-    step: () => {
-      void (async () => {
-        if (running || isBusy) return
-        if (!ensureTargetUrl()) return
-        if (plannedStatus === null) {
-          const started = await start()
-          if (!started) return
-          return
-        }
-        await runSingleStep()
-      })()
     },
   }
 }

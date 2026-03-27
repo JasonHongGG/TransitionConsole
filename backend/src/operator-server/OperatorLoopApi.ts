@@ -5,6 +5,8 @@ import type {
   OperatorLoopAgent,
   OperatorLoopAppendFunctionResponsesRequest,
   OperatorLoopAppendFunctionResponsesResponse,
+  OperatorLoopCleanupPathRequest,
+  OperatorLoopCleanupPathResponse,
   OperatorLoopCleanupRunRequest,
   OperatorLoopCleanupRunResponse,
   OperatorLoopDecideRequest,
@@ -58,6 +60,14 @@ export class OperatorLoopApi implements OperatorLoopAgent {
       this.aiBaseUrl,
       '/api/ai/agents/operator-loop/cleanup-run',
       { runId },
+    )
+  }
+
+  async cleanupPath(runId: string, pathExecutionId: string): Promise<void> {
+    await postJson<OperatorLoopCleanupPathRequest, OperatorLoopCleanupPathResponse>(
+      this.aiBaseUrl,
+      '/api/ai/agents/operator-loop/cleanup-path',
+      { runId, pathExecutionId },
     )
   }
 

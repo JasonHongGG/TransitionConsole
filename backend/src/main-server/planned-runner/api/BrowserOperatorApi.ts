@@ -1,16 +1,15 @@
 import type {
   ExecutorContext,
-  PlannedTransitionStep,
-  StepValidationSpec,
   StepNarrativeInstruction,
+  PlannedTransitionPath,
 } from '../types'
 import type { BrowserOperator } from '../executor/contracts'
 import type {
   OperatorCleanupPathRequest,
   OperatorCleanupRunRequest,
+  OperatorPathRunRequest,
+  OperatorPathRunResponse,
   OperatorResetReplayResponse,
-  OperatorStepRunRequest,
-  OperatorStepRunResponse,
 } from '../../../operator-server/type'
 import { servicePorts, toLocalBaseUrl } from '../../../common/network'
 import { postApiJson } from './apiClient'
@@ -24,20 +23,18 @@ export class BrowserOperatorApi implements BrowserOperator {
     this.timeoutMs = options?.timeoutMs ?? Number(process.env.OPERATOR_LOOP_TIMEOUT_MS ?? process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
   }
 
-  async run(
-    step: PlannedTransitionStep,
+  async runPath(
+    path: PlannedTransitionPath,
     context: ExecutorContext,
     narrative: StepNarrativeInstruction,
-    validations: StepValidationSpec[],
-  ): Promise<OperatorStepRunResponse> {
-    return postApiJson<OperatorStepRunRequest, OperatorStepRunResponse>(
+  ): Promise<OperatorPathRunResponse> {
+    return postApiJson<OperatorPathRunRequest, OperatorPathRunResponse>(
       this.operatorBaseUrl,
-      '/api/operator/step-executor/run',
+      '/api/operator/path-executor/run',
       {
-        step,
+        path,
         context,
         narrative,
-        validations,
       },
       this.timeoutMs,
     )
@@ -46,17 +43,17 @@ export class BrowserOperatorApi implements BrowserOperator {
   async cleanupRun(runId: string): Promise<void> {
     await postApiJson<OperatorCleanupRunRequest, { ok: boolean }>(
       this.operatorBaseUrl,
-      '/api/operator/step-executor/cleanup-run',
+      '/api/operator/path-executor/cleanup-run',
       { runId },
       this.timeoutMs,
     )
   }
 
-  async cleanupPath(runId: string, pathId: string): Promise<void> {
+  async cleanupPath(runId: string, pathExecutionId: string, pathId: string): Promise<void> {
     await postApiJson<OperatorCleanupPathRequest, { ok: boolean }>(
       this.operatorBaseUrl,
-      '/api/operator/step-executor/cleanup-path',
-      { runId, pathId },
+      '/api/operator/path-executor/cleanup-path',
+      { runId, pathExecutionId, pathId },
       this.timeoutMs,
     )
   }
@@ -64,7 +61,7 @@ export class BrowserOperatorApi implements BrowserOperator {
   async resetReplayCursor(): Promise<void> {
     await postApiJson<Record<string, never>, OperatorResetReplayResponse>(
       this.operatorBaseUrl,
-      '/api/operator/step-executor/reset-replay',
+      '/api/operator/path-executor/reset-replay',
       {},
       this.timeoutMs,
     )

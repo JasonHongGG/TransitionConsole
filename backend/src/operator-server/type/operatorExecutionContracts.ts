@@ -52,10 +52,20 @@ export interface StepValidationSummary {
   pending: number
 }
 
+export interface PathNarrativeTransitionInstruction {
+  stepId: string
+  edgeId: string
+  summary: string
+  taskDescription: string
+  validations: StepValidationSpec[]
+}
+
 export interface StepNarrativeInstruction {
   summary: string
   taskDescription: string
   validations: StepValidationSpec[]
+  executionStrategy?: string
+  transitions?: PathNarrativeTransitionInstruction[]
 }
 
 export interface OperatorFunctionCallTrace {
@@ -104,36 +114,38 @@ export interface PlannedTransitionStep {
   semantic: string
 }
 
+export interface PlannedTransitionPath {
+  id: string
+  name: string
+  semanticGoal: string
+  steps: PlannedTransitionStep[]
+}
+
 export interface ExecutorContext {
   runId: string
   pathId: string
   pathName: string
-  stepId: string
+  pathExecutionId: string
+  attemptId: number
   semanticGoal: string
   targetUrl: string
   specRaw: string | null
   userTestingInfo?: UserTestingInfo
   agentModes: {
     pathPlanner: 'llm' | 'mock'
-    stepNarrator: 'llm' | 'mock'
+    pathNarrator: 'llm' | 'mock'
     operatorLoop: 'llm' | 'mock'
   }
-  stepValidations: StepValidationSpec[]
-  currentPathStepIndex: number
-  currentPathStepTotal: number
-  pathEdgeIds: string[]
+  batchNumber: number
+  pathIndexInBatch: number
+  totalPathsInBatch: number
+  currentPath: PlannedTransitionPath
   systemDiagrams: unknown[]
   systemConnectors: unknown[]
 }
 
-export interface OperatorStepRunRequest {
+export interface PathTransitionResult {
   step: PlannedTransitionStep
-  context: ExecutorContext
-  narrative: StepNarrativeInstruction
-  validations: StepValidationSpec[]
-}
-
-export interface OperatorStepRunResponse {
   result: 'pass' | 'fail'
   blockedReason?: string
   failureCode?: ExecutionFailureCode
@@ -141,7 +153,22 @@ export interface OperatorStepRunResponse {
   validationResults: StepValidationResult[]
   validationSummary: StepValidationSummary
   trace: OperatorTraceItem[]
-  evidence: StepEvidence | undefined
+  evidence?: StepEvidence
+}
+
+export interface OperatorPathRunRequest {
+  path: PlannedTransitionPath
+  context: ExecutorContext
+  narrative: StepNarrativeInstruction
+}
+
+export interface OperatorPathRunResponse {
+  result: 'pass' | 'fail'
+  blockedReason?: string
+  failureCode?: ExecutionFailureCode
+  terminationReason?: OperatorTerminationReason
+  transitionResults: PathTransitionResult[]
+  finalStateId: string | null
 }
 
 export interface OperatorCleanupRunRequest {
@@ -150,6 +177,7 @@ export interface OperatorCleanupRunRequest {
 
 export interface OperatorCleanupPathRequest {
   runId: string
+  pathExecutionId: string
   pathId: string
 }
 
@@ -165,9 +193,17 @@ export interface PlannedLiveEventInput {
   message: string
   runId?: string
   pathId?: string
+  pathExecutionId?: string
+  attemptId?: number
   stepId?: string
   edgeId?: string
   iteration?: number
   actionCursor?: number
+  currentStateId?: string | null
+  nextStateId?: string | null
+  currentStepOrder?: number | null
+  currentPathStepTotal?: number | null
+  pathOrder?: number | null
+  totalPaths?: number | null
   meta?: Record<string, unknown>
 }

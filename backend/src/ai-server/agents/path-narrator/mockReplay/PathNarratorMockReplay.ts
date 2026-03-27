@@ -2,23 +2,23 @@ import path from 'node:path'
 import { createLogger } from '../../../../common/logger'
 import type { StepNarrativeInstruction } from '../../../../main-server/planned-runner/types'
 import { resolveMockDir } from '../../../common/resolveMockDir'
-import { loadStepNarratorMockReplayItems, type StepNarratorMockReplayItem } from './stepNarratorMockReplayReader'
+import { loadPathNarratorMockReplayItems, type PathNarratorMockReplayItem } from './pathNarratorMockReplayReader'
 
-const log = createLogger('mock-replay-step-narrator')
+const log = createLogger('mock-replay-path-narrator')
 
-interface StepNarratorMockReplayOptions {
+interface PathNarratorMockReplayOptions {
   mockDir?: string
   loop?: boolean
 }
 
-export class StepNarratorMockReplay {
+export class PathNarratorMockReplay {
   private readonly mockDir: string
   private readonly loop: boolean
   private cursor = 0
-  private items: StepNarratorMockReplayItem[] = []
+  private items: PathNarratorMockReplayItem[] = []
 
-  constructor(options: StepNarratorMockReplayOptions = {}) {
-    this.mockDir = resolveMockDir(options.mockDir ?? path.join('mock-data', 'step-narrator'), 'step-narrator')
+  constructor(options: PathNarratorMockReplayOptions = {}) {
+    this.mockDir = resolveMockDir(options.mockDir ?? path.join('mock-data', 'path-narrator'), 'path-narrator')
     this.loop = options.loop ?? true
 
     log.log('initialized', {
@@ -28,7 +28,7 @@ export class StepNarratorMockReplay {
   }
 
   async resetRoundCursor(): Promise<void> {
-    this.items = await loadStepNarratorMockReplayItems(this.mockDir)
+    this.items = await loadPathNarratorMockReplayItems(this.mockDir)
     this.cursor = 0
 
     log.log('round cursor reset', {
@@ -42,14 +42,14 @@ export class StepNarratorMockReplay {
     await this.resetRoundCursor()
   }
 
-  private consumeNextItem(): StepNarratorMockReplayItem {
+  private consumeNextItem(): PathNarratorMockReplayItem {
     if (this.items.length === 0) {
-      throw new Error(`No mock step narrator JSON files found in ${this.mockDir}`)
+      throw new Error(`No mock path narrator JSON files found in ${this.mockDir}`)
     }
 
     if (this.cursor >= this.items.length) {
       if (!this.loop) {
-        throw new Error(`Mock step narrator files exhausted at ${this.mockDir}`)
+        throw new Error(`Mock path narrator files exhausted at ${this.mockDir}`)
       }
       this.cursor = 0
     }
@@ -64,10 +64,10 @@ export class StepNarratorMockReplay {
 
     const item = this.consumeNextItem()
     if (!item.narrative) {
-      throw new Error(`Mock step narrator file contains no valid parsedResponse.narrative: ${item.fileName}`)
+      throw new Error(`Mock path narrator file contains no valid parsedResponse.narrative: ${item.fileName}`)
     }
 
-    log.log('replaying step narrator response', {
+    log.log('replaying path narrator response', {
       fileName: item.fileName,
       cursor: this.cursor,
       totalMockFiles: this.items.length,

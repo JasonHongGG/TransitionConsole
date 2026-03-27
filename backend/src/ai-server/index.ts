@@ -4,10 +4,11 @@ import cors from 'cors'
 import { createLogger } from '../common/logger'
 import type {
   PathPlannerGenerateRequest,
-  StepNarratorGenerateRequest,
+  PathNarratorGenerateRequest,
 } from '../main-server/type/contracts'
 import type {
   OperatorLoopAppendFunctionResponsesRequest,
+  OperatorLoopCleanupPathRequest,
   OperatorLoopCleanupRunRequest,
   OperatorLoopDecideRequest,
 } from '../operator-server/type'
@@ -73,47 +74,47 @@ app.post('/api/ai/path-planner/reset', async (_req, res) => {
   }
 })
 
-app.post('/api/ai/agents/step-narrator/generate', async (req, res) => {
+app.post('/api/ai/agents/path-narrator/generate', async (req, res) => {
   try {
-    const body = req.body as StepNarratorGenerateRequest
-    const { step, context } = body
-    log.log('step narrator request', {
+    const body = req.body as PathNarratorGenerateRequest
+    const { path, context } = body
+    log.log('path narrator request', {
       runId: context.runId,
       pathId: context.pathId,
-      stepId: context.stepId,
-      edgeId: step.edgeId,
+      pathExecutionId: context.pathExecutionId,
+      transitions: path.steps.length,
     })
-    const narrative = await agents.stepNarrator.generate(body)
-    log.log('step narrator completed', {
+    const narrative = await agents.pathNarrator.generate(body)
+    log.log('path narrator completed', {
       runId: context.runId,
       pathId: context.pathId,
-      stepId: context.stepId,
+      pathExecutionId: context.pathExecutionId,
     })
     res.json({ narrative })
   } catch (error) {
-    log.log('step narrator failed', {
-      error: error instanceof Error ? error.message : 'step narrator failed',
+    log.log('path narrator failed', {
+      error: error instanceof Error ? error.message : 'path narrator failed',
     })
     res.status(500).json({
       ok: false,
-      error: error instanceof Error ? error.message : 'step narrator failed',
+      error: error instanceof Error ? error.message : 'path narrator failed',
     })
   }
 })
 
-app.post('/api/ai/agents/step-narrator/reset', async (_req, res) => {
+app.post('/api/ai/agents/path-narrator/reset', async (_req, res) => {
   try {
-    log.log('step narrator reset request')
-    await agents.stepNarrator.reset()
-    log.log('step narrator reset completed')
+    log.log('path narrator reset request')
+    await agents.pathNarrator.reset()
+    log.log('path narrator reset completed')
     res.json({ ok: true })
   } catch (error) {
-    log.log('step narrator reset failed', {
-      error: error instanceof Error ? error.message : 'step narrator reset failed',
+    log.log('path narrator reset failed', {
+      error: error instanceof Error ? error.message : 'path narrator reset failed',
     })
     res.status(500).json({
       ok: false,
-      error: error instanceof Error ? error.message : 'step narrator reset failed',
+      error: error instanceof Error ? error.message : 'path narrator reset failed',
     })
   }
 })
@@ -125,13 +126,15 @@ app.post('/api/ai/agents/operator-loop/decide', async (req, res) => {
     log.log('operator loop decide request', {
       runId: requestContext.runId,
       pathId: requestContext.pathId,
-      stepId: requestContext.stepId,
+      pathExecutionId: requestContext.pathExecutionId,
+      stepId: body.currentTransition.stepId,
     })
     const decision = await agents.operatorLoop.decide(body)
     log.log('operator loop decide completed', {
       runId: requestContext.runId,
       pathId: requestContext.pathId,
-      stepId: requestContext.stepId,
+      pathExecutionId: requestContext.pathExecutionId,
+      stepId: body.currentTransition.stepId,
       result: decision.kind,
     })
     res.json(decision)
@@ -153,6 +156,7 @@ app.post('/api/ai/agents/operator-loop/append-function-responses', async (req, r
     log.log('operator loop append function responses request', {
       runId: body.runId,
       pathId: body.pathId,
+      pathExecutionId: body.pathExecutionId,
       stepId: body.stepId,
       stepOrder: body.stepOrder,
       iteration: body.runtimeState?.iteration,
@@ -162,6 +166,7 @@ app.post('/api/ai/agents/operator-loop/append-function-responses', async (req, r
     log.log('operator loop append function responses completed', {
       runId: body.runId,
       pathId: body.pathId,
+      pathExecutionId: body.pathExecutionId,
       stepId: body.stepId,
     })
     res.json({ ok: true })
@@ -190,6 +195,24 @@ app.post('/api/ai/agents/operator-loop/cleanup-run', async (req, res) => {
     res.status(500).json({
       ok: false,
       error: error instanceof Error ? error.message : 'operator loop cleanup failed',
+    })
+  }
+})
+
+app.post('/api/ai/agents/operator-loop/cleanup-path', async (req, res) => {
+  try {
+    const { runId, pathExecutionId } = req.body as OperatorLoopCleanupPathRequest
+    log.log('operator loop cleanup path request', { runId, pathExecutionId })
+    await agents.operatorLoop.cleanupPath(runId, pathExecutionId)
+    log.log('operator loop cleanup path completed', { runId, pathExecutionId })
+    res.json({ ok: true })
+  } catch (error) {
+    log.log('operator loop cleanup path failed', {
+      error: error instanceof Error ? error.message : 'operator loop cleanup path failed',
+    })
+    res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'operator loop cleanup path failed',
     })
   }
 })

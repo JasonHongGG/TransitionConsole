@@ -446,7 +446,6 @@ function App() {
                 coverage={agentRunner.coverage}
                 logs={agentRunner.logs}
                 currentStateId={agentRunner.currentStateId}
-                latestEvent={agentRunner.latestEvent}
                 running={agentRunner.running}
                 stopRequested={agentRunner.stopRequested}
                 isBusy={agentRunner.isBusy}
@@ -459,7 +458,7 @@ function App() {
                 fullCoveragePassed={agentRunner.fullCoveragePassed}
                 onStart={() => agentRunner.setRunning(true)}
                 onStop={() => agentRunner.setRunning(false)}
-                onStep={agentRunner.step}
+                onRefresh={agentRunner.refresh}
                 onReset={agentRunner.reset}
                 targetUrl={agentRunner.targetUrl}
                 onTargetUrlChange={agentRunner.setTargetUrl}
