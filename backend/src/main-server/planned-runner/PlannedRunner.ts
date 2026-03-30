@@ -9,6 +9,7 @@ import type {
   ElementExecutionStatus,
   ExecutorContext,
   PathExecutionSummary,
+  PlannedLiveEvent,
   PlannedLiveEventInput,
   PlannedPathHistoryItem,
   PlannedRunnerRequest,
@@ -19,6 +20,7 @@ import type {
   RuntimeState,
   StepExecutor,
 } from './types'
+import type { PlannedLiveEventBus } from './live-events/PlannedLiveEventBus'
 
 const log = createLogger('planned-runner')
 
@@ -62,6 +64,7 @@ export class PlannedRunner {
   private readonly executor: StepExecutor
   private readonly pathPlanner: PathPlanner
   private readonly publishLiveEvent?: (event: PlannedLiveEventInput) => void
+  private readonly liveEventUnsubscribe: (() => void) | null = null
   private readonly defaultAgentModes: RunnerAgentModes
   private readonly maxCompletedPaths: number | null
   private activeLoop: Promise<void> | null = null
@@ -70,6 +73,7 @@ export class PlannedRunner {
     executor?: StepExecutor
     pathPlanner: PathPlanner
     publishLiveEvent?: (event: PlannedLiveEventInput) => void
+    liveEventBus?: PlannedLiveEventBus
     defaultAgentModes?: RunnerAgentModes
   }) {
     this.executor = options.executor ?? new StubStepExecutor()
@@ -81,10 +85,68 @@ export class PlannedRunner {
       operatorLoop: 'llm',
     }
     this.maxCompletedPaths = parseOptionalPositiveInt(process.env.PLANNED_RUNNER_AUTO_MAX_PATHS)
+    if (options.liveEventBus) {
+      this.liveEventUnsubscribe = options.liveEventBus.subscribe((event) => {
+        this.handleLiveEvent(event)
+      })
+    }
   }
 
   private emitLiveEvent(event: PlannedLiveEventInput): void {
     this.publishLiveEvent?.(event)
+  }
+
+  private handleLiveEvent(event: PlannedLiveEvent): void {
+    const runtime = this.runtime
+    if (!runtime) return
+    if (event.runId !== runtime.runId) return
+
+    if (event.type === 'transition.started') {
+      if (event.currentStateId && runtime.nodeStatuses[event.currentStateId] === 'untested') {
+        runtime.nodeStatuses[event.currentStateId] = 'running'
+      }
+      if (event.edgeId && runtime.edgeStatuses[event.edgeId] === 'untested') {
+        runtime.edgeStatuses[event.edgeId] = 'running'
+      }
+      
+      if (event.currentStateId) runtime.currentStateId = event.currentStateId
+      if (event.nextStateId !== undefined) runtime.nextStateId = event.nextStateId
+      if (event.activeEdgeId !== undefined) runtime.activeEdgeId = event.activeEdgeId
+      if (event.currentStepOrder != null) runtime.currentStepOrder = event.currentStepOrder
+      if (event.currentPathStepTotal != null) runtime.currentPathStepTotal = event.currentPathStepTotal
+      if (event.stepId) runtime.currentStepId = event.stepId
+      return
+    }
+
+    if (event.type === 'transition.advanced') {
+      if (event.currentStateId) runtime.nodeStatuses[event.currentStateId] = 'pass'
+      if (event.nextStateId) runtime.nodeStatuses[event.nextStateId] = 'pass'
+      if (event.edgeId) runtime.edgeStatuses[event.edgeId] = 'pass'
+      if (event.activeEdgeId && event.activeEdgeId !== event.edgeId) {
+        runtime.edgeStatuses[event.activeEdgeId] = 'pass'
+      }
+      
+      if (event.currentStateId) runtime.currentStateId = event.currentStateId
+      if (event.nextStateId !== undefined) runtime.nextStateId = event.nextStateId
+      if (event.activeEdgeId !== undefined) runtime.activeEdgeId = event.activeEdgeId
+      if (event.currentStepOrder != null) runtime.currentStepOrder = event.currentStepOrder
+      if (event.currentPathStepTotal != null) runtime.currentPathStepTotal = event.currentPathStepTotal
+      if (event.stepId) runtime.currentStepId = event.stepId
+      
+      if (event.pathId && event.currentStepOrder != null) {
+        this.updatePathSummary(event.pathId, runtime.currentBatchNumber, (summary) => ({
+          ...summary,
+          completedTransitions: event.currentStepOrder!,
+          currentTransitionId: event.stepId ?? summary.currentTransitionId,
+          currentTransitionLabel: event.stepLabel ?? summary.currentTransitionLabel,
+          currentTransitionOrder: event.currentStepOrder,
+          currentStateId: event.currentStateId ?? summary.currentStateId,
+          nextStateId: event.nextStateId ?? summary.nextStateId,
+          activeEdgeId: event.activeEdgeId ?? event.edgeId ?? summary.activeEdgeId,
+        }))
+      }
+      return
+    }
   }
 
   private createPathSummaries(paths: PlannedTransitionPath[], batchNumber: number): PathExecutionSummary[] {

@@ -53,6 +53,7 @@ export const startMainServer = (): void => {
     publishLiveEvent: (event) => {
       liveEventBus.publish(event)
     },
+    liveEventBus,
     defaultAgentModes,
   })
 

@@ -640,17 +640,9 @@ export const AgentPanel = ({
               <dt>Step</dt>
               <dd>{plannedStatus ? `${stepCurrentIndex}/${stepTotal}` : 'N/A'}</dd>
             </div>
-            <div className="agent-keyval-row">
-              <dt>Failed</dt>
-              <dd>{plannedStatus ? `${plannedStatus.failedPaths}` : 'N/A'}</dd>
-            </div>
           </div>
 
           <div className="agent-keyval-column wide">
-            <div className="agent-keyval-row">
-              <dt>Batch</dt>
-              <dd>{plannedStatus ? `${plannedStatus.batchNumber}` : 'N/A'}</dd>
-            </div>
             <div className="agent-keyval-row">
               <dt>Current State</dt>
               <dd>{plannedStatus ? (currentStateId ?? 'N/A') : 'N/A'}</dd>
