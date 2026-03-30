@@ -80,6 +80,10 @@ export interface LoopDecisionInput {
     currentStateId: string
     nextStateId: string
     completedTransitions: number
+    lastObservationSummary?: string
+    lastObservationSource?: 'initial' | 'tool-batch'
+    lastBatchToolNames?: string[]
+    lastBatchBoundary?: 'batch-complete' | 'page-changed' | 'observation-required' | 'stop-requested'
   }
   screenshotBase64: string
   narrative: {
@@ -152,7 +156,14 @@ export interface LoopAppendFunctionResponsesInput {
     currentStateId: string
     nextStateId: string
     completedTransitions: number
+    lastObservationSummary?: string
+    lastObservationSource?: 'initial' | 'tool-batch'
+    lastBatchToolNames?: string[]
+    lastBatchBoundary?: 'batch-complete' | 'page-changed' | 'observation-required' | 'stop-requested'
   }
+  observationSummary?: string
+  observationSource?: 'initial' | 'tool-batch'
+  batchBoundary?: 'batch-complete' | 'page-changed' | 'observation-required' | 'stop-requested'
   responses: LoopFunctionResponse[]
 }
 

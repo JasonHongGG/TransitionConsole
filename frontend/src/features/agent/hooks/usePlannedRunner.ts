@@ -44,6 +44,7 @@ interface PlannedRunnerSettingsResponse {
 }
 
 type SyncState = 'idle' | 'live' | 'reconnecting'
+type ControlPhase = 'idle' | 'starting' | 'running' | 'stopping' | 'paused' | 'resetting' | 'completed'
 
 export interface TemporaryRunnerSettings {
   targetUrl: string
@@ -56,6 +57,9 @@ export interface PlannedRunnerState {
   running: boolean
   stopRequested: boolean
   isBusy: boolean
+  controlPhase: ControlPhase
+  canStop: boolean
+  canReset: boolean
   statusMessage: string
   statusTone: 'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'
   waitingElapsedSeconds: number
@@ -120,12 +124,16 @@ const phaseLabel = (phase: ExecutionPhase): string => {
       return 'Validating'
     case 'paused':
       return 'Paused'
+    case 'stopping':
+      return 'Stopping'
     case 'completed':
       return 'Completed'
     case 'failed':
       return 'Failed'
     case 'reset':
       return 'Reset'
+    case 'resetting':
+      return 'Resetting'
     default:
       return 'Idle'
   }
@@ -152,7 +160,8 @@ const derivePhaseFromSnapshot = (snapshot: PlannedRunSnapshot | null): Execution
     const hasFailure = Object.values(snapshot.edgeStatuses).some((status) => status === 'fail')
     return hasFailure ? 'failed' : 'completed'
   }
-  if (snapshot.stopRequested || !snapshot.running) return 'paused'
+  if (snapshot.stopRequested) return snapshot.running ? 'stopping' : 'paused'
+  if (!snapshot.running) return 'paused'
   if (snapshot.currentPathId) return 'operating'
   return 'planning'
 }
@@ -171,7 +180,10 @@ const deriveEventPhase = (event: PlannedLiveEvent): ExecutionPhase => {
   if (event.level === 'error') return 'failed'
   if (event.type === 'run.completed') return 'completed'
   if (event.type === 'run.reset') return 'reset'
-  if (event.type.startsWith('run.stop')) return 'paused'
+  if (event.type === 'run.reset-requested') return 'resetting'
+  if (event.type === 'path.paused') return 'paused'
+  if (event.type === 'run.stop-requested') return 'stopping'
+  if (event.type === 'run.stopped') return 'paused'
   if (event.type.startsWith('narrator')) return 'narrating'
   if (event.type.startsWith('operator') || event.type.startsWith('transition')) return 'operating'
   if (event.type.includes('planner') || event.type.startsWith('batch') || event.type.startsWith('replan')) return 'planning'
@@ -186,6 +198,7 @@ const shouldSurfaceEvent = (event: PlannedLiveEvent): boolean => {
     case 'run.resumed':
     case 'run.stop-requested':
     case 'run.stopped':
+    case 'run.reset-requested':
     case 'run.completed':
     case 'run.reset':
     case 'batch.started':
@@ -194,6 +207,7 @@ const shouldSurfaceEvent = (event: PlannedLiveEvent): boolean => {
     case 'path.started':
     case 'path.completed':
     case 'path.failed':
+    case 'path.paused':
     case 'narrator.started':
     case 'narrator.completed':
     case 'operator.started':
@@ -204,6 +218,7 @@ const shouldSurfaceEvent = (event: PlannedLiveEvent): boolean => {
     case 'operator.tool.started':
     case 'operator.tool.completed':
     case 'operator.tool.failed':
+    case 'operator.batch.boundary':
     case 'agent.generation.completed':
     case 'executor.failed':
       return true
@@ -419,6 +434,7 @@ export const usePlannedRunner = (
   const [running, setRunningState] = useState(false)
   const [stopRequested, setStopRequestedState] = useState(false)
   const [isBusy, setIsBusy] = useState(false)
+  const [controlPhase, setControlPhase] = useState<ControlPhase>('idle')
   const [statusMessage, setStatusMessage] = useState('Idle')
   const [statusTone, setStatusTone] = useState<'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'>('idle')
   const [waitingElapsedSeconds, setWaitingElapsedSeconds] = useState(0)
@@ -570,6 +586,7 @@ export const usePlannedRunner = (
       setPlannedStatus(null)
       setCompleted(false)
       setFullCoveragePassed(null)
+      setControlPhase('idle')
       setStatusTone('idle')
       setStatusMessage('Idle')
       setSyncState('idle')
@@ -580,6 +597,7 @@ export const usePlannedRunner = (
 
     if (snapshot.completed) {
       setCompleted(true)
+      setControlPhase('completed')
       const uncoveredTotal = snapshot.coverage.uncoveredEdgeIds.length + snapshot.coverage.uncoveredNodeIds.length
       const hasFailure = Object.values(snapshot.edgeStatuses).some((status) => status === 'fail')
       const passed = uncoveredTotal === 0 && !hasFailure
@@ -593,23 +611,27 @@ export const usePlannedRunner = (
     setFullCoveragePassed(null)
 
     if (snapshot.stopRequested) {
+      setControlPhase(snapshot.running ? 'stopping' : 'paused')
       setStatusTone(snapshot.running ? 'waiting' : 'paused')
-      setStatusMessage(snapshot.running ? 'Stop requested. Finishing current path...' : 'Paused. Press Start to resume.')
+      setStatusMessage(snapshot.running ? 'Stop requested. Waiting for the next tool boundary...' : 'Paused. Press Start to resume.')
       return
     }
 
     if (snapshot.running && snapshot.currentPathName) {
+      setControlPhase('running')
       setStatusTone('running')
       setStatusMessage(`Running ${snapshot.currentPathName} · step ${snapshot.currentStepOrder ?? 0}/${snapshot.currentPathStepTotal ?? 0}`)
       return
     }
 
     if (snapshot.running) {
+      setControlPhase('running')
       setStatusTone('running')
       setStatusMessage(source === 'start' ? 'Path batch started.' : 'Execution in progress...')
       return
     }
 
+    setControlPhase('paused')
     setStatusTone('paused')
     setStatusMessage('Paused. Press Start to resume.')
   }, [setStopRequested])
@@ -805,6 +827,7 @@ export const usePlannedRunner = (
     connectLiveEvents()
     setStopRequested(false)
     setIsBusy(true)
+    setControlPhase('starting')
     setLastError(null)
     setStatusTone('waiting')
     setStatusMessage(plannedStatus && !plannedStatus.completed ? 'Resuming path batch...' : 'Starting path batch...')
@@ -819,6 +842,7 @@ export const usePlannedRunner = (
       if (!response.ok) {
         const failureMessage = await formatHttpFailure(response, `Failed to start planned run (${response.status}).`)
         setLastError(failureMessage)
+        setControlPhase(plannedStatus?.runId ? 'paused' : 'idle')
         setStatusTone('error')
         setStatusMessage('Start failed.')
         return false
@@ -831,6 +855,7 @@ export const usePlannedRunner = (
     } catch (error) {
       const failureMessage = formatRequestError(error)
       setLastError(failureMessage)
+      setControlPhase(plannedStatus?.runId ? 'paused' : 'idle')
       setStatusTone('error')
       setStatusMessage('Backend unavailable. Please check server connection.')
       return false
@@ -844,10 +869,10 @@ export const usePlannedRunner = (
       return false
     }
 
-    setIsBusy(true)
+    setControlPhase('stopping')
     setLastError(null)
     setStatusTone('waiting')
-    setStatusMessage('Stop requested. Finishing current path...')
+    setStatusMessage('Stop requested. Waiting for the next tool boundary...')
 
     try {
       const response = await fetch(`${endpointBase}/stop`, {
@@ -858,6 +883,7 @@ export const usePlannedRunner = (
       if (!response.ok) {
         const failureMessage = await formatHttpFailure(response, `Stop request failed (${response.status}).`)
         setLastError(failureMessage)
+        setControlPhase('running')
         setStatusTone('error')
         setStatusMessage('Stop failed.')
         return false
@@ -870,16 +896,16 @@ export const usePlannedRunner = (
     } catch (error) {
       const failureMessage = formatRequestError(error)
       setLastError(failureMessage)
+      setControlPhase('running')
       setStatusTone('error')
       setStatusMessage('Stop failed: backend unavailable.')
       return false
-    } finally {
-      setIsBusy(false)
     }
   }, [applySnapshot, endpointBase, formatHttpFailure, formatRequestError, plannedStatus, scheduleReconcile])
 
   const reset = useCallback(async () => {
     setIsBusy(true)
+    setControlPhase('resetting')
     setStatusTone('waiting')
     setLastError(null)
     disconnectLiveEvents()
@@ -893,6 +919,7 @@ export const usePlannedRunner = (
       if (!response.ok) {
         const failureMessage = `Failed to reset planned run (${response.status}).`
         setLastError(failureMessage)
+        setControlPhase(plannedStatus?.runId ? 'paused' : 'idle')
         setStatusTone('error')
         setStatusMessage('Reset failed.')
         return
@@ -909,6 +936,7 @@ export const usePlannedRunner = (
       setActiveEdgeId(null)
       setPlannedStatus(null)
       setTimeline([])
+      setControlPhase('idle')
       setStatusTone('idle')
       setStatusMessage('Idle')
       setCoverage({
@@ -921,12 +949,13 @@ export const usePlannedRunner = (
     } catch (error) {
       const failureMessage = formatRequestError(error)
       setLastError(failureMessage)
+      setControlPhase(plannedStatus?.runId ? 'paused' : 'idle')
       setStatusTone('error')
       setStatusMessage('Reset failed: backend unavailable.')
     } finally {
       setIsBusy(false)
     }
-  }, [disconnectLiveEvents, endpointBase, formatRequestError, setStopRequested])
+  }, [disconnectLiveEvents, endpointBase, formatRequestError, plannedStatus?.runId, setStopRequested])
 
   useEffect(() => {
     return () => {
@@ -1001,10 +1030,16 @@ export const usePlannedRunner = (
     [plannedStatus, timeline, lastError, syncState],
   )
 
+  const canStop = running && !stopRequested && controlPhase !== 'resetting'
+  const canReset = controlPhase !== 'resetting' && Boolean(runId || plannedStatus?.runId || running || stopRequested || timeline.length > 0)
+
   return {
     running,
     stopRequested,
     isBusy,
+    controlPhase,
+    canStop,
+    canReset,
     statusMessage,
     statusTone,
     waitingElapsedSeconds,

@@ -46,6 +46,7 @@ export type ExecutionFailureCode =
   | 'operator-no-progress'
   | 'operator-action-failed'
   | 'validation-failed'
+  | 'run-interrupted'
   | 'unexpected-error'
 
 export type OperatorTerminationReason =
@@ -54,6 +55,8 @@ export type OperatorTerminationReason =
   | 'operator-error'
   | 'validation-failed'
   | 'criteria-unmet'
+  | 'stopped'
+  | 'reset'
 
 export interface StepValidationSummary {
   total: number
@@ -257,7 +260,7 @@ export interface PlannedRunnerRequest {
   agentModes?: Partial<RunnerAgentModes>
 }
 
-export type PathExecutionStatus = 'pending' | 'running' | 'pass' | 'fail'
+export type PathExecutionStatus = 'pending' | 'running' | 'paused' | 'pass' | 'fail'
 
 export interface PathExecutionSummary {
   pathId: string
@@ -328,9 +331,11 @@ export type ExecutionPhase =
   | 'operating'
   | 'validating'
   | 'paused'
+  | 'stopping'
   | 'completed'
   | 'failed'
   | 'reset'
+  | 'resetting'
 
 export type ExecutionEventKind =
   | 'lifecycle'
@@ -417,6 +422,7 @@ export interface RuntimeState {
   completed: boolean
   loopActive: boolean
   stopRequested: boolean
+  resetRequested: boolean
   currentPathId: string | null
   currentPathName: string | null
   currentPathExecutionId: string | null
@@ -477,6 +483,8 @@ export type StepExecutionResult = PathExecutionResult
 export interface PathExecutor {
   executePath(path: PlannedTransitionPath, context: ExecutorContext): Promise<PathExecutionResult>
   onRunStart?(runId: string): Promise<void> | void
+  requestStop?(runId: string, pathExecutionId?: string): Promise<void> | void
+  interruptRun?(runId: string, reason: 'reset'): Promise<void> | void
   cleanupPath?(runId: string, pathExecutionId: string, pathId: string): Promise<void> | void
   onRunStop?(runId: string): Promise<void> | void
   onRunnerReset?(): Promise<void> | void

@@ -25,6 +25,8 @@ export interface BrowserOperator {
     context: ExecutorContext,
     narrative: StepNarrativeInstruction,
   ): Promise<BrowserOperatorRunResult>
+  requestStop?(runId: string, pathExecutionId?: string): Promise<void>
+  interruptRun?(runId: string, reason: 'reset'): Promise<void>
   cleanupPath?(runId: string, pathExecutionId: string, pathId: string): Promise<void>
   cleanupRun?(runId: string): Promise<void>
   resetReplayCursor?(): Promise<void>

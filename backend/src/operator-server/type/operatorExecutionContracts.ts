@@ -19,9 +19,10 @@ export type ExecutionFailureCode =
   | 'operator-no-progress'
   | 'operator-action-failed'
   | 'validation-failed'
+  | 'run-interrupted'
   | 'unexpected-error'
 
-export type OperatorTerminationReason = 'completed' | 'max-iterations' | 'operator-error' | 'validation-failed' | 'criteria-unmet'
+export type OperatorTerminationReason = 'completed' | 'max-iterations' | 'operator-error' | 'validation-failed' | 'criteria-unmet' | 'stopped' | 'reset'
 
 export interface StepValidationSpec {
   id: string
@@ -181,6 +182,16 @@ export interface OperatorCleanupPathRequest {
   pathId: string
 }
 
+export interface OperatorRequestStopRequest {
+  runId: string
+  pathExecutionId?: string
+}
+
+export interface OperatorInterruptRunRequest {
+  runId: string
+  reason: 'reset'
+}
+
 export interface OperatorResetReplayResponse {
   ok: boolean
 }
@@ -191,7 +202,7 @@ export interface PlannedLiveEventInput {
   type: string
   level: PlannedLiveEventLevel
   message: string
-  phase?: 'idle' | 'planning' | 'narrating' | 'operating' | 'validating' | 'paused' | 'completed' | 'failed' | 'reset'
+  phase?: 'idle' | 'planning' | 'narrating' | 'operating' | 'validating' | 'paused' | 'stopping' | 'completed' | 'failed' | 'reset' | 'resetting'
   kind?: 'lifecycle' | 'progress' | 'validation' | 'issue' | 'tool'
   runId?: string
   pathId?: string

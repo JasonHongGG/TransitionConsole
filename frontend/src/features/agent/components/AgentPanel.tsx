@@ -19,6 +19,9 @@ interface AgentPanelProps {
   running: boolean
   stopRequested: boolean
   isBusy: boolean
+  controlPhase: 'idle' | 'starting' | 'running' | 'stopping' | 'paused' | 'resetting' | 'completed'
+  canStop: boolean
+  canReset: boolean
   statusMessage: string
   statusTone: 'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'
   waitingElapsedSeconds: number
@@ -84,6 +87,9 @@ export const AgentPanel = ({
   running,
   stopRequested,
   isBusy,
+  controlPhase,
+  canStop,
+  canReset,
   statusMessage,
   statusTone,
   waitingElapsedSeconds,
@@ -151,7 +157,7 @@ export const AgentPanel = ({
       : 0
 
   const stepTotal = plannedStatus?.currentPathStepTotal ?? 0
-  const runModeLabel = running ? 'Auto' : plannedStatus ? 'Standby' : 'Idle'
+  const runModeLabel = controlPhase === 'stopping' ? 'Stopping' : running ? 'Auto' : plannedStatus ? 'Standby' : 'Idle'
   const coverageLabel = completed ? (fullCoveragePassed ? 'Pass' : 'Not Pass') : 'In Progress'
   const plannerLabel = plannerRound > 0 ? `Round ${plannerRound}` : 'Not Started'
 
@@ -496,9 +502,9 @@ export const AgentPanel = ({
             type="button"
             className="agent-icon-btn primary"
             onClick={running ? onStop : onStart}
-            disabled={running ? stopRequested : isBusy}
-            title={running ? (stopRequested ? 'Stopping...' : 'Stop') : 'Start'}
-            aria-label={running ? (stopRequested ? 'Stopping...' : 'Stop') : 'Start'}
+            disabled={running ? !canStop : isBusy || controlPhase === 'resetting'}
+            title={running ? (stopRequested ? 'Stopping...' : 'Stop') : (controlPhase === 'starting' ? 'Starting...' : 'Start')}
+            aria-label={running ? (stopRequested ? 'Stopping...' : 'Stop') : (controlPhase === 'starting' ? 'Starting...' : 'Start')}
           >
             {running ? (
               <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -514,9 +520,9 @@ export const AgentPanel = ({
             type="button"
             className="agent-icon-btn"
             onClick={onReset}
-            disabled={isBusy}
-            title="Reset"
-            aria-label="Reset"
+            disabled={!canReset}
+            title={controlPhase === 'resetting' ? 'Resetting...' : 'Reset'}
+            aria-label={controlPhase === 'resetting' ? 'Resetting...' : 'Reset'}
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 5a7 7 0 1 1-6.2 3.75" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />

@@ -85,6 +85,14 @@ export class PassOnlyStepExecutor implements PathExecutor {
     return
   }
 
+  async requestStop(): Promise<void> {
+    return
+  }
+
+  async interruptRun(): Promise<void> {
+    return
+  }
+
   async onRunnerReset(): Promise<void> {
     return
   }

@@ -35,6 +35,21 @@ type ToolExecutionResult = {
   result?: unknown
 }
 
+type BatchBoundary = 'batch-complete' | 'page-changed' | 'observation-required' | 'stop-requested'
+
+type ObservationState = {
+  summary: string
+  source: 'initial' | 'tool-batch'
+  boundary: BatchBoundary
+  toolNames: string[]
+}
+
+type RunControlState = {
+  stopRequested: boolean
+  requestedPathExecutionId?: string
+  interruptReason: 'reset' | null
+}
+
 type ValidationLedgerEntry = StepValidationResult & {
   updatedIteration: number
 }
@@ -94,6 +109,7 @@ const toElapsedSeconds = (elapsedMs: number): number => Math.max(1, Math.ceil(el
 
 export class PlaywrightBrowserOperator implements BrowserOperator {
   private readonly sessions = new Map<string, BrowserSession>()
+  private readonly runControls = new Map<string, RunControlState>()
   private readonly highlightMouseEnabled = process.env.PLANNED_RUNNER_HIGHLIGHT_MOUSE === 'true'
   private readonly browserHeadless = parseBooleanEnv(process.env.OPERATOR_BROWSER_HEADLESS, true)
   private readonly loopAgent: OperatorLoopAgent
@@ -121,6 +137,124 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
   private sessionKey(runId: string, pathExecutionId: string): string {
     return `${runId}:${pathExecutionId}`
+  }
+
+  private getOrCreateRunControl(runId: string): RunControlState {
+    const existing = this.runControls.get(runId)
+    if (existing) {
+      return existing
+    }
+
+    const created: RunControlState = {
+      stopRequested: false,
+      interruptReason: null,
+    }
+    this.runControls.set(runId, created)
+    return created
+  }
+
+  private clearRunControl(runId: string): void {
+    this.runControls.delete(runId)
+  }
+
+  private clearStopRequest(runId: string): void {
+    const control = this.getOrCreateRunControl(runId)
+    control.stopRequested = false
+    control.requestedPathExecutionId = undefined
+  }
+
+  private matchesRequestedPath(control: RunControlState, pathExecutionId: string): boolean {
+    return !control.requestedPathExecutionId || control.requestedPathExecutionId === pathExecutionId
+  }
+
+  private isStopRequested(runId: string, pathExecutionId: string): boolean {
+    const control = this.runControls.get(runId)
+    return Boolean(control?.stopRequested && this.matchesRequestedPath(control, pathExecutionId))
+  }
+
+  private getInterruptReason(runId: string): 'reset' | null {
+    return this.runControls.get(runId)?.interruptReason ?? null
+  }
+
+  private setInterruptReason(runId: string, reason: 'reset'): void {
+    const control = this.getOrCreateRunControl(runId)
+    control.interruptReason = reason
+  }
+
+  private summarizeLocation(state: CurrentState): string {
+    const title = state.title.replace(/\s+/g, ' ').trim() || 'untitled page'
+    return `${title} @ ${state.url}`
+  }
+
+  private didPageBoundaryChange(previous: CurrentState, next: CurrentState, toolName: string): boolean {
+    if (toolName === 'navigate' || toolName === 'go_back' || toolName === 'go_forward') {
+      return true
+    }
+
+    try {
+      const prevUrl = new URL(previous.url)
+      const nextUrl = new URL(next.url)
+      return `${prevUrl.origin}${prevUrl.pathname}${prevUrl.search}` !== `${nextUrl.origin}${nextUrl.pathname}${nextUrl.search}`
+    } catch {
+      return previous.url !== next.url
+    }
+  }
+
+  private buildObservationSummary(options: {
+    before: CurrentState
+    after: CurrentState
+    toolNames: string[]
+    boundary: BatchBoundary
+  }): string {
+    const toolSummary = options.toolNames.length > 0 ? options.toolNames.join(', ') : 'no tool executed'
+    const boundarySummary =
+      options.boundary === 'page-changed'
+        ? 'page changed, re-observe before next decision'
+        : options.boundary === 'stop-requested'
+          ? 'stop requested at tool boundary'
+          : options.boundary === 'observation-required'
+            ? 'fresh observation required'
+            : 'same page batch completed'
+
+    if (options.before.url === options.after.url && options.before.title === options.after.title) {
+      return `Batch ran ${toolSummary}. Still on ${this.summarizeLocation(options.after)}; ${boundarySummary}.`
+    }
+
+    return `Batch ran ${toolSummary}. Moved from ${this.summarizeLocation(options.before)} to ${this.summarizeLocation(options.after)}; ${boundarySummary}.`
+  }
+
+  private buildInterruptedResult(options: {
+    step: PlannedTransitionStep
+    reason: string
+    terminationReason: 'stopped' | 'reset'
+    validationResults: StepValidationResult[]
+    validationSummary: StepValidationSummary
+    trace: PathTransitionResult['trace']
+    currentUrl: string
+    finalStateId: string | null
+  }): BrowserOperatorRunResult {
+    return {
+      result: 'fail',
+      blockedReason: options.reason,
+      failureCode: 'run-interrupted',
+      terminationReason: options.terminationReason,
+      transitionResults: [
+        {
+          step: options.step,
+          result: 'fail',
+          blockedReason: options.reason,
+          failureCode: 'run-interrupted',
+          terminationReason: options.terminationReason,
+          validationResults: options.validationResults,
+          validationSummary: options.validationSummary,
+          trace: options.trace,
+          evidence: {
+            domSummary: `current_url=${options.currentUrl}`,
+          },
+        },
+      ],
+      finalStateId: options.finalStateId,
+    }
   }
 
   private async closeSessionByKey(key: string): Promise<void> {
@@ -576,10 +710,17 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     context: ExecutorContext,
     narrative: StepNarrativeInstruction,
   ): Promise<BrowserOperatorRunResult> {
+    this.clearStopRequest(context.runId)
     const session = await this.getOrCreateSession(context)
     const page = session.page
     const transitionResults: PathTransitionResult[] = []
     let lastState: CurrentState = await this.currentState(page)
+    let latestObservation: ObservationState = {
+      summary: `Initial observation on ${this.summarizeLocation(lastState)}.`,
+      source: 'initial',
+      boundary: 'observation-required',
+      toolNames: [],
+    }
     let actionCursor = 0
     const maxLoopRounds = 12
     const validationLedger = new Map<string, ValidationLedgerEntry>()
@@ -628,6 +769,40 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           currentStateId: step.fromStateId,
           nextStateId: step.toStateId,
           completedTransitions: transitionResults.length,
+          lastObservationSummary: latestObservation.summary,
+          lastObservationSource: latestObservation.source,
+          lastBatchToolNames: latestObservation.toolNames,
+          lastBatchBoundary: latestObservation.boundary,
+        }
+
+        if (this.getInterruptReason(context.runId) === 'reset') {
+          const validationResults = this.buildValidationResults(context, step, validations, validationLedger, iteration)
+          const validationSummary = this.summarizeValidationResults(validationResults)
+          return this.buildInterruptedResult({
+            step,
+            reason: 'Run reset requested',
+            terminationReason: 'reset',
+            validationResults,
+            validationSummary,
+            trace,
+            currentUrl: lastState.url,
+            finalStateId: latestStableStateId,
+          })
+        }
+
+        if (this.isStopRequested(context.runId, context.pathExecutionId)) {
+          const validationResults = this.buildValidationResults(context, step, validations, validationLedger, iteration)
+          const validationSummary = this.summarizeValidationResults(validationResults)
+          return this.buildInterruptedResult({
+            step,
+            reason: 'Stop requested at tool boundary',
+            terminationReason: 'stopped',
+            validationResults,
+            validationSummary,
+            trace,
+            currentUrl: lastState.url,
+            finalStateId: latestStableStateId,
+          })
         }
 
         this.emitLiveEvent({
@@ -912,13 +1087,24 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         }
 
         const functionResponses: LoopFunctionResponse[] = []
+        const batchStartedFrom = lastState
+        const batchToolNames: string[] = []
+        let batchBoundary: BatchBoundary = 'batch-complete'
         let activeFunctionCall: LoopFunctionCall | null = null
 
         try {
-          for (const functionCall of nextFunctionCalls) {
+          for (let callIndex = 0; callIndex < nextFunctionCalls.length; callIndex += 1) {
+            const functionCall = nextFunctionCalls[callIndex]
+            if (this.isStopRequested(context.runId, context.pathExecutionId)) {
+              batchBoundary = 'stop-requested'
+              break
+            }
+
             activeFunctionCall = functionCall
             const toolName = functionCall.name.trim().toLowerCase()
             const payload = functionCall.args
+            const previousState = lastState
+            batchToolNames.push(toolName)
 
             this.emitLiveEvent({
               type: 'operator.tool.started',
@@ -1000,6 +1186,51 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             })
 
             actionCursor += 1
+
+            if (this.isStopRequested(context.runId, context.pathExecutionId)) {
+              batchBoundary = 'stop-requested'
+              break
+            }
+
+            if (callIndex < nextFunctionCalls.length - 1 && this.didPageBoundaryChange(previousState, lastState, toolName)) {
+              batchBoundary = 'page-changed'
+              this.emitLiveEvent({
+                type: 'operator.batch.boundary',
+                level: 'info',
+                message: `Batch paused after ${toolName} because page context changed`,
+                phase: 'operating',
+                kind: 'progress',
+                runId: context.runId,
+                pathId: context.pathId,
+                pathName: context.pathName,
+                pathExecutionId: context.pathExecutionId,
+                attemptId: context.attemptId,
+                stepId: step.id,
+                stepLabel: step.label,
+                edgeId: step.edgeId,
+                semanticGoal: context.semanticGoal,
+                iteration,
+                actionCursor,
+                meta: {
+                  toolName,
+                  boundary: batchBoundary,
+                  remainingCalls: nextFunctionCalls.length - callIndex - 1,
+                },
+              })
+              break
+            }
+          }
+
+          latestObservation = {
+            summary: this.buildObservationSummary({
+              before: batchStartedFrom,
+              after: lastState,
+              toolNames: batchToolNames,
+              boundary: batchBoundary,
+            }),
+            source: 'tool-batch',
+            boundary: batchBoundary,
+            toolNames: [...batchToolNames],
           }
 
           if (this.loopAgent.appendFunctionResponses) {
@@ -1012,12 +1243,51 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
               stepId: step.id,
               stepOrder: stepIndex + 1,
               narrativeSummary: narrativeForStep?.summary ?? step.label,
-              runtimeState,
+              runtimeState: {
+                ...runtimeState,
+                url: lastState.url,
+                title: lastState.title.replace(/\s+/g, ' ').slice(0, 120),
+                actionCursor,
+                lastObservationSummary: latestObservation.summary,
+                lastObservationSource: latestObservation.source,
+                lastBatchToolNames: latestObservation.toolNames,
+                lastBatchBoundary: latestObservation.boundary,
+              },
+              observationSummary: latestObservation.summary,
+              observationSource: latestObservation.source,
+              batchBoundary: latestObservation.boundary,
               responses: functionResponses,
+            })
+          }
+
+          if (batchBoundary === 'stop-requested') {
+            return this.buildInterruptedResult({
+              step,
+              reason: 'Stop requested at tool boundary',
+              terminationReason: 'stopped',
+              validationResults: currentValidationResults,
+              validationSummary: currentValidationSummary,
+              trace,
+              currentUrl: lastState.url,
+              finalStateId: latestStableStateId,
             })
           }
         } catch (error) {
           const message = error instanceof Error ? error.message : 'tool execution failed'
+          const interruptionReason = this.getInterruptReason(context.runId)
+          if (interruptionReason === 'reset') {
+            return this.buildInterruptedResult({
+              step,
+              reason: 'Run reset requested',
+              terminationReason: 'reset',
+              validationResults: currentValidationResults,
+              validationSummary: currentValidationSummary,
+              trace,
+              currentUrl: lastState?.url ?? page.url(),
+              finalStateId: latestStableStateId,
+            })
+          }
+
           if (this.loopAgent.appendFunctionResponses) {
             const failedResponse: LoopFunctionResponse = {
               name: activeFunctionCall?.name ?? 'unknown_tool',
@@ -1042,7 +1312,11 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
                 ...runtimeState,
                 url: lastState?.url ?? page.url(),
                 title: lastState?.title ?? titleSummary,
+                actionCursor,
               },
+              observationSummary: latestObservation.summary,
+              observationSource: latestObservation.source,
+              batchBoundary: latestObservation.boundary,
               responses: [...functionResponses, failedResponse],
             })
           }
@@ -1157,6 +1431,20 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     if (this.loopAgent.cleanupRun) {
       await this.loopAgent.cleanupRun(runId)
     }
+
+    const entries = Array.from(this.sessions.entries()).filter(([key]) => key.startsWith(`${runId}:`))
+    await Promise.all(entries.map(async ([key]) => this.closeSessionByKey(key)))
+    this.clearRunControl(runId)
+  }
+
+  async requestStop(runId: string, pathExecutionId?: string): Promise<void> {
+    const control = this.getOrCreateRunControl(runId)
+    control.stopRequested = true
+    control.requestedPathExecutionId = pathExecutionId
+  }
+
+  async interruptRun(runId: string, reason: 'reset'): Promise<void> {
+    this.setInterruptReason(runId, reason)
 
     const entries = Array.from(this.sessions.entries()).filter(([key]) => key.startsWith(`${runId}:`))
     await Promise.all(entries.map(async ([key]) => this.closeSessionByKey(key)))

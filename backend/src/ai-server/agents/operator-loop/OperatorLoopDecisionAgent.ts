@@ -63,6 +63,13 @@ type ConversationFunctionResponsePayloadItem = {
   }
 }
 
+type ConversationFunctionResponsePayload = {
+  observationSummary?: string
+  observationSource?: 'initial' | 'tool-batch'
+  batchBoundary?: 'batch-complete' | 'page-changed' | 'observation-required' | 'stop-requested'
+  items: ConversationFunctionResponsePayloadItem[]
+}
+
 type ConversationTurn =
   | {
       role: 'assistant'
@@ -72,7 +79,7 @@ type ConversationTurn =
   | {
       role: 'user'
       type: 'function_response'
-      payload: ConversationFunctionResponsePayloadItem[]
+      payload: ConversationFunctionResponsePayload
     }
 
 export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAgentContract {
@@ -356,11 +363,16 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     this.pushHistory(key, {
       role: 'user',
       type: 'function_response',
-      payload: input.responses.map((item) => ({
-        name: item.name,
-        arguments: item.arguments,
-        response: item.response,
-      })),
+      payload: {
+        observationSummary: input.observationSummary,
+        observationSource: input.observationSource,
+        batchBoundary: input.batchBoundary,
+        items: input.responses.map((item) => ({
+          name: item.name,
+          arguments: item.arguments,
+          response: item.response,
+        })),
+      },
     })
   }
 

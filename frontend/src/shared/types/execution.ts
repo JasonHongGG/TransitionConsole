@@ -74,7 +74,7 @@ export interface PlannedCoverageSummary {
   uncoveredEdgeIds: string[]
 }
 
-export type PathExecutionStatus = 'pending' | 'running' | 'pass' | 'fail'
+export type PathExecutionStatus = 'pending' | 'running' | 'paused' | 'pass' | 'fail'
 
 export interface PathExecutionSummary {
   pathId: string
@@ -147,9 +147,11 @@ export type ExecutionPhase =
   | 'operating'
   | 'validating'
   | 'paused'
+  | 'stopping'
   | 'completed'
   | 'failed'
   | 'reset'
+  | 'resetting'
 
 export type ExecutionEventKind =
   | 'lifecycle'

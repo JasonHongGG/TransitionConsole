@@ -448,6 +448,9 @@ function App() {
                 running={agentRunner.running}
                 stopRequested={agentRunner.stopRequested}
                 isBusy={agentRunner.isBusy}
+                controlPhase={agentRunner.controlPhase}
+                canStop={agentRunner.canStop}
+                canReset={agentRunner.canReset}
                 nextStateId={agentRunner.nextStateId}
                 statusMessage={agentRunner.statusMessage}
                 statusTone={agentRunner.statusTone}

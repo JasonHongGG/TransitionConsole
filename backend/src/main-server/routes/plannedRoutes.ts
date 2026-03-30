@@ -121,10 +121,10 @@ export const createPlannedRoutes = (runner: PlannedRunner, liveEventBus: Planned
     }
   })
 
-  router.post('/stop', (_req, res) => {
+  router.post('/stop', async (_req, res) => {
     try {
       log.log('stop request received')
-      const result = runner.stop()
+      const result = await runner.stop()
       log.log('stop request completed', {
         ok: result.ok,
         completed: result.snapshot.completed,

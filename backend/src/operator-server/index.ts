@@ -6,7 +6,9 @@ import { PlaywrightBrowserOperator } from './operators/PlaywrightBrowserOperator
 import type {
   OperatorCleanupPathRequest,
   OperatorCleanupRunRequest,
+  OperatorInterruptRunRequest,
   OperatorPathRunRequest,
+  OperatorRequestStopRequest,
   OperatorResetReplayResponse,
   PlannedLiveEventInput,
 } from './type'
@@ -100,6 +102,42 @@ app.post('/api/operator/path-executor/cleanup-run', async (req, res) => {
     res.status(500).json({
       ok: false,
       error: error instanceof Error ? error.message : 'operator cleanup failed',
+    })
+  }
+})
+
+app.post('/api/operator/path-executor/request-stop', async (req, res) => {
+  try {
+    const { runId, pathExecutionId } = req.body as OperatorRequestStopRequest
+    log.log('operator stop request', { runId, pathExecutionId })
+    await operator.requestStop?.(runId, pathExecutionId)
+    log.log('operator stop request completed', { runId, pathExecutionId })
+    res.json({ ok: true })
+  } catch (error) {
+    log.log('operator stop request failed', {
+      error: error instanceof Error ? error.message : 'operator stop request failed',
+    })
+    res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'operator stop request failed',
+    })
+  }
+})
+
+app.post('/api/operator/path-executor/interrupt-run', async (req, res) => {
+  try {
+    const { runId, reason } = req.body as OperatorInterruptRunRequest
+    log.log('operator interrupt request', { runId, reason })
+    await operator.interruptRun?.(runId, reason)
+    log.log('operator interrupt completed', { runId, reason })
+    res.json({ ok: true })
+  } catch (error) {
+    log.log('operator interrupt failed', {
+      error: error instanceof Error ? error.message : 'operator interrupt failed',
+    })
+    res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'operator interrupt failed',
     })
   }
 })

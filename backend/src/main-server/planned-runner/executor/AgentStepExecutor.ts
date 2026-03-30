@@ -149,6 +149,22 @@ export class AgentStepExecutor implements PathExecutor {
     await this.operator.cleanupRun(runId)
   }
 
+  async requestStop(runId: string, pathExecutionId?: string): Promise<void> {
+    if (!this.operator.requestStop) return
+    await this.operator.requestStop(runId, pathExecutionId)
+  }
+
+  async interruptRun(runId: string, reason: 'reset'): Promise<void> {
+    if (this.operator.interruptRun) {
+      await this.operator.interruptRun(runId, reason)
+      return
+    }
+
+    if (this.operator.cleanupRun) {
+      await this.operator.cleanupRun(runId)
+    }
+  }
+
   async cleanupPath(runId: string, pathExecutionId: string, pathId: string): Promise<void> {
     if (!this.operator.cleanupPath) return
     await this.operator.cleanupPath(runId, pathExecutionId, pathId)

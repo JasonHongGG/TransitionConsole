@@ -7,8 +7,10 @@ import type { BrowserOperator } from '../executor/contracts'
 import type {
   OperatorCleanupPathRequest,
   OperatorCleanupRunRequest,
+  OperatorInterruptRunRequest,
   OperatorPathRunRequest,
   OperatorPathRunResponse,
+  OperatorRequestStopRequest,
   OperatorResetReplayResponse,
 } from '../../../operator-server/type'
 import { servicePorts, toLocalBaseUrl } from '../../../common/network'
@@ -45,6 +47,24 @@ export class BrowserOperatorApi implements BrowserOperator {
       this.operatorBaseUrl,
       '/api/operator/path-executor/cleanup-run',
       { runId },
+      this.timeoutMs,
+    )
+  }
+
+  async requestStop(runId: string, pathExecutionId?: string): Promise<void> {
+    await postApiJson<OperatorRequestStopRequest, { ok: boolean }>(
+      this.operatorBaseUrl,
+      '/api/operator/path-executor/request-stop',
+      { runId, pathExecutionId },
+      this.timeoutMs,
+    )
+  }
+
+  async interruptRun(runId: string, reason: 'reset'): Promise<void> {
+    await postApiJson<OperatorInterruptRunRequest, { ok: boolean }>(
+      this.operatorBaseUrl,
+      '/api/operator/path-executor/interrupt-run',
+      { runId, reason },
       this.timeoutMs,
     )
   }
