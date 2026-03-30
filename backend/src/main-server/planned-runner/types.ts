@@ -8,6 +8,8 @@ export type ValidationStatus = 'pass' | 'fail' | 'pending'
 
 export type ValidationResolution = 'newly-verified' | 'reused-cache' | 'unverified'
 
+export type ValidationObservability = 'visual' | 'deferred'
+
 export const VALIDATION_TYPES = [
   'url-equals',
   'url-includes',
@@ -72,6 +74,7 @@ export interface StepValidationSpec {
   expected?: string
   selector?: string
   timeoutMs?: number
+  observability?: ValidationObservability
 }
 
 export type DiagramValidation = StepValidationSpec
@@ -85,6 +88,7 @@ export interface StepValidationResult {
   resolution: ValidationResolution
   checkedAt: string
   validationType?: ValidationType
+  observability?: ValidationObservability
   actual?: string
   expected?: string
 }

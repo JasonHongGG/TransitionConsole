@@ -13,6 +13,8 @@ export type ValidationStatus = 'pass' | 'fail' | 'pending'
 
 export type ValidationResolution = 'newly-verified' | 'reused-cache' | 'unverified'
 
+export type ValidationObservability = 'visual' | 'deferred'
+
 export type ExecutionFailureCode =
   | 'narrative-planner-failed'
   | 'operator-timeout'
@@ -31,6 +33,7 @@ export interface StepValidationSpec {
   expected?: string
   selector?: string
   timeoutMs?: number
+  observability?: ValidationObservability
 }
 
 export interface StepValidationResult {
@@ -42,6 +45,7 @@ export interface StepValidationResult {
   resolution: ValidationResolution
   checkedAt: string
   validationType?: ValidationType
+  observability?: ValidationObservability
   actual?: string
   expected?: string
 }

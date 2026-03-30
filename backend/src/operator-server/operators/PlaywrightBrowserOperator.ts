@@ -9,6 +9,7 @@ import type {
   StepValidationResult,
   StepValidationSpec,
   StepValidationSummary,
+  ValidationObservability,
 } from '../type/operatorExecutionContracts'
 import type {
   BrowserOperator,
@@ -75,6 +76,15 @@ type RunControlState = {
   requestedPathExecutionId?: string
   interruptReason: 'reset' | null
 }
+
+const VISUAL_VALIDATION_TYPES: ReadonlySet<string> = new Set([
+  'url-equals',
+  'url-includes',
+  'text-visible',
+  'text-not-visible',
+  'element-visible',
+  'element-not-visible',
+])
 
 type ValidationLedgerEntry = StepValidationResult & {
   updatedIteration: number
@@ -1244,6 +1254,13 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     }
   }
 
+  private inferObservability(validation: StepValidationSpec): ValidationObservability {
+    if (validation.observability === 'visual' || validation.observability === 'deferred') {
+      return validation.observability
+    }
+    return VISUAL_VALIDATION_TYPES.has(validation.type) ? 'visual' : 'deferred'
+  }
+
   private validationCacheKey(context: ExecutorContext, step: PlannedTransitionStep, validationId: string): string {
     return `${context.pathExecutionId}::${step.id}::${validationId}`
   }
@@ -1260,10 +1277,27 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
       const cacheKey = this.validationCacheKey(context, step, validation.id)
       const existing = ledger.get(cacheKey)
       if (!existing) {
+        const observability = this.inferObservability(validation)
+        if (observability === 'deferred') {
+          return {
+            id: validation.id,
+            label: validation.description,
+            validationType: validation.type,
+            observability: 'deferred',
+            status: 'pass',
+            reason: 'auto-passed: not observable via browser',
+            cacheKey,
+            resolution: 'unverified',
+            checkedAt: now,
+            expected: validation.expected,
+            actual: 'deferred — requires non-visual verification',
+          }
+        }
         return {
           id: validation.id,
           label: validation.description,
           validationType: validation.type,
+          observability: 'visual',
           status: 'pending',
           reason: 'not-yet-verified',
           cacheKey,
@@ -1408,7 +1442,8 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     for (let stepIndex = 0; stepIndex < path.steps.length; stepIndex += 1) {
       const step = path.steps[stepIndex]
       const narrativeForStep = this.resolveTransitionNarrative(narrative, step)
-      const validations = narrativeForStep?.validations ?? step.validations
+      const rawValidations = narrativeForStep?.validations ?? step.validations
+      const validations = rawValidations.map((v) => ({ ...v, observability: this.inferObservability(v) }))
       const validationsById = new Map(validations.map((validation) => [validation.id, validation] as const))
       const trace: PathTransitionResult['trace'] = []
 
@@ -1564,6 +1599,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             executionStrategy: narrative.executionStrategy,
             currentTransitionSummary: narrativeForStep?.taskDescription ?? step.label,
             pendingValidations: validations
+              .filter((validation) => validation.observability !== 'deferred')
               .filter((validation) => !validationLedger.has(this.validationCacheKey(context, step, validation.id)))
               .map((validation) => ({
                 id: validation.id,
@@ -1645,17 +1681,19 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         const currentValidationSummary = this.summarizeValidationResults(currentValidationResults)
 
         if (decision.kind === 'advance' || decision.kind === 'complete') {
-          const allPassed = currentValidationSummary.total > 0 && currentValidationSummary.pass === currentValidationSummary.total
+          const visualResults = currentValidationResults.filter((r) => r.observability !== 'deferred')
+          const visualSummary = this.summarizeValidationResults(visualResults)
+          const allVisualPassed = visualSummary.total === 0 || visualSummary.pass === visualSummary.total
           trace.push({
             iteration,
             url: runtimeState.url,
             observation: JSON.stringify(runtimeState),
             action: decision.kind === 'complete' ? 'path_complete' : 'advance_transition',
-            outcome: allPassed ? 'success' : 'failed',
+            outcome: allVisualPassed ? 'success' : 'failed',
             detail: decision.reason,
           })
 
-          if (!allPassed) {
+          if (!allVisualPassed) {
             const blockedReason = this.buildValidationFailureBlockedReason(currentValidationResults)
             transitionResults.push({
               step,
