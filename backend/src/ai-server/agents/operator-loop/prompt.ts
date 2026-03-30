@@ -2,21 +2,24 @@ const OPERATOR_LOOP_TOOL_GUIDE = `【工具速查表】
 1. click_at
   - 用途: 已知要點擊的位置，直接點擊座標。
   - 何時用: 你已能從畫面或既有上下文確定點擊位置。
+  - 座標契約: x / y 一律使用 screenshot-normalized 座標，範圍 0 到 1000，不是瀏覽器實際 pixel。
   - args: { "x": number, "y": number }
-  - 範例: { "name": "click_at", "args": { "x": 860, "y": 30 }, "description": "點擊右上角登入連結" }
+  - 範例: { "name": "click_at", "args": { "x": 920, "y": 70 }, "description": "點擊右上角登入連結" }
 
 2. hover_at
   - 用途: 將滑鼠移到指定位置以觸發 hover 狀態。
   - 何時用: 需要展開 menu、tooltip、下拉選單或 hover 才會出現的控制項。
+  - 座標契約: x / y 一律使用 0 到 1000 的 normalized screenshot 座標。
   - args: { "x": number, "y": number }
   - 範例: { "name": "hover_at", "args": { "x": 540, "y": 96 }, "description": "滑入使用者選單" }
 
 3. type_text_at
   - 用途: 點擊輸入框後輸入文字。
   - 何時用: 你已知輸入框位置，且要輸入帳號、密碼、搜尋字詞或表單值。
+  - 座標契約: x / y 一律使用 0 到 1000 的 normalized screenshot 座標。
   - args: { "x": number, "y": number, "text": string }
   - 可選 args: { "pressEnter": boolean, "clearBeforeTyping": boolean }
-  - 範例: { "name": "type_text_at", "args": { "x": 612, "y": 248, "text": "admin@example.com" }, "description": "輸入管理員帳號" }
+  - 範例: { "name": "type_text_at", "args": { "x": 500, "y": 320, "text": "admin@example.com" }, "description": "輸入管理員帳號" }
 
 4. scroll_document
   - 用途: 滾動整份文件。
@@ -27,6 +30,7 @@ const OPERATOR_LOOP_TOOL_GUIDE = `【工具速查表】
 5. scroll_at
   - 用途: 對特定位置下方的 scroll 容器滾動。
   - 何時用: 頁面有局部捲動區塊，例如 modal、side panel、table container。
+  - 座標契約: x / y 一律使用 0 到 1000 的 normalized screenshot 座標。
   - args: { "x": number, "y": number, "direction": "up" | "down" | "left" | "right" }
   - 可選 args: { "magnitude": number }
   - 範例: { "name": "scroll_at", "args": { "x": 1180, "y": 420, "direction": "down", "magnitude": 700 }, "description": "捲動 modal 內容" }
@@ -64,12 +68,14 @@ const OPERATOR_LOOP_TOOL_GUIDE = `【工具速查表】
 11. drag_and_drop
   - 用途: 從一個座標拖曳到另一個座標。
   - 何時用: 排序、拖拉元件、拖曳上傳或移動 slider。
+  - 座標契約: x / y / destination_x / destination_y 一律使用 0 到 1000 的 normalized screenshot 座標。
   - args: { "x": number, "y": number, "destination_x": number, "destination_y": number }
   - 範例: { "name": "drag_and_drop", "args": { "x": 420, "y": 510, "destination_x": 820, "destination_y": 510 }, "description": "拖曳項目到目標欄位" }
 
 12. current_state
   - 用途: 重新取得目前畫面的最新狀態。
   - 何時用: 畫面資訊不足、點擊後結果不明、DOM 對齊不清、需要重新判斷可互動元素。
+  - 回傳重點: response.result.pageState 會提供 viewport、activeElement、visible inputs、buttons、links、clickables，以及每個元素的 normalizedCenterX / normalizedCenterY。
   - args: {}
   - 範例: { "name": "current_state", "args": {}, "description": "重新確認目前頁面可互動元素" }
 
@@ -113,6 +119,16 @@ export const OPERATOR_LOOP_PROMPT = `【系統角色】
 6. 若 runtimeState.lastBatchBoundary 是 page-changed 或 stop-requested，代表上一批已到邊界；此輪應優先根據新的 screenshot 與 runtimeState.lastObservationSummary 重新判斷，而不是延續上一批未完成的假設。
 7. 若要輸出多個 functionCalls，請讓它們形成短而清楚的連續操作，例如：點輸入框 -> 輸入文字 -> 按 Enter。不要把「需要先看結果再決定」的動作塞進同一批。
 8. 若 context.userTestingInfo 存在，登入、切換角色、測試帳號、權限判斷等行為必須優先參考它。
+9. 當前 runtimeState.viewport.coordinateSpace 會告訴你目前使用的座標系；若是 viewport-normalized-1000，代表所有座標都必須以 0 到 1000 的 normalized 值輸出。
+10. current_state 已經提供結構化元素清單；若需要精準點擊或輸入，優先使用那些元素的 normalized center，而不是靠肉眼估算。
+11. 若 function response 顯示 verification failed、target mismatch、page unchanged、或 observationSummary 明確指出輸入到了錯欄位，不得宣稱該欄位已完成。
+
+【證據優先規則】
+1. 只有 screenshot 或 function response 明確證明某欄位已填入，才能在 reason / progressSummary 中說它完成。
+2. 對登入表單尤其要保守：email、username、password 各自分開驗證，不可因為其中一個欄位已填，就推論另一個也完成。
+3. 若工具回傳 activeElement、chosenTarget、verification 或 pageState，優先使用這些結構化證據，不可忽略它們去延續舊假設。
+4. 若 click_at 後 page unchanged，而且沒有其他證據顯示成功提交，下一輪應重新觀察或改用 current_state / evaluate 取得更精準目標，不可重複自信地宣稱提交完成。
+5. 若 type_text_at 的結果顯示落在 password-like field，而你的意圖是 email / username，必須把它視為失敗訊號，而不是部分成功。
 
 ${OPERATOR_LOOP_TOOL_GUIDE}
 

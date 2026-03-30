@@ -36,6 +36,60 @@ export interface LoopPathStep {
   }
 }
 
+export type LoopCoordinateSpace = 'viewport-normalized-1000'
+
+export interface LoopViewportState {
+  width: number
+  height: number
+  scrollX: number
+  scrollY: number
+  devicePixelRatio: number
+  coordinateSpace: LoopCoordinateSpace
+}
+
+export interface LoopElementRect {
+  left: number
+  top: number
+  width: number
+  height: number
+  centerX: number
+  centerY: number
+  normalizedLeft: number
+  normalizedTop: number
+  normalizedCenterX: number
+  normalizedCenterY: number
+}
+
+export interface LoopElementState {
+  tagName: string
+  role: string | null
+  inputType: string | null
+  identifier: string | null
+  name: string | null
+  placeholder: string | null
+  text: string | null
+  labels: string[]
+  disabled: boolean
+  focused: boolean
+  editable: boolean
+  clickable: boolean
+  visible: boolean
+  checked: boolean | null
+  valueState: 'none' | 'empty' | 'filled' | 'masked'
+  valueLength: number
+  valuePreview?: string
+  rect: LoopElementRect
+}
+
+export interface LoopPageState {
+  viewport: LoopViewportState
+  activeElement: LoopElementState | null
+  inputs: LoopElementState[]
+  buttons: LoopElementState[]
+  links: LoopElementState[]
+  clickables: LoopElementState[]
+}
+
 export interface LoopDecisionInput {
   agentMode?: 'llm' | 'mock'
   context: {
@@ -80,6 +134,8 @@ export interface LoopDecisionInput {
     currentStateId: string
     nextStateId: string
     completedTransitions: number
+    coordinateSpace: LoopCoordinateSpace
+    viewport: LoopViewportState
     lastObservationSummary?: string
     lastObservationSource?: 'initial' | 'tool-batch'
     lastBatchToolNames?: string[]
@@ -156,6 +212,8 @@ export interface LoopAppendFunctionResponsesInput {
     currentStateId: string
     nextStateId: string
     completedTransitions: number
+    coordinateSpace: LoopCoordinateSpace
+    viewport: LoopViewportState
     lastObservationSummary?: string
     lastObservationSource?: 'initial' | 'tool-batch'
     lastBatchToolNames?: string[]

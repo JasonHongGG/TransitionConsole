@@ -12,6 +12,8 @@ import type {
   PlannedRunSnapshot,
   PlannedRunnerStatus,
   RunnerAgentModes,
+  StepValidationResult,
+  StepValidationSummary,
   TestingAccount,
   TransitionResult,
   UserTestingInfo,
@@ -111,6 +113,67 @@ const normalizeAccount = (account: Partial<TestingAccount>): TestingAccount => (
 })
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+
+const VALIDATION_MESSAGE_ITEM_LIMIT = 3
+const GENERIC_VALIDATION_BLOCKED_REASON = 'transition completion rejected: all validations must pass'
+
+const formatValidationSummary = (summary: StepValidationSummary): string =>
+  `${summary.pass}/${summary.total} passed${summary.fail > 0 ? ` · ${summary.fail} failed` : ''}${summary.pending > 0 ? ` · ${summary.pending} pending` : ''}`
+
+const formatValidationResultDetail = (result: StepValidationResult): string => {
+  const segments = [result.label]
+
+  if (result.reason && result.reason !== 'not-yet-verified') {
+    segments.push(result.reason)
+  }
+  if (result.actual) {
+    segments.push(`actual: ${result.actual}`)
+  }
+  if (result.expected) {
+    segments.push(`expected: ${result.expected}`)
+  }
+
+  return segments.join(' | ')
+}
+
+const formatValidationBucket = (
+  label: string,
+  results: StepValidationResult[] | undefined,
+  status: StepValidationResult['status'],
+): string | null => {
+  const matches = results?.filter((result) => result.status === status) ?? []
+  if (matches.length === 0) return null
+
+  const items = matches.slice(0, VALIDATION_MESSAGE_ITEM_LIMIT).map(formatValidationResultDetail)
+  const remaining = matches.length - items.length
+  return `${label}: ${items.join('; ')}${remaining > 0 ? `; +${remaining} more` : ''}`
+}
+
+const formatBlockedReasonDetail = (
+  blockedReason: string | null | undefined,
+  validationSummary?: StepValidationSummary,
+  validationResults?: StepValidationResult[],
+): string | null => {
+  const details: string[] = []
+
+  if (blockedReason && blockedReason !== GENERIC_VALIDATION_BLOCKED_REASON && !blockedReason.startsWith('transition completion rejected:')) {
+    details.push(blockedReason)
+  }
+  if (validationSummary && (validationSummary.fail > 0 || validationSummary.pending > 0)) {
+    details.push(formatValidationSummary(validationSummary))
+  }
+
+  const failed = formatValidationBucket('Failed', validationResults, 'fail')
+  const pending = formatValidationBucket('Pending', validationResults, 'pending')
+  if (failed) details.push(failed)
+  if (pending) details.push(pending)
+
+  if (details.length > 0) {
+    return details.join(' | ')
+  }
+
+  return blockedReason ?? null
+}
 
 const phaseLabel = (phase: ExecutionPhase): string => {
   switch (phase) {
@@ -258,7 +321,7 @@ const toTimelineEntry = (event: PlannedLiveEvent): ExecutionTimelineEntry => ({
   phase: deriveEventPhase(event),
   kind: deriveEventKind(event),
   title: eventTitle(event),
-  detail: event.message,
+  detail: formatBlockedReasonDetail(event.blockedReason, event.validationSummary, event.validationResults) ?? event.message,
   context: {
     pathId: event.pathId,
     pathName: event.pathName,
@@ -314,8 +377,7 @@ const latestValidationLabel = (timeline: ExecutionTimelineEntry[]): string => {
   if (!latestValidation?.diagnostics.validationSummary) {
     return 'No validation result yet'
   }
-  const summary = latestValidation.diagnostics.validationSummary
-  return `${summary.pass}/${summary.total} passed${summary.fail > 0 ? ` · ${summary.fail} failed` : ''}${summary.pending > 0 ? ` · ${summary.pending} pending` : ''}`
+  return formatValidationSummary(latestValidation.diagnostics.validationSummary)
 }
 
 const buildOverview = (
@@ -341,7 +403,11 @@ const buildOverview = (
     routeLabel: currentStateId || nextStateId ? `${currentStateId ?? 'Unknown'} → ${nextStateId ?? 'Pending'}` : 'Route not active yet',
     latestValidationLabel: latestValidationLabel(timeline),
     latestOutcomeLabel: latestEntry ? `${kindLabel(latestEntry.kind)} · ${latestEntry.detail}` : statusMessage,
-    blockedReason: activePath?.blockedReason ?? latestEntry?.diagnostics.blockedReason ?? null,
+    blockedReason: formatBlockedReasonDetail(
+      activePath?.blockedReason ?? latestEntry?.diagnostics.blockedReason ?? null,
+      latestEntry?.diagnostics.validationSummary,
+      latestEntry?.diagnostics.validationResults,
+    ),
   }
 }
 
@@ -383,11 +449,22 @@ const buildIssues = (
 
   const activePath = resolveActivePath(plannedStatus)
   if (activePath?.blockedReason) {
+    const activePathDiagnostic = timeline.find(
+      (entry) =>
+        entry.context.pathId === activePath.pathId &&
+        (Boolean(entry.diagnostics.validationSummary) || Boolean(entry.diagnostics.validationResults?.length) || entry.diagnostics.blockedReason === activePath.blockedReason),
+    )
+
     pushIssue({
       id: `path-blocked:${activePath.pathId}:${activePath.blockedReason}`,
       severity: 'error',
       title: 'Current path blocked',
-      detail: activePath.blockedReason,
+      detail:
+        formatBlockedReasonDetail(
+          activePath.blockedReason,
+          activePathDiagnostic?.diagnostics.validationSummary,
+          activePathDiagnostic?.diagnostics.validationResults,
+        ) ?? activePath.blockedReason,
       context: {
         pathId: activePath.pathId,
         pathName: activePath.pathName,
@@ -400,6 +477,8 @@ const buildIssues = (
       },
       diagnostics: {
         blockedReason: activePath.blockedReason,
+        validationSummary: activePathDiagnostic?.diagnostics.validationSummary,
+        validationResults: activePathDiagnostic?.diagnostics.validationResults,
       },
       timestamp: activePath.completedAt ?? activePath.startedAt ?? new Date().toISOString(),
     })
@@ -413,7 +492,7 @@ const buildIssues = (
         id: `timeline-issue:${entry.id}`,
         severity: entry.level === 'error' ? 'error' : 'warning',
         title: entry.title,
-        detail: entry.diagnostics.blockedReason ?? entry.detail,
+        detail: entry.detail,
         context: entry.context,
         diagnostics: entry.diagnostics,
         timestamp: entry.timestamp,

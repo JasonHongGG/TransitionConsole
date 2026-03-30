@@ -7,20 +7,28 @@ import type {
   StepNarrativeInstruction,
 } from '../type/operatorExecutionContracts'
 import type {
+  LoopCoordinateSpace,
   LoopAppendFunctionResponsesInput,
   LoopDecision,
   LoopDecisionInput,
+  LoopElementState,
   LoopFunctionCall,
   LoopFunctionResponse,
+  LoopPageState,
+  LoopViewportState,
   OperatorLoopAgent,
 } from '../type/operatorLoopContracts'
 
 export type {
+  LoopCoordinateSpace,
   LoopAppendFunctionResponsesInput,
   LoopDecision,
   LoopDecisionInput,
+  LoopElementState,
   LoopFunctionCall,
   LoopFunctionResponse,
+  LoopPageState,
+  LoopViewportState,
   OperatorLoopAgent,
 }
 
@@ -66,10 +74,10 @@ export interface BrowserPage {
   goto: (url: string, options?: { waitUntil?: 'domcontentloaded' | 'load'; timeout?: number }) => Promise<unknown>
   goBack: () => Promise<unknown>
   goForward: () => Promise<unknown>
-  evaluate: <Arg>(
-    pageFunction: (arg: Arg) => unknown,
+  evaluate: <Arg, Result = unknown>(
+    pageFunction: (arg: Arg) => Result,
     arg: Arg,
-  ) => Promise<unknown>
+  ) => Promise<Result>
   waitForTimeout: (ms: number) => Promise<void>
   screenshot: (options: { path?: string; fullPage?: boolean; type?: 'png' | 'jpeg' }) => Promise<unknown>
   url: () => string
