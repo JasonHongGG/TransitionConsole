@@ -140,6 +140,49 @@ export interface PlannedStepEvent {
   validationSummary: StepValidationSummary
 }
 
+export type ExecutionPhase =
+  | 'idle'
+  | 'planning'
+  | 'narrating'
+  | 'operating'
+  | 'validating'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'reset'
+
+export type ExecutionEventKind =
+  | 'lifecycle'
+  | 'progress'
+  | 'validation'
+  | 'issue'
+  | 'tool'
+
+export interface ExecutionEventContext {
+  pathId?: string
+  pathName?: string
+  semanticGoal?: string
+  pathOrder?: number | null
+  totalPaths?: number | null
+  stepId?: string
+  stepLabel?: string
+  stepOrder?: number | null
+  totalSteps?: number | null
+  currentStateId?: string | null
+  nextStateId?: string | null
+  activeEdgeId?: string | null
+}
+
+export interface ExecutionEventDiagnostics {
+  blockedReason?: string
+  failureCode?: string
+  terminationReason?: string
+  validationSummary?: StepValidationSummary
+  validationResults?: StepValidationResult[]
+  toolName?: string
+  url?: string
+}
+
 export interface PlannedRunPlan {
   paths: PlannedTransitionPath[]
 }
@@ -169,21 +212,69 @@ export interface PlannedLiveEvent {
   type: string
   level: 'info' | 'success' | 'error'
   message: string
+  phase?: ExecutionPhase
+  kind?: ExecutionEventKind
   runId?: string
   pathId?: string
+  pathName?: string
   pathExecutionId?: string
   attemptId?: number
   stepId?: string
+  stepLabel?: string
   edgeId?: string
+  semanticGoal?: string
   iteration?: number
   actionCursor?: number
   currentStateId?: string | null
   nextStateId?: string | null
+  activeEdgeId?: string | null
   currentStepOrder?: number | null
   currentPathStepTotal?: number | null
   pathOrder?: number | null
   totalPaths?: number | null
+  blockedReason?: string
+  failureCode?: string
+  terminationReason?: string
+  validationSummary?: StepValidationSummary
+  validationResults?: StepValidationResult[]
   meta?: Record<string, unknown>
+}
+
+export interface ExecutionTimelineEntry {
+  id: string
+  seq: number
+  timestamp: string
+  level: PlannedLiveEvent['level']
+  phase: ExecutionPhase
+  kind: ExecutionEventKind
+  title: string
+  detail: string
+  context: ExecutionEventContext
+  diagnostics: ExecutionEventDiagnostics
+  rawType: string
+}
+
+export interface ExecutionIssue {
+  id: string
+  severity: 'error' | 'warning' | 'info'
+  title: string
+  detail: string
+  context: ExecutionEventContext
+  diagnostics: ExecutionEventDiagnostics
+  timestamp: string
+}
+
+export interface ExecutionOverview {
+  phase: ExecutionPhase
+  phaseLabel: string
+  statusLabel: string
+  pathLabel: string
+  stepLabel: string
+  goal: string
+  routeLabel: string
+  latestValidationLabel: string
+  latestOutcomeLabel: string
+  blockedReason: string | null
 }
 
 export interface TestingAccount {

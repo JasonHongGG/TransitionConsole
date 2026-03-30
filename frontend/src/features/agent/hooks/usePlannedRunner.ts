@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Diagram, DiagramConnector } from '../../../shared/types/diagram'
 import type {
   AgentMode,
-  AgentLogEntry,
   CoverageState,
-  Diagram,
-  DiagramConnector,
+  ExecutionIssue,
+  ExecutionOverview,
+  ExecutionPhase,
+  ExecutionTimelineEntry,
+  PathExecutionSummary,
   PlannedLiveEvent,
   PlannedRunSnapshot,
   PlannedRunnerStatus,
@@ -12,10 +15,12 @@ import type {
   TestingAccount,
   TransitionResult,
   UserTestingInfo,
-} from '../../../types'
+} from '../../../shared/types/execution'
 
-const MAX_LOGS = 120
+const MAX_TIMELINE_ENTRIES = 80
 const TARGET_URL_REQUIRED_MESSAGE = '請先輸入 URL 以開始流程。'
+const ACTIVE_RECONCILE_INTERVAL_MS = 450
+const ACTIVE_RECONCILE_DEBOUNCE_MS = 90
 
 interface PlannedRunnerRequest {
   diagrams: Diagram[]
@@ -38,6 +43,8 @@ interface PlannedRunnerSettingsResponse {
   agentModes: RunnerAgentModes
 }
 
+type SyncState = 'idle' | 'live' | 'reconnecting'
+
 export interface TemporaryRunnerSettings {
   targetUrl: string
   testingNotes: string
@@ -59,7 +66,6 @@ export interface PlannedRunnerState {
   currentStateId: string | null
   nextStateId: string | null
   activeEdgeId: string | null
-  logs: AgentLogEntry[]
   coverage: CoverageState
   plannedStatus: PlannedRunnerStatus | null
   targetUrl: string
@@ -68,6 +74,10 @@ export interface PlannedRunnerState {
   runId: string | null
   agentModes: RunnerAgentModes
   isSettingsBusy: boolean
+  timeline: ExecutionTimelineEntry[]
+  issues: ExecutionIssue[]
+  overview: ExecutionOverview
+  syncState: SyncState
   applyAgentModes: (nextModes: RunnerAgentModes) => void
   setAgentMode: (agent: keyof RunnerAgentModes, mode: AgentMode) => void
   setTargetUrl: (url: string) => void
@@ -79,7 +89,6 @@ export interface PlannedRunnerState {
   getTemporarySettings: () => TemporaryRunnerSettings
   applyTemporarySettings: (settings: TemporaryRunnerSettings) => void
   setRunning: (next: boolean) => void
-  refresh: () => void
   reset: () => void
 }
 
@@ -97,22 +106,307 @@ const normalizeAccount = (account: Partial<TestingAccount>): TestingAccount => (
   description: String(account.description ?? ''),
 })
 
-const classifyEventCategory = (eventType: string): AgentLogEntry['category'] => {
-  if (eventType.startsWith('narrator.')) return 'narrator'
-  if (eventType.startsWith('operator.tool.')) return 'tool'
-  if (eventType.startsWith('operator.')) return 'operator'
-  return 'system'
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
+
+const phaseLabel = (phase: ExecutionPhase): string => {
+  switch (phase) {
+    case 'planning':
+      return 'Planning'
+    case 'narrating':
+      return 'Narrating'
+    case 'operating':
+      return 'Operating'
+    case 'validating':
+      return 'Validating'
+    case 'paused':
+      return 'Paused'
+    case 'completed':
+      return 'Completed'
+    case 'failed':
+      return 'Failed'
+    case 'reset':
+      return 'Reset'
+    default:
+      return 'Idle'
+  }
 }
 
-const toAgentLogEntry = (event: PlannedLiveEvent): AgentLogEntry => ({
-  id: `event-${event.runId ?? 'global'}-${event.seq}`,
+const kindLabel = (kind: ExecutionTimelineEntry['kind']): string => {
+  switch (kind) {
+    case 'validation':
+      return 'Validation'
+    case 'issue':
+      return 'Issue'
+    case 'tool':
+      return 'Tool'
+    case 'progress':
+      return 'Progress'
+    default:
+      return 'Lifecycle'
+  }
+}
+
+const derivePhaseFromSnapshot = (snapshot: PlannedRunSnapshot | null): ExecutionPhase => {
+  if (!snapshot?.runId) return 'idle'
+  if (snapshot.completed) {
+    const hasFailure = Object.values(snapshot.edgeStatuses).some((status) => status === 'fail')
+    return hasFailure ? 'failed' : 'completed'
+  }
+  if (snapshot.stopRequested || !snapshot.running) return 'paused'
+  if (snapshot.currentPathId) return 'operating'
+  return 'planning'
+}
+
+const deriveEventKind = (event: PlannedLiveEvent): ExecutionTimelineEntry['kind'] => {
+  if (event.kind) return event.kind
+  if (event.level === 'error') return 'issue'
+  if (event.type.includes('tool')) return 'tool'
+  if (event.type.includes('transition')) return 'validation'
+  if (event.type.includes('path') || event.type.includes('batch') || event.type.includes('replan')) return 'progress'
+  return 'lifecycle'
+}
+
+const deriveEventPhase = (event: PlannedLiveEvent): ExecutionPhase => {
+  if (event.phase) return event.phase
+  if (event.level === 'error') return 'failed'
+  if (event.type === 'run.completed') return 'completed'
+  if (event.type === 'run.reset') return 'reset'
+  if (event.type.startsWith('run.stop')) return 'paused'
+  if (event.type.startsWith('narrator')) return 'narrating'
+  if (event.type.startsWith('operator') || event.type.startsWith('transition')) return 'operating'
+  if (event.type.includes('planner') || event.type.startsWith('batch') || event.type.startsWith('replan')) return 'planning'
+  return 'idle'
+}
+
+const shouldSurfaceEvent = (event: PlannedLiveEvent): boolean => {
+  if (event.level === 'error') return true
+  switch (event.type) {
+    case 'run.starting':
+    case 'run.started':
+    case 'run.resumed':
+    case 'run.stop-requested':
+    case 'run.stopped':
+    case 'run.completed':
+    case 'run.reset':
+    case 'batch.started':
+    case 'replan.started':
+    case 'replan.completed':
+    case 'path.started':
+    case 'path.completed':
+    case 'path.failed':
+    case 'narrator.started':
+    case 'narrator.completed':
+    case 'operator.started':
+    case 'operator.completed':
+    case 'transition.started':
+    case 'transition.completed':
+    case 'transition.advanced':
+    case 'operator.tool.started':
+    case 'operator.tool.completed':
+    case 'operator.tool.failed':
+    case 'agent.generation.completed':
+    case 'executor.failed':
+      return true
+    default:
+      return false
+  }
+}
+
+const eventTitle = (event: PlannedLiveEvent): string => {
+  if (event.type === 'agent.generation.completed') {
+    const tag = isRecord(event.meta) && typeof event.meta.agentTag === 'string' ? event.meta.agentTag : 'agent'
+    if (tag === 'path-planner') return 'Planner completed'
+    if (tag === 'path-narrator') return 'Narrator completed'
+    if (tag === 'path-narrator-input') return 'Narrator input loaded'
+    if (tag === 'operator-loop') return 'Operator decision ready'
+  }
+  if (event.type.startsWith('path.') && event.pathName) return event.pathName
+  if (event.stepLabel) return event.stepLabel
+  if (event.type.startsWith('operator.tool.')) {
+    const toolName = isRecord(event.meta) && typeof event.meta.toolName === 'string' ? event.meta.toolName : 'tool'
+    return `Tool: ${toolName}`
+  }
+  if (event.type.startsWith('run.')) return 'Run'
+  if (event.type.startsWith('batch.')) return 'Batch'
+  if (event.type.startsWith('replan.')) return 'Replan'
+  if (event.type.startsWith('operator.')) return 'Operator'
+  if (event.type.startsWith('narrator.')) return 'Narrator'
+  if (event.type.startsWith('transition.')) return 'Transition'
+  return event.type
+}
+
+const toTimelineEntry = (event: PlannedLiveEvent): ExecutionTimelineEntry => ({
+  id: `${event.runId ?? 'global'}:${event.seq}:${event.type}`,
+  seq: event.seq,
   timestamp: event.emittedAt,
   level: event.level,
-  message: event.message,
-  category: classifyEventCategory(event.type),
-  transitionId: event.edgeId,
-  stateId: event.currentStateId ?? undefined,
+  phase: deriveEventPhase(event),
+  kind: deriveEventKind(event),
+  title: eventTitle(event),
+  detail: event.message,
+  context: {
+    pathId: event.pathId,
+    pathName: event.pathName,
+    semanticGoal: event.semanticGoal,
+    pathOrder: event.pathOrder,
+    totalPaths: event.totalPaths,
+    stepId: event.stepId,
+    stepLabel: event.stepLabel,
+    stepOrder: event.currentStepOrder,
+    totalSteps: event.currentPathStepTotal,
+    currentStateId: event.currentStateId,
+    nextStateId: event.nextStateId,
+    activeEdgeId: event.activeEdgeId ?? event.edgeId,
+  },
+  diagnostics: {
+    blockedReason: event.blockedReason,
+    failureCode: event.failureCode,
+    terminationReason: event.terminationReason,
+    validationSummary: event.validationSummary,
+    validationResults: event.validationResults,
+    toolName: isRecord(event.meta) && typeof event.meta.toolName === 'string' ? event.meta.toolName : undefined,
+    url: isRecord(event.meta) && typeof event.meta.url === 'string' ? event.meta.url : undefined,
+  },
+  rawType: event.type,
 })
+
+const resolveActivePath = (plannedStatus: PlannedRunnerStatus | null): PathExecutionSummary | null => {
+  if (!plannedStatus) return null
+  if (plannedStatus.currentPathExecutionId) {
+    const currentByExecution = plannedStatus.paths.find(
+      (path) => path.pathExecutionId === plannedStatus.currentPathExecutionId,
+    )
+    if (currentByExecution) return currentByExecution
+  }
+  if (plannedStatus.currentPathId) {
+    const currentById = [...plannedStatus.paths].reverse().find((path) => path.pathId === plannedStatus.currentPathId)
+    if (currentById) return currentById
+  }
+  return [...plannedStatus.paths].reverse().find((path) => path.status !== 'pending') ?? null
+}
+
+const pathLabel = (plannedStatus: PlannedRunnerStatus | null): string => {
+  if (!plannedStatus || plannedStatus.totalPaths === 0) return 'No path selected'
+  const currentIndex = plannedStatus.currentPathId
+    ? Math.min(plannedStatus.totalPaths, plannedStatus.completedPaths + plannedStatus.failedPaths + 1)
+    : plannedStatus.completedPaths + plannedStatus.failedPaths
+  const activePath = resolveActivePath(plannedStatus)
+  return activePath ? `Path ${currentIndex}/${plannedStatus.totalPaths} · ${activePath.pathName}` : `Path ${currentIndex}/${plannedStatus.totalPaths}`
+}
+
+const latestValidationLabel = (timeline: ExecutionTimelineEntry[]): string => {
+  const latestValidation = timeline.find((entry) => entry.diagnostics.validationSummary)
+  if (!latestValidation?.diagnostics.validationSummary) {
+    return 'No validation result yet'
+  }
+  const summary = latestValidation.diagnostics.validationSummary
+  return `${summary.pass}/${summary.total} passed${summary.fail > 0 ? ` · ${summary.fail} failed` : ''}${summary.pending > 0 ? ` · ${summary.pending} pending` : ''}`
+}
+
+const buildOverview = (
+  plannedStatus: PlannedRunnerStatus | null,
+  timeline: ExecutionTimelineEntry[],
+  statusMessage: string,
+  currentStateId: string | null,
+  nextStateId: string | null,
+): ExecutionOverview => {
+  const latestEntry = timeline[0] ?? null
+  const activePath = resolveActivePath(plannedStatus)
+  const phase = latestEntry?.phase ?? derivePhaseFromSnapshot(plannedStatus)
+  const stepOrder = activePath?.currentTransitionOrder ?? plannedStatus?.currentStepOrder ?? null
+  const stepTotal = activePath?.totalTransitions ?? plannedStatus?.currentPathStepTotal ?? null
+  const stepName = activePath?.currentTransitionLabel ?? latestEntry?.context.stepLabel ?? 'Waiting for next step'
+  return {
+    phase,
+    phaseLabel: phaseLabel(phase),
+    statusLabel: statusMessage,
+    pathLabel: pathLabel(plannedStatus),
+    stepLabel: stepOrder && stepTotal ? `Step ${stepOrder}/${stepTotal} · ${stepName}` : stepName,
+    goal: activePath?.semanticGoal ?? latestEntry?.context.semanticGoal ?? 'Start a run to generate an execution path.',
+    routeLabel: currentStateId || nextStateId ? `${currentStateId ?? 'Unknown'} → ${nextStateId ?? 'Pending'}` : 'Route not active yet',
+    latestValidationLabel: latestValidationLabel(timeline),
+    latestOutcomeLabel: latestEntry ? `${kindLabel(latestEntry.kind)} · ${latestEntry.detail}` : statusMessage,
+    blockedReason: activePath?.blockedReason ?? latestEntry?.diagnostics.blockedReason ?? null,
+  }
+}
+
+const buildIssues = (
+  plannedStatus: PlannedRunnerStatus | null,
+  timeline: ExecutionTimelineEntry[],
+  lastError: string | null,
+  syncState: SyncState,
+): ExecutionIssue[] => {
+  const issues: ExecutionIssue[] = []
+  const pushIssue = (issue: ExecutionIssue) => {
+    if (issues.some((item) => item.title === issue.title && item.detail === issue.detail)) return
+    issues.push(issue)
+  }
+
+  if (lastError) {
+    pushIssue({
+      id: `sync-error:${lastError}`,
+      severity: 'error',
+      title: 'State synchronization failed',
+      detail: lastError,
+      context: {},
+      diagnostics: {},
+      timestamp: new Date().toISOString(),
+    })
+  }
+
+  if (syncState === 'reconnecting') {
+    pushIssue({
+      id: 'live-reconnect',
+      severity: 'warning',
+      title: 'Live stream reconnecting',
+      detail: 'Execution is still running, but the live event stream is reconnecting. Snapshot reconcile remains active in the background.',
+      context: {},
+      diagnostics: {},
+      timestamp: new Date().toISOString(),
+    })
+  }
+
+  const activePath = resolveActivePath(plannedStatus)
+  if (activePath?.blockedReason) {
+    pushIssue({
+      id: `path-blocked:${activePath.pathId}:${activePath.blockedReason}`,
+      severity: 'error',
+      title: 'Current path blocked',
+      detail: activePath.blockedReason,
+      context: {
+        pathId: activePath.pathId,
+        pathName: activePath.pathName,
+        semanticGoal: activePath.semanticGoal,
+        stepOrder: activePath.currentTransitionOrder,
+        totalSteps: activePath.totalTransitions,
+        currentStateId: activePath.currentStateId,
+        nextStateId: activePath.nextStateId,
+        activeEdgeId: activePath.activeEdgeId,
+      },
+      diagnostics: {
+        blockedReason: activePath.blockedReason,
+      },
+      timestamp: activePath.completedAt ?? activePath.startedAt ?? new Date().toISOString(),
+    })
+  }
+
+  timeline
+    .filter((entry) => entry.level === 'error' || (entry.diagnostics.validationSummary?.fail ?? 0) > 0)
+    .slice(0, 5)
+    .forEach((entry) => {
+      pushIssue({
+        id: `timeline-issue:${entry.id}`,
+        severity: entry.level === 'error' ? 'error' : 'warning',
+        title: entry.title,
+        detail: entry.diagnostics.blockedReason ?? entry.detail,
+        context: entry.context,
+        diagnostics: entry.diagnostics,
+        timestamp: entry.timestamp,
+      })
+    })
+
+  return issues.slice(0, 6)
+}
 
 export const usePlannedRunner = (
   diagrams: Diagram[],
@@ -138,7 +432,7 @@ export const usePlannedRunner = (
   const [targetUrl, setTargetUrl] = useState('')
   const [testingNotes, setTestingNotes] = useState('')
   const [testAccounts, setTestAccountsState] = useState<TestingAccount[]>([])
-  const [logs, setLogs] = useState<AgentLogEntry[]>([])
+  const [timeline, setTimeline] = useState<ExecutionTimelineEntry[]>([])
   const [runId, setRunId] = useState<string | null>(null)
   const [agentModes, setAgentModes] = useState<RunnerAgentModes>({
     pathPlanner: 'llm',
@@ -146,6 +440,7 @@ export const usePlannedRunner = (
     operatorLoop: 'llm',
   })
   const [isSettingsBusy, setIsSettingsBusy] = useState(false)
+  const [syncState, setSyncState] = useState<SyncState>('idle')
   const [coverage, setCoverage] = useState<CoverageState>({
     visitedNodes: new Set<string>(),
     transitionResults: {},
@@ -153,72 +448,13 @@ export const usePlannedRunner = (
     edgeStatuses: {},
   })
   const [plannedStatus, setPlannedStatus] = useState<PlannedRunnerStatus | null>(null)
+
   const eventSourceRef = useRef<EventSource | null>(null)
   const pollInFlightRef = useRef(false)
+  const reconcileTimerRef = useRef<number | null>(null)
 
   const setStopRequested = useCallback((next: boolean) => {
     setStopRequestedState(next)
-  }, [])
-
-  const appendLiveEvent = useCallback((event: PlannedLiveEvent) => {
-    const entry = toAgentLogEntry(event)
-    setLogs((prev) => {
-      if (prev.some((item) => item.id === entry.id)) {
-        return prev
-      }
-      return [entry, ...prev].slice(0, MAX_LOGS)
-    })
-  }, [])
-
-  const connectLiveEvents = useCallback(() => {
-    if (eventSourceRef.current) {
-      return
-    }
-
-    const source = new EventSource(`${endpointBase}/events`)
-    source.onmessage = (messageEvent) => {
-      try {
-        const payload = JSON.parse(messageEvent.data) as PlannedLiveEvent
-        if (!payload || typeof payload.seq !== 'number' || typeof payload.message !== 'string') {
-          return
-        }
-        appendLiveEvent(payload)
-      } catch {
-        // ignore malformed stream chunks
-      }
-    }
-    source.onerror = () => {
-      // Browser auto-reconnects SSE by default.
-    }
-
-    eventSourceRef.current = source
-  }, [appendLiveEvent, endpointBase])
-
-  const disconnectLiveEvents = useCallback(() => {
-    if (!eventSourceRef.current) {
-      return
-    }
-
-    eventSourceRef.current.close()
-    eventSourceRef.current = null
-  }, [])
-
-  const setTestAccountField = useCallback((index: number, field: keyof TestingAccount, value: string) => {
-    setTestAccountsState((prev) =>
-      prev.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)),
-    )
-  }, [])
-
-  const addTestAccount = useCallback(() => {
-    setTestAccountsState((prev) => [...prev, createEmptyTestAccount()])
-  }, [])
-
-  const setTestAccounts = useCallback((accounts: TestingAccount[]) => {
-    setTestAccountsState((accounts ?? []).map((account) => normalizeAccount(account)))
-  }, [])
-
-  const removeTestAccount = useCallback((index: number) => {
-    setTestAccountsState((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
   }, [])
 
   const formatRequestError = useCallback((error: unknown) => {
@@ -239,6 +475,36 @@ export const usePlannedRunner = (
     } catch {
       return fallback
     }
+  }, [])
+
+  const applyLiveCursor = useCallback((event: PlannedLiveEvent) => {
+    if (event.currentStateId !== undefined) {
+      setCurrentStateId(event.currentStateId)
+    }
+    if (event.nextStateId !== undefined) {
+      setNextStateId(event.nextStateId)
+    }
+    if (event.activeEdgeId !== undefined) {
+      setActiveEdgeId(event.activeEdgeId)
+    } else if (event.edgeId !== undefined) {
+      setActiveEdgeId(event.edgeId)
+    }
+    if (isRecord(event.meta) && typeof event.meta.batchNumber === 'number') {
+      setPlannerRound(event.meta.batchNumber)
+    }
+  }, [])
+
+  const appendTimelineEvent = useCallback((event: PlannedLiveEvent) => {
+    if (!shouldSurfaceEvent(event)) {
+      return
+    }
+    const entry = toTimelineEntry(event)
+    setTimeline((prev) => {
+      if (prev.some((item) => item.id === entry.id)) {
+        return prev
+      }
+      return [entry, ...prev].slice(0, MAX_TIMELINE_ENTRIES)
+    })
   }, [])
 
   const requestPayload = useMemo<PlannedRunnerRequest>(() => {
@@ -270,7 +536,7 @@ export const usePlannedRunner = (
     }
   }, [agentModes, diagrams, connectors, specRaw, targetUrl, testAccounts, testingNotes])
 
-  const applySnapshot = useCallback((snapshot: PlannedRunSnapshot, source: 'start' | 'status' | 'stop') => {
+  const applySnapshot = useCallback((snapshot: PlannedRunSnapshot, source: 'start' | 'status' | 'stop' | 'reconcile') => {
     setRunId(snapshot.runId)
     setAgentModes(snapshot.agentModes)
     setPlannerRound(snapshot.batchNumber)
@@ -280,27 +546,24 @@ export const usePlannedRunner = (
     setRunningState(snapshot.running)
     setStopRequested(snapshot.stopRequested)
 
-    setCoverage((prev) => {
-      const visitedNodes = new Set(prev.visitedNodes)
-      Object.entries(snapshot.nodeStatuses).forEach(([nodeId, status]) => {
-        if (status === 'pass' || status === 'running' || status === 'fail') {
-          visitedNodes.add(nodeId)
-        }
-      })
+    const visitedNodes = new Set(
+      Object.entries(snapshot.nodeStatuses)
+        .filter(([, status]) => status === 'pass' || status === 'running' || status === 'fail')
+        .map(([nodeId]) => nodeId),
+    )
 
-      const transitionResults: Record<string, TransitionResult> = {}
-      Object.entries(snapshot.edgeStatuses).forEach(([edgeId, status]) => {
-        if (status === 'pass' || status === 'fail') {
-          transitionResults[edgeId] = status
-        }
-      })
-
-      return {
-        visitedNodes,
-        transitionResults,
-        nodeStatuses: snapshot.nodeStatuses,
-        edgeStatuses: snapshot.edgeStatuses,
+    const transitionResults: Record<string, TransitionResult> = {}
+    Object.entries(snapshot.edgeStatuses).forEach(([edgeId, status]) => {
+      if (status === 'pass' || status === 'fail') {
+        transitionResults[edgeId] = status
       }
+    })
+
+    setCoverage({
+      visitedNodes,
+      transitionResults,
+      nodeStatuses: snapshot.nodeStatuses,
+      edgeStatuses: snapshot.edgeStatuses,
     })
 
     if (!snapshot.runId) {
@@ -309,6 +572,7 @@ export const usePlannedRunner = (
       setFullCoveragePassed(null)
       setStatusTone('idle')
       setStatusMessage('Idle')
+      setSyncState('idle')
       return
     }
 
@@ -320,7 +584,7 @@ export const usePlannedRunner = (
       const hasFailure = Object.values(snapshot.edgeStatuses).some((status) => status === 'fail')
       const passed = uncoveredTotal === 0 && !hasFailure
       setFullCoveragePassed(passed)
-      setStatusMessage(passed ? 'Full coverage complete: PASS' : 'Run complete: full coverage NOT passed')
+      setStatusMessage(passed ? 'Full coverage complete: PASS' : 'Run complete: coverage or validation failed')
       setStatusTone(passed ? 'success' : 'error')
       return
     }
@@ -336,21 +600,134 @@ export const usePlannedRunner = (
 
     if (snapshot.running && snapshot.currentPathName) {
       setStatusTone('running')
-      setStatusMessage(
-        `Running: ${snapshot.currentPathName} transition ${snapshot.currentStepOrder ?? 0}/${snapshot.currentPathStepTotal ?? 0}`,
-      )
+      setStatusMessage(`Running ${snapshot.currentPathName} · step ${snapshot.currentStepOrder ?? 0}/${snapshot.currentPathStepTotal ?? 0}`)
       return
     }
 
     if (snapshot.running) {
       setStatusTone('running')
-      setStatusMessage(source === 'start' ? 'Path batch started.' : 'Executing planned paths...')
+      setStatusMessage(source === 'start' ? 'Path batch started.' : 'Execution in progress...')
       return
     }
 
     setStatusTone('paused')
     setStatusMessage('Paused. Press Start to resume.')
   }, [setStopRequested])
+
+  const reconcileStatus = useCallback(async (silent = false): Promise<boolean> => {
+    if (pollInFlightRef.current) {
+      return false
+    }
+
+    pollInFlightRef.current = true
+    if (!silent) {
+      setIsBusy(true)
+    }
+
+    try {
+      const response = await fetch(`${endpointBase}/status`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      })
+
+      if (!response.ok) {
+        const failureMessage = await formatHttpFailure(response, `Status reconcile failed (${response.status}).`)
+        setLastError(failureMessage)
+        setStatusTone('error')
+        setStatusMessage('State sync failed.')
+        return false
+      }
+
+      const data = (await response.json()) as PlannedRunnerResponse
+      applySnapshot(data.snapshot, 'reconcile')
+      setLastError(null)
+      if (eventSourceRef.current) {
+        setSyncState('live')
+      }
+      return Boolean(data.snapshot.runId)
+    } catch (error) {
+      const failureMessage = formatRequestError(error)
+      setLastError(failureMessage)
+      setStatusTone('error')
+      setStatusMessage('State sync failed: backend unavailable.')
+      return false
+    } finally {
+      pollInFlightRef.current = false
+      if (!silent) {
+        setIsBusy(false)
+      }
+    }
+  }, [applySnapshot, endpointBase, formatHttpFailure, formatRequestError])
+
+  const scheduleReconcile = useCallback((delayMs = ACTIVE_RECONCILE_DEBOUNCE_MS) => {
+    if (reconcileTimerRef.current !== null) {
+      window.clearTimeout(reconcileTimerRef.current)
+    }
+    reconcileTimerRef.current = window.setTimeout(() => {
+      reconcileTimerRef.current = null
+      void reconcileStatus(true)
+    }, delayMs)
+  }, [reconcileStatus])
+
+  const connectLiveEvents = useCallback(() => {
+    if (eventSourceRef.current) {
+      return
+    }
+
+    const source = new EventSource(`${endpointBase}/events`)
+    source.onopen = () => {
+      setSyncState('live')
+    }
+    source.onmessage = (messageEvent) => {
+      try {
+        const payload = JSON.parse(messageEvent.data) as PlannedLiveEvent
+        if (!payload || typeof payload.seq !== 'number' || typeof payload.message !== 'string') {
+          return
+        }
+        setLastError(null)
+        setSyncState('live')
+        applyLiveCursor(payload)
+        appendTimelineEvent(payload)
+        if (payload.level === 'error' || deriveEventKind(payload) !== 'tool') {
+          scheduleReconcile(payload.level === 'error' ? 0 : ACTIVE_RECONCILE_DEBOUNCE_MS)
+        }
+      } catch {
+        // ignore malformed stream chunks
+      }
+    }
+    source.onerror = () => {
+      setSyncState('reconnecting')
+      scheduleReconcile(0)
+    }
+
+    eventSourceRef.current = source
+  }, [appendTimelineEvent, applyLiveCursor, endpointBase, scheduleReconcile])
+
+  const disconnectLiveEvents = useCallback(() => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
+    setSyncState('idle')
+  }, [])
+
+  const setTestAccountField = useCallback((index: number, field: keyof TestingAccount, value: string) => {
+    setTestAccountsState((prev) =>
+      prev.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)),
+    )
+  }, [])
+
+  const addTestAccount = useCallback(() => {
+    setTestAccountsState((prev) => [...prev, createEmptyTestAccount()])
+  }, [])
+
+  const setTestAccounts = useCallback((accounts: TestingAccount[]) => {
+    setTestAccountsState((accounts ?? []).map((account) => normalizeAccount(account)))
+  }, [])
+
+  const removeTestAccount = useCallback((index: number) => {
+    setTestAccountsState((prev) => prev.filter((_, itemIndex) => itemIndex !== index))
+  }, [])
 
   const applyAgentModes = useCallback((nextModes: RunnerAgentModes) => {
     const previousModes = agentModes
@@ -411,54 +788,12 @@ export const usePlannedRunner = (
     return false
   }, [targetUrl])
 
-  const refreshStatus = useCallback(async (silent = false): Promise<boolean> => {
-    if (pollInFlightRef.current) {
-      return false
-    }
-
-    pollInFlightRef.current = true
-
-    if (!silent) {
-      setIsBusy(true)
-    }
-
-    try {
-      const response = await fetch(`${endpointBase}/status`, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      })
-
-      if (!response.ok) {
-        const failureMessage = await formatHttpFailure(response, `Status request failed (${response.status}).`)
-        setLastError(failureMessage)
-        setStatusTone('error')
-        setStatusMessage('Status refresh failed.')
-        return false
-      }
-
-      const data = (await response.json()) as PlannedRunnerResponse
-      applySnapshot(data.snapshot, 'status')
-      return Boolean(data.snapshot.runId)
-    } catch (error) {
-      const failureMessage = formatRequestError(error)
-      setLastError(failureMessage)
-      setStatusTone('error')
-      setStatusMessage('Status refresh failed: backend unavailable.')
-      return false
-    } finally {
-      pollInFlightRef.current = false
-      if (!silent) {
-        setIsBusy(false)
-      }
-    }
-  }, [applySnapshot, endpointBase, formatHttpFailure, formatRequestError])
-
   const startOrResume = useCallback(async (): Promise<boolean> => {
     if (diagrams.length === 0) return false
     if (!ensureTargetUrl()) return false
 
     if (!plannedStatus || plannedStatus.completed) {
-      setLogs([])
+      setTimeline([])
       setCoverage({
         visitedNodes: new Set<string>(),
         transitionResults: {},
@@ -482,10 +817,7 @@ export const usePlannedRunner = (
       })
 
       if (!response.ok) {
-        const failureMessage = await formatHttpFailure(
-          response,
-          `Failed to start planned run (${response.status}).`,
-        )
+        const failureMessage = await formatHttpFailure(response, `Failed to start planned run (${response.status}).`)
         setLastError(failureMessage)
         setStatusTone('error')
         setStatusMessage('Start failed.')
@@ -494,6 +826,7 @@ export const usePlannedRunner = (
 
       const data = (await response.json()) as PlannedRunnerResponse
       applySnapshot(data.snapshot, 'start')
+      setSyncState('live')
       return true
     } catch (error) {
       const failureMessage = formatRequestError(error)
@@ -532,6 +865,7 @@ export const usePlannedRunner = (
 
       const data = (await response.json()) as PlannedRunnerResponse
       applySnapshot(data.snapshot, 'stop')
+      scheduleReconcile(0)
       return true
     } catch (error) {
       const failureMessage = formatRequestError(error)
@@ -542,7 +876,7 @@ export const usePlannedRunner = (
     } finally {
       setIsBusy(false)
     }
-  }, [applySnapshot, endpointBase, formatHttpFailure, formatRequestError, plannedStatus])
+  }, [applySnapshot, endpointBase, formatHttpFailure, formatRequestError, plannedStatus, scheduleReconcile])
 
   const reset = useCallback(async () => {
     setIsBusy(true)
@@ -574,7 +908,7 @@ export const usePlannedRunner = (
       setNextStateId(null)
       setActiveEdgeId(null)
       setPlannedStatus(null)
-      setLogs([])
+      setTimeline([])
       setStatusTone('idle')
       setStatusMessage('Idle')
       setCoverage({
@@ -583,6 +917,7 @@ export const usePlannedRunner = (
         nodeStatuses: {},
         edgeStatuses: {},
       })
+      setSyncState('idle')
     } catch (error) {
       const failureMessage = formatRequestError(error)
       setLastError(failureMessage)
@@ -595,6 +930,9 @@ export const usePlannedRunner = (
 
   useEffect(() => {
     return () => {
+      if (reconcileTimerRef.current !== null) {
+        window.clearTimeout(reconcileTimerRef.current)
+      }
       disconnectLiveEvents()
     }
   }, [disconnectLiveEvents])
@@ -620,30 +958,19 @@ export const usePlannedRunner = (
     if (!plannedStatus?.runId) {
       return
     }
-
-    if (!plannedStatus.running && !plannedStatus.stopRequested) {
+    if (!plannedStatus.running && !plannedStatus.stopRequested && syncState !== 'reconnecting') {
       return
     }
 
-    let cancelled = false
-
-    const tick = async () => {
-      if (cancelled) {
-        return
-      }
-      await refreshStatus(true)
-    }
-
-    void tick()
+    void reconcileStatus(true)
     const timer = window.setInterval(() => {
-      void tick()
-    }, 1000)
+      void reconcileStatus(true)
+    }, ACTIVE_RECONCILE_INTERVAL_MS)
 
     return () => {
-      cancelled = true
       window.clearInterval(timer)
     }
-  }, [plannedStatus?.runId, plannedStatus?.running, plannedStatus?.stopRequested, refreshStatus])
+  }, [plannedStatus?.runId, plannedStatus?.running, plannedStatus?.stopRequested, reconcileStatus, syncState])
 
   const getTemporarySettings = useCallback<() => TemporaryRunnerSettings>(() => ({
     targetUrl,
@@ -664,6 +991,16 @@ export const usePlannedRunner = (
     applyAgentModes(nextModes)
   }, [setTargetUrl, setTestingNotes, setTestAccounts, applyAgentModes])
 
+  const overview = useMemo(
+    () => buildOverview(plannedStatus, timeline, statusMessage, currentStateId, nextStateId),
+    [plannedStatus, timeline, statusMessage, currentStateId, nextStateId],
+  )
+
+  const issues = useMemo(
+    () => buildIssues(plannedStatus, timeline, lastError, syncState),
+    [plannedStatus, timeline, lastError, syncState],
+  )
+
   return {
     running,
     stopRequested,
@@ -678,17 +1015,20 @@ export const usePlannedRunner = (
     currentStateId,
     nextStateId,
     activeEdgeId,
-    logs,
     coverage,
     plannedStatus,
-    runId,
-    agentModes,
-    isSettingsBusy,
-    applyAgentModes,
-    setAgentMode,
     targetUrl,
     testingNotes,
     testAccounts,
+    runId,
+    agentModes,
+    isSettingsBusy,
+    timeline,
+    issues,
+    overview,
+    syncState,
+    applyAgentModes,
+    setAgentMode,
     setTargetUrl,
     setTestingNotes,
     setTestAccounts,
@@ -704,9 +1044,6 @@ export const usePlannedRunner = (
       }
 
       void requestStop()
-    },
-    refresh: () => {
-      void refreshStatus()
     },
     reset: () => {
       void reset()

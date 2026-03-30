@@ -191,19 +191,46 @@ export interface PlannedLiveEventInput {
   type: string
   level: PlannedLiveEventLevel
   message: string
+  phase?: 'idle' | 'planning' | 'narrating' | 'operating' | 'validating' | 'paused' | 'completed' | 'failed' | 'reset'
+  kind?: 'lifecycle' | 'progress' | 'validation' | 'issue' | 'tool'
   runId?: string
   pathId?: string
+  pathName?: string
   pathExecutionId?: string
   attemptId?: number
   stepId?: string
+  stepLabel?: string
   edgeId?: string
+  semanticGoal?: string
   iteration?: number
   actionCursor?: number
   currentStateId?: string | null
   nextStateId?: string | null
+  activeEdgeId?: string | null
   currentStepOrder?: number | null
   currentPathStepTotal?: number | null
   pathOrder?: number | null
   totalPaths?: number | null
+  blockedReason?: string
+  failureCode?: string
+  terminationReason?: string
+  validationSummary?: {
+    total: number
+    pass: number
+    fail: number
+    pending: number
+  }
+  validationResults?: Array<{
+    id: string
+    label: string
+    status: 'pass' | 'fail' | 'pending'
+    reason: string
+    cacheKey: string
+    resolution: 'newly-verified' | 'reused-cache' | 'unverified'
+    checkedAt: string
+    validationType?: string
+    actual?: string
+    expected?: string
+  }>
   meta?: Record<string, unknown>
 }

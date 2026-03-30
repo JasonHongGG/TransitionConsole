@@ -321,6 +321,24 @@ export interface PlannedStepEvent {
   validationSummary: StepValidationSummary
 }
 
+export type ExecutionPhase =
+  | 'idle'
+  | 'planning'
+  | 'narrating'
+  | 'operating'
+  | 'validating'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'reset'
+
+export type ExecutionEventKind =
+  | 'lifecycle'
+  | 'progress'
+  | 'validation'
+  | 'issue'
+  | 'tool'
+
 export type PlannedLiveEventLevel = 'info' | 'success' | 'error'
 
 export interface PlannedLiveEvent {
@@ -329,20 +347,31 @@ export interface PlannedLiveEvent {
   type: string
   level: PlannedLiveEventLevel
   message: string
+  phase?: ExecutionPhase
+  kind?: ExecutionEventKind
   runId?: string
   pathId?: string
+  pathName?: string
   pathExecutionId?: string
   attemptId?: number
   stepId?: string
+  stepLabel?: string
   edgeId?: string
+  semanticGoal?: string
   iteration?: number
   actionCursor?: number
   currentStateId?: string | null
   nextStateId?: string | null
+  activeEdgeId?: string | null
   currentStepOrder?: number | null
   currentPathStepTotal?: number | null
   pathOrder?: number | null
   totalPaths?: number | null
+  blockedReason?: string
+  failureCode?: string
+  terminationReason?: string
+  validationSummary?: StepValidationSummary
+  validationResults?: StepValidationResult[]
   meta?: Record<string, unknown>
 }
 

@@ -50,32 +50,39 @@ export const SystemView = ({
   const zoomBehaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
   const transformRef = useRef(zoomIdentity)
   const frameRef = useRef<number | null>(null)
+  const lastFocusKeyRef = useRef<string>('')
   const [zoomInfo, setZoomInfo] = useState({ k: 1, x: 0, y: 0 })
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [nodeHistory, setNodeHistory] = useState<string[]>([])
 
   const resolveNodeStatus = useCallback(
     (nodeId: string): ElementExecutionStatus => {
-      if (isTesting && nextStateId === nodeId) {
-        return 'running'
+      const snapshotStatus = coverage.nodeStatuses?.[nodeId]
+      if (snapshotStatus && snapshotStatus !== 'untested') {
+        return snapshotStatus
       }
-      if (coverage.nodeStatuses && coverage.nodeStatuses[nodeId]) {
-        return coverage.nodeStatuses[nodeId]
+      if (isTesting && currentStateId === nodeId) return 'running'
+      if (isTesting && nextStateId === nodeId) return 'running'
+      if (snapshotStatus) {
+        return snapshotStatus
       }
-      if (currentStateId === nodeId) return 'running'
       if (coverage.visitedNodes.has(nodeId)) return 'pass'
       return 'untested'
     },
-    [isTesting, nextStateId, coverage.nodeStatuses, coverage.visitedNodes, currentStateId],
+    [coverage.nodeStatuses, coverage.visitedNodes, currentStateId, isTesting, nextStateId],
   )
 
   const resolveEdgeStatus = useCallback(
     (edgeId: string): ElementExecutionStatus => {
+      const snapshotStatus = coverage.edgeStatuses?.[edgeId]
+      if (snapshotStatus && snapshotStatus !== 'untested') {
+        return snapshotStatus
+      }
       if (isTesting && activeEdgeId === edgeId) {
         return 'running'
       }
-      if (coverage.edgeStatuses && coverage.edgeStatuses[edgeId]) {
-        return coverage.edgeStatuses[edgeId]
+      if (snapshotStatus) {
+        return snapshotStatus
       }
       const result = coverage.transitionResults[edgeId]
       if (result === 'pass' || result === 'fail') return result
@@ -142,6 +149,7 @@ export const SystemView = ({
       const targetTransform = zoomIdentity.translate(tx, ty).scale(scale)
 
       select(svgRef.current)
+        .interrupt()
         .transition()
         .duration(420)
         .call(zoomBehaviorRef.current.transform, targetTransform)
@@ -306,6 +314,7 @@ export const SystemView = ({
     }
 
     select(svgEl)
+      .interrupt()
       .transition()
       .duration(600)
       .call(zoomBehaviorRef.current.transform, targetTransform)
@@ -324,6 +333,11 @@ export const SystemView = ({
   useEffect(() => {
     if (focusMode === 'off') return
     if (!svgRef.current || !zoomBehaviorRef.current) return
+
+    const focusKey = `${focusMode}:${currentStateId ?? ''}:${nextStateId ?? ''}:${activeEdgeId ?? ''}`
+    if (lastFocusKeyRef.current === focusKey) {
+      return
+    }
 
     let minX = Number.POSITIVE_INFINITY
     let maxX = Number.NEGATIVE_INFINITY
@@ -401,7 +415,10 @@ export const SystemView = ({
       .translate(svgW / 2 - centerX * scale, svgH / 2 - centerY * scale)
       .scale(scale)
 
+    lastFocusKeyRef.current = focusKey
+
     select(svgRef.current)
+      .interrupt()
       .transition()
       .duration(300)
       .call(zoomBehaviorRef.current.transform, targetTransform)

@@ -444,7 +444,6 @@ function App() {
               <AgentPanel
                 diagrams={data.diagrams}
                 coverage={agentRunner.coverage}
-                logs={agentRunner.logs}
                 currentStateId={agentRunner.currentStateId}
                 running={agentRunner.running}
                 stopRequested={agentRunner.stopRequested}
@@ -458,7 +457,6 @@ function App() {
                 fullCoveragePassed={agentRunner.fullCoveragePassed}
                 onStart={() => agentRunner.setRunning(true)}
                 onStop={() => agentRunner.setRunning(false)}
-                onRefresh={agentRunner.refresh}
                 onReset={agentRunner.reset}
                 targetUrl={agentRunner.targetUrl}
                 onTargetUrlChange={agentRunner.setTargetUrl}
@@ -474,6 +472,10 @@ function App() {
                 plannedStatus={agentRunner.plannedStatus}
                 focusMode={focusMode}
                 onCycleFocusMode={cycleFocusMode}
+                timeline={agentRunner.timeline}
+                issues={agentRunner.issues}
+                overview={agentRunner.overview}
+                syncState={agentRunner.syncState}
               />
             </div>
           </aside>

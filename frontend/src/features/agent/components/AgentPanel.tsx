@@ -1,11 +1,19 @@
 import { useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { AgentLogEntry, CoverageState, Diagram, PlannedRunnerStatus, RunnerAgentModes, TestingAccount } from '../../../types'
+import type {
+  CoverageState,
+  Diagram,
+  ExecutionIssue,
+  ExecutionOverview,
+  ExecutionTimelineEntry,
+  PlannedRunnerStatus,
+  RunnerAgentModes,
+  TestingAccount,
+} from '../../../types'
 
 interface AgentPanelProps {
   diagrams: Diagram[]
   coverage: CoverageState
-  logs: AgentLogEntry[]
   currentStateId: string | null
   nextStateId: string | null
   running: boolean
@@ -19,7 +27,6 @@ interface AgentPanelProps {
   fullCoveragePassed: boolean | null
   onStart: () => void
   onStop: () => void
-  onRefresh: () => void
   onReset: () => void
   targetUrl: string
   onTargetUrlChange: (value: string) => void
@@ -35,27 +42,43 @@ interface AgentPanelProps {
   plannedStatus: PlannedRunnerStatus | null
   focusMode: 'off' | 'current' | 'path'
   onCycleFocusMode: () => void
+  timeline: ExecutionTimelineEntry[]
+  issues: ExecutionIssue[]
+  overview: ExecutionOverview
+  syncState: 'idle' | 'live' | 'reconnecting'
 }
 
 const formatTime = (value: string) => new Date(value).toLocaleTimeString()
 
-const formatLogCategory = (category: AgentLogEntry['category'] | undefined): string => {
-  switch (category) {
-    case 'narrator':
-      return 'Narrator'
-    case 'operator':
-      return 'Operator'
+const formatSyncState = (syncState: AgentPanelProps['syncState']): string => {
+  switch (syncState) {
+    case 'live':
+      return 'Live Sync'
+    case 'reconnecting':
+      return 'Reconnecting'
+    default:
+      return 'Standby'
+  }
+}
+
+const formatTimelineKind = (entry: ExecutionTimelineEntry): string => {
+  switch (entry.kind) {
+    case 'validation':
+      return 'Validation'
+    case 'issue':
+      return 'Issue'
     case 'tool':
       return 'Tool'
+    case 'progress':
+      return 'Progress'
     default:
-      return 'System'
+      return 'Lifecycle'
   }
 }
 
 export const AgentPanel = ({
   diagrams,
   coverage,
-  logs,
   currentStateId,
   nextStateId,
   running,
@@ -69,7 +92,6 @@ export const AgentPanel = ({
   fullCoveragePassed,
   onStart,
   onStop,
-  onRefresh,
   onReset,
   targetUrl,
   onTargetUrlChange,
@@ -85,9 +107,14 @@ export const AgentPanel = ({
   plannedStatus,
   focusMode,
   onCycleFocusMode,
+  timeline,
+  issues,
+  overview,
+  syncState,
 }: AgentPanelProps) => {
   const [showTestingInfoModal, setShowTestingInfoModal] = useState(false)
   const [showAgentSettingsModal, setShowAgentSettingsModal] = useState(false)
+  const [consoleTab, setConsoleTab] = useState<'overview' | 'issues' | 'timeline'>('overview')
   const allStates = diagrams.flatMap((diagram) => diagram.states)
   const totalStates = allStates.length
   const visitedStates = coverage.visitedNodes.size
@@ -486,19 +513,6 @@ export const AgentPanel = ({
           <button
             type="button"
             className="agent-icon-btn"
-            onClick={onRefresh}
-            disabled={isBusy}
-            title="Refresh Status"
-            aria-label="Refresh Status"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M19 12a7 7 0 1 1-2-4.9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              <path d="M19 5v5h-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="agent-icon-btn"
             onClick={onReset}
             disabled={isBusy}
             title="Reset"
@@ -643,75 +657,175 @@ export const AgentPanel = ({
         </dl>
       </div>
 
-      <div className="agent-detail-stack">
-        <section className="agent-card agent-scroll-card">
-          <div className="agent-card-header">
-            <h4>Path Detail</h4>
+      <section className="agent-card agent-execution-console">
+        <div className="agent-card-header agent-console-header">
+          <div className="agent-console-heading">
+            <h4>Execution Console</h4>
+            <div className="agent-console-statuses">
+              <span className={`agent-sync-pill ${syncState}`}>{formatSyncState(syncState)}</span>
+              <span className="agent-sync-pill neutral">{overview.phaseLabel}</span>
+            </div>
           </div>
-          <div className="agent-scroll-region agent-validation-list">
-            {activePath ? (
-              <>
-                <p className="agent-validation-summary">
-                  [{activePath.status.toUpperCase()}] {activePath.pathName}
-                </p>
-                <p className="agent-validation-summary">
-                  Goal: {activePath.semanticGoal}
-                </p>
-                <p className="agent-validation-summary">
-                  Transition: {activePath.completedTransitions}/{activePath.totalTransitions}
-                  {activePath.currentTransitionLabel ? ` · ${activePath.currentTransitionLabel}` : ''}
-                </p>
-                {activePath.blockedReason ? <p className="agent-validation-summary">Blocked: {activePath.blockedReason}</p> : null}
-                {plannedStatus ? (
-                  <ul>
-                    <li className="agent-validation-row">
-                      <span className={`validation-status-tag ${activePath.status}`}>
-                        {activePath.status.toUpperCase()}
-                      </span>
-                      <span className="validation-label">Current Path ID</span>
-                      <span className="validation-reason">{activePath.pathId}</span>
-                    </li>
-                    <li className="agent-validation-row">
-                      <span className="validation-status-tag pending">BATCH</span>
-                      <span className="validation-label">Execution Context</span>
-                      <span className="validation-reason">
-                        batch {activePath.batchNumber}
-                        {activePath.attemptId ? ` · attempt ${activePath.attemptId}` : ''}
-                        {activePath.pathExecutionId ? ` · ${activePath.pathExecutionId}` : ''}
-                      </span>
-                    </li>
-                  </ul>
-                ) : (
-                  <p className="muted">No path detail available.</p>
-                )}
-              </>
-            ) : (
-              <p className="muted">No path running yet.</p>
-            )}
-          </div>
-        </section>
+          <div className="agent-console-actions" role="tablist" aria-label="Execution console tabs">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={consoleTab === 'overview'}
+            className={`agent-console-icon-tab ${consoleTab === 'overview' ? 'active' : ''}`}
+            onClick={() => setConsoleTab('overview')}
+            title="Overview"
+            aria-label="Overview"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="4" y="4" width="6" height="6" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <rect x="14" y="4" width="6" height="6" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <rect x="4" y="14" width="6" height="6" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <rect x="14" y="14" width="6" height="6" rx="1.2" fill="none" stroke="currentColor" strokeWidth="1.8" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={consoleTab === 'issues'}
+            className={`agent-console-icon-tab ${consoleTab === 'issues' ? 'active' : ''}`}
+            onClick={() => setConsoleTab('issues')}
+            title="Issues"
+            aria-label="Issues"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 4 20 19H4L12 4z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+              <path d="M12 9v4.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <circle cx="12" cy="16.8" r="1" fill="currentColor" />
+            </svg>
+            {issues.length > 0 ? <span className="agent-console-icon-tab-count">{issues.length}</span> : null}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={consoleTab === 'timeline'}
+            className={`agent-console-icon-tab ${consoleTab === 'timeline' ? 'active' : ''}`}
+            onClick={() => setConsoleTab('timeline')}
+            title="Timeline"
+            aria-label="Timeline"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 7h12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M6 12h12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <path d="M6 17h8" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              <circle cx="17.5" cy="17" r="1.3" fill="currentColor" />
+            </svg>
+            {timeline.length > 0 ? <span className="agent-console-icon-tab-count">{Math.min(timeline.length, 99)}</span> : null}
+          </button>
+        </div>
+        </div>
 
-        <section className="agent-card agent-scroll-card live-events-card">
-          <div className="agent-card-header">
-            <h4>Live Events</h4>
-          </div>
-          <div className="agent-scroll-region agent-logs">
-            {logs.length === 0 ? (
-              <p className="muted">No agent events yet.</p>
-            ) : (
-              <ul>
-                {logs.map((log) => (
-                  <li key={log.id} className={`log ${log.level}`}>
-                    <span>{formatTime(log.timestamp)}</span>
-                    <span>{log.message}</span>
-                    <span className={`log-category ${log.category ?? 'system'}`}>{formatLogCategory(log.category)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </section>
-      </div>
+        <div className="agent-scroll-region agent-console-body">
+          {consoleTab === 'overview' ? (
+            <div className="agent-console-overview">
+              <div className="agent-console-grid">
+                <article className="agent-console-card accent">
+                  <span className="agent-console-label">Current Route</span>
+                  <strong>{overview.routeLabel}</strong>
+                  <p>{overview.statusLabel}</p>
+                </article>
+                <article className="agent-console-card">
+                  <span className="agent-console-label">Path</span>
+                  <strong>{overview.pathLabel}</strong>
+                  <p>{overview.stepLabel}</p>
+                </article>
+                <article className="agent-console-card">
+                  <span className="agent-console-label">Validation</span>
+                  <strong>{overview.latestValidationLabel}</strong>
+                  <p>{overview.latestOutcomeLabel}</p>
+                </article>
+              </div>
+
+              <div className="agent-console-summary-list">
+                <div className="agent-console-summary-row">
+                  <span>Goal</span>
+                  <strong>{overview.goal}</strong>
+                </div>
+                <div className="agent-console-summary-row">
+                  <span>Active Path</span>
+                  <strong>{activePath?.pathName ?? 'Not started yet'}</strong>
+                </div>
+                <div className="agent-console-summary-row">
+                  <span>Execution Context</span>
+                  <strong>
+                    {activePath
+                      ? `batch ${activePath.batchNumber}${activePath.attemptId ? ` · attempt ${activePath.attemptId}` : ''}`
+                      : 'No active batch'}
+                  </strong>
+                </div>
+                <div className="agent-console-summary-row multiline">
+                  <span>Blocked Reason</span>
+                  <strong>{overview.blockedReason ?? 'None'}</strong>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {consoleTab === 'issues' ? (
+            <div className="agent-console-issues">
+              {issues.length === 0 ? (
+                <p className="muted">No blocking issue detected. Validation and runtime errors will appear here first.</p>
+              ) : (
+                <ul className="agent-issue-list">
+                  {issues.map((issue) => (
+                    <li key={issue.id} className={`agent-issue-row ${issue.severity}`}>
+                      <div className="agent-issue-topline">
+                        <span className={`validation-status-tag ${issue.severity === 'error' ? 'fail' : issue.severity === 'warning' ? 'pending' : 'pass'}`}>
+                          {issue.severity.toUpperCase()}
+                        </span>
+                        <strong>{issue.title}</strong>
+                        <span className="agent-issue-time">{formatTime(issue.timestamp)}</span>
+                      </div>
+                      <p>{issue.detail}</p>
+                      {issue.context.pathName || issue.context.stepLabel ? (
+                        <div className="agent-issue-context">
+                          {issue.context.pathName ? <span>Path: {issue.context.pathName}</span> : null}
+                          {issue.context.stepLabel ? <span>Step: {issue.context.stepLabel}</span> : null}
+                          {issue.context.activeEdgeId ? <span>Edge: {issue.context.activeEdgeId}</span> : null}
+                        </div>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
+
+          {consoleTab === 'timeline' ? (
+            <div className="agent-console-timeline">
+              {timeline.length === 0 ? (
+                <p className="muted">No execution events yet.</p>
+              ) : (
+                <ul className="agent-timeline-list">
+                  {timeline.map((entry) => (
+                    <li key={entry.id} className={`agent-timeline-row ${entry.level}`}>
+                      <div className="agent-timeline-head">
+                        <span className="agent-timeline-time">{formatTime(entry.timestamp)}</span>
+                        <span className={`validation-status-tag ${entry.level === 'error' ? 'fail' : entry.kind === 'validation' ? 'pending' : 'pass'}`}>
+                          {formatTimelineKind(entry)}
+                        </span>
+                        <strong>{entry.title}</strong>
+                      </div>
+                      <p>{entry.detail}</p>
+                      <div className="agent-timeline-meta">
+                        <span>{entry.phase}</span>
+                        {entry.context.pathName ? <span>{entry.context.pathName}</span> : null}
+                        {entry.context.stepLabel ? <span>{entry.context.stepLabel}</span> : null}
+                        {entry.diagnostics.toolName ? <span>{entry.diagnostics.toolName}</span> : null}
+                        {entry.diagnostics.blockedReason ? <span>{entry.diagnostics.blockedReason}</span> : null}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
+        </div>
+      </section>
 
       {testingInfoModal}
       {agentSettingsModal}

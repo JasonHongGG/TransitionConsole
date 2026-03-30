@@ -31,30 +31,37 @@ export const DiagramView = ({
   const layout = useMemo(() => layoutDiagram(diagram), [diagram])
   const svgRef = useRef<SVGSVGElement>(null)
   const zoomBehaviorRef = useRef<ZoomBehavior<SVGSVGElement, unknown> | null>(null)
+  const lastFocusKeyRef = useRef<string>('')
   const [transform, setTransform] = useState(zoomIdentity)
 
   const resolveNodeStatus = useCallback(
     (nodeId: string): ElementExecutionStatus => {
-      if (isTesting && nextStateId === nodeId) {
-        return 'running'
+      const snapshotStatus = coverage.nodeStatuses?.[nodeId]
+      if (snapshotStatus && snapshotStatus !== 'untested') {
+        return snapshotStatus
       }
-      if (coverage.nodeStatuses && coverage.nodeStatuses[nodeId]) {
-        return coverage.nodeStatuses[nodeId]
+      if (isTesting && currentStateId === nodeId) return 'running'
+      if (isTesting && nextStateId === nodeId) return 'running'
+      if (snapshotStatus) {
+        return snapshotStatus
       }
-      if (currentStateId === nodeId) return 'running'
       if (coverage.visitedNodes.has(nodeId)) return 'pass'
       return 'untested'
     },
-    [isTesting, nextStateId, coverage.nodeStatuses, coverage.visitedNodes, currentStateId],
+    [coverage.nodeStatuses, coverage.visitedNodes, currentStateId, isTesting, nextStateId],
   )
 
   const resolveEdgeStatus = useCallback(
     (edgeId: string): ElementExecutionStatus => {
+      const snapshotStatus = coverage.edgeStatuses?.[edgeId]
+      if (snapshotStatus && snapshotStatus !== 'untested') {
+        return snapshotStatus
+      }
       if (isTesting && activeEdgeId === edgeId) {
         return 'running'
       }
-      if (coverage.edgeStatuses && coverage.edgeStatuses[edgeId]) {
-        return coverage.edgeStatuses[edgeId]
+      if (snapshotStatus) {
+        return snapshotStatus
       }
       const result = coverage.transitionResults[edgeId]
       if (result === 'pass' || result === 'fail') return result
@@ -135,6 +142,11 @@ export const DiagramView = ({
     if (focusMode === 'off') return
     if (!svgRef.current || !zoomBehaviorRef.current) return
 
+    const focusKey = `${focusMode}:${currentStateId ?? ''}:${nextStateId ?? ''}:${activeEdgeId ?? ''}`
+    if (lastFocusKeyRef.current === focusKey) {
+      return
+    }
+
     let minX = Number.POSITIVE_INFINITY
     let maxX = Number.NEGATIVE_INFINITY
     let minY = Number.POSITIVE_INFINITY
@@ -201,7 +213,10 @@ export const DiagramView = ({
       .translate(svgW / 2 - centerX * scale, svgH / 2 - centerY * scale)
       .scale(scale)
 
+    lastFocusKeyRef.current = focusKey
+
     select(svgRef.current)
+      .interrupt()
       .transition()
       .duration(280)
       .call(zoomBehaviorRef.current.transform, targetTransform)

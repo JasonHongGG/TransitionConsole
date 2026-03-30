@@ -169,10 +169,14 @@ export class AgentStepExecutor implements PathExecutor {
         type: 'narrator.started',
         level: 'info',
         message: this.narratorMode === 'input' ? 'Path narrator started (input mode)' : 'Path narrator started',
+        phase: 'narrating',
+        kind: 'progress',
         runId: context.runId,
         pathId: context.pathId,
+        pathName: context.pathName,
         pathExecutionId: context.pathExecutionId,
         attemptId: context.attemptId,
+        semanticGoal: context.semanticGoal,
       })
 
       const narratorStartedAt = Date.now()
@@ -193,10 +197,14 @@ export class AgentStepExecutor implements PathExecutor {
         type: 'narrator.completed',
         level: 'success',
         message: 'Path narrator completed',
+        phase: 'narrating',
+        kind: 'progress',
         runId: context.runId,
         pathId: context.pathId,
+        pathName: context.pathName,
         pathExecutionId: context.pathExecutionId,
         attemptId: context.attemptId,
+        semanticGoal: context.semanticGoal,
       })
 
       this.emitLiveEvent({
@@ -205,10 +213,14 @@ export class AgentStepExecutor implements PathExecutor {
         message: this.narratorMode === 'input'
           ? `[path-narrator:input] 讀取完成，花費 ${narratorElapsedSeconds}s`
           : `[path-narrator] 生成完成，花費 ${narratorElapsedSeconds}s`,
+        phase: 'narrating',
+        kind: 'progress',
         runId: context.runId,
         pathId: context.pathId,
+        pathName: context.pathName,
         pathExecutionId: context.pathExecutionId,
         attemptId: context.attemptId,
+        semanticGoal: context.semanticGoal,
         meta: {
           agentTag: this.narratorMode === 'input' ? 'path-narrator-input' : 'path-narrator',
           elapsedMs: narratorElapsedMs,
@@ -231,10 +243,14 @@ export class AgentStepExecutor implements PathExecutor {
         type: 'operator.started',
         level: 'info',
         message: 'Path operator loop started',
+        phase: 'operating',
+        kind: 'progress',
         runId: context.runId,
         pathId: context.pathId,
+        pathName: context.pathName,
         pathExecutionId: context.pathExecutionId,
         attemptId: context.attemptId,
+        semanticGoal: context.semanticGoal,
       })
 
       const operated = await this.operator.runPath(path, context, narrative)
@@ -243,10 +259,17 @@ export class AgentStepExecutor implements PathExecutor {
         type: 'operator.completed',
         level: operated.result === 'pass' ? 'success' : 'error',
         message: operated.result === 'pass' ? 'Path operator loop completed' : (operated.blockedReason ?? 'Path operator loop failed'),
+        phase: operated.result === 'pass' ? 'validating' : 'failed',
+        kind: operated.result === 'pass' ? 'progress' : 'issue',
         runId: context.runId,
         pathId: context.pathId,
+        pathName: context.pathName,
         pathExecutionId: context.pathExecutionId,
         attemptId: context.attemptId,
+        semanticGoal: context.semanticGoal,
+        blockedReason: operated.blockedReason,
+        failureCode: operated.failureCode,
+        terminationReason: operated.terminationReason,
       })
 
       log.log('path executed by agent executor', {
@@ -269,10 +292,15 @@ export class AgentStepExecutor implements PathExecutor {
         type: 'executor.failed',
         level: 'error',
         message: error instanceof Error ? error.message : 'agent executor failed',
+        phase: 'failed',
+        kind: 'issue',
         runId: context.runId,
         pathId: context.pathId,
+        pathName: context.pathName,
         pathExecutionId: context.pathExecutionId,
         attemptId: context.attemptId,
+        semanticGoal: context.semanticGoal,
+        blockedReason: error instanceof Error ? error.message : 'agent executor failed',
       })
 
       return {
