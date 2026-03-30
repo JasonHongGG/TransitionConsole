@@ -2258,7 +2258,7 @@
 
 .agent-console-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 8px;
 }
 
@@ -2284,6 +2284,7 @@
   color: var(--text);
   font-size: 11px;
   line-height: 1.4;
+  word-break: break-word;
 }
 
 .agent-console-card p,
@@ -2293,6 +2294,7 @@
   color: var(--muted);
   font-size: 10px;
   line-height: 1.45;
+  word-break: break-word;
 }
 
 .agent-console-label {
@@ -2594,10 +2596,6 @@
 
   .agent-console-actions {
     margin-left: 0;
-  }
-
-  .agent-console-grid {
-    grid-template-columns: 1fr;
   }
 
   .agent-console-summary-row {

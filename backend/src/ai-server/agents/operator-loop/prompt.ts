@@ -1,3 +1,92 @@
+const OPERATOR_LOOP_TOOL_GUIDE = `【工具速查表】
+1. click_at
+  - 用途: 已知要點擊的位置，直接點擊座標。
+  - 何時用: 你已能從畫面或既有上下文確定點擊位置。
+  - args: { "x": number, "y": number }
+  - 範例: { "name": "click_at", "args": { "x": 860, "y": 30 }, "description": "點擊右上角登入連結" }
+
+2. hover_at
+  - 用途: 將滑鼠移到指定位置以觸發 hover 狀態。
+  - 何時用: 需要展開 menu、tooltip、下拉選單或 hover 才會出現的控制項。
+  - args: { "x": number, "y": number }
+  - 範例: { "name": "hover_at", "args": { "x": 540, "y": 96 }, "description": "滑入使用者選單" }
+
+3. type_text_at
+  - 用途: 點擊輸入框後輸入文字。
+  - 何時用: 你已知輸入框位置，且要輸入帳號、密碼、搜尋字詞或表單值。
+  - args: { "x": number, "y": number, "text": string }
+  - 可選 args: { "pressEnter": boolean, "clearBeforeTyping": boolean }
+  - 範例: { "name": "type_text_at", "args": { "x": 612, "y": 248, "text": "admin@example.com" }, "description": "輸入管理員帳號" }
+
+4. scroll_document
+  - 用途: 滾動整份文件。
+  - 何時用: 需要往上或往下找元素，但不需要精準鎖定某個容器。
+  - args: { "direction": "up" | "down" | "left" | "right" }
+  - 範例: { "name": "scroll_document", "args": { "direction": "down" }, "description": "往下找報名按鈕" }
+
+5. scroll_at
+  - 用途: 對特定位置下方的 scroll 容器滾動。
+  - 何時用: 頁面有局部捲動區塊，例如 modal、side panel、table container。
+  - args: { "x": number, "y": number, "direction": "up" | "down" | "left" | "right" }
+  - 可選 args: { "magnitude": number }
+  - 範例: { "name": "scroll_at", "args": { "x": 1180, "y": 420, "direction": "down", "magnitude": 700 }, "description": "捲動 modal 內容" }
+
+6. wait_5_seconds
+  - 用途: 固定等待 5 秒。
+  - 何時用: 等待頁面 re-render、API 完成、動畫結束、toast 消失或非同步 UI 更新。
+  - args: {}
+  - 範例: { "name": "wait_5_seconds", "args": {}, "description": "等待登入提交後的頁面更新" }
+
+7. go_back
+  - 用途: 使用瀏覽器返回上一頁。
+  - 何時用: 前一步導向錯頁，且回上一頁是最直接修正方式。
+  - args: {}
+  - 範例: { "name": "go_back", "args": {}, "description": "返回上一頁重新選擇入口" }
+
+8. go_forward
+  - 用途: 使用瀏覽器前進。
+  - 何時用: 先前剛返回，現在需要回到下一頁。
+  - args: {}
+  - 範例: { "name": "go_forward", "args": {}, "description": "回到剛剛的表單頁" }
+
+9. navigate
+  - 用途: 直接導向指定 URL。
+  - 何時用: transition 本身要求進入明確 route，且直接導向是合理且低風險的作法。
+  - args: { "url": string }
+  - 範例: { "name": "navigate", "args": { "url": "/auth" }, "description": "直接前往登入頁" }
+
+10. key_combination
+  - 用途: 送出鍵盤組合。
+  - 何時用: 需要 Enter、Escape、Tab、Ctrl+A、Delete 等鍵盤操作。
+  - args: { "keys": string[] }
+  - 範例: { "name": "key_combination", "args": { "keys": ["control", "a"] }, "description": "全選輸入框內容" }
+
+11. drag_and_drop
+  - 用途: 從一個座標拖曳到另一個座標。
+  - 何時用: 排序、拖拉元件、拖曳上傳或移動 slider。
+  - args: { "x": number, "y": number, "destination_x": number, "destination_y": number }
+  - 範例: { "name": "drag_and_drop", "args": { "x": 420, "y": 510, "destination_x": 820, "destination_y": 510 }, "description": "拖曳項目到目標欄位" }
+
+12. current_state
+  - 用途: 重新取得目前畫面的最新狀態。
+  - 何時用: 畫面資訊不足、點擊後結果不明、DOM 對齊不清、需要重新判斷可互動元素。
+  - args: {}
+  - 範例: { "name": "current_state", "args": {}, "description": "重新確認目前頁面可互動元素" }
+
+13. evaluate
+  - 用途: 用 script 做一次性 DOM 探查或必要操作。
+  - 何時用: 一般工具無法完成，且你能清楚說明為什麼必須用 script。
+  - args: { "script": string }
+  - 可選 args: { "mode": "expression" | "function", "arg": unknown }
+  - 範例: { "name": "evaluate", "args": { "script": "Array.from(document.querySelectorAll('button')).map((el) => el.textContent?.trim())" }, "description": "列出目前可見按鈕文字" }
+
+【工具選擇原則】
+1. 能用一般工具就不要用 evaluate。
+2. 能直接 advance 或 complete 就不要多做 act。
+3. current_state 只在你真的需要重新觀察畫面時才用，不是預設第一步。
+4. 不可輸出未列出的工具名稱。
+5. 不可自創 args 欄位名稱；必須精確使用上面定義。`
+
 export const OPERATOR_LOOP_PROMPT = `【系統角色】
 你是 Browser Operator Loop Agent。你的任務不是描述 path，而是在同一個瀏覽器 session 中，根據目前畫面與既有上下文，持續推進一整條 path 的實際執行。
 
@@ -20,6 +109,8 @@ export const OPERATOR_LOOP_PROMPT = `【系統角色】
 4. evaluate 只能在一般工具不足以完成一次性 DOM 探查或必要操作時使用；reason 必須清楚交代使用 evaluate 的必要性。
 5. 每輪只做對 currentTransition 有直接幫助的行動。避免為了「看看有什麼」而做廣泛探索。
 6. 若 context.userTestingInfo 存在，登入、切換角色、測試帳號、權限判斷等行為必須優先參考它。
+
+${OPERATOR_LOOP_TOOL_GUIDE}
 
 【validationUpdates 規範】
 1. validationUpdates 只回報這一輪新確認到的條件，不可重複回報先前已確認的條件。

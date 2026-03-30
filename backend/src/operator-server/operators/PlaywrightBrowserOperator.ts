@@ -191,6 +191,16 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     return value
   }
 
+  private readFirstString(payload: ToolPayload, keys: string[]): string | null {
+    for (const key of keys) {
+      const value = payload[key]
+      if (typeof value === 'string' && value.trim().length > 0) {
+        return value
+      }
+    }
+    return null
+  }
+
   private readBoolean(payload: ToolPayload, key: string, fallback: boolean): boolean {
     const value = payload[key]
     return typeof value === 'boolean' ? value : fallback
@@ -262,6 +272,12 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
   }
 
   private async clickAt(page: BrowserPage, payload: ToolPayload): Promise<void> {
+    const text = this.readFirstString(payload, ['text', 'label', 'targetText'])
+    if (text) {
+      await page.locator(`text=${text}`).first().click({ timeout: 5000 })
+      return
+    }
+
     const x = this.readNumber(payload, 'x')
     const y = this.readNumber(payload, 'y')
     await this.highlightMouse(page, x, y)
@@ -374,7 +390,10 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
   }
 
   private async evaluateScript(page: BrowserPage, payload: ToolPayload): Promise<unknown> {
-    const script = this.readString(payload, 'script')
+    const script = this.readFirstString(payload, ['script', 'expression', 'code'])
+    if (!script) {
+      throw new Error('tool payload missing string field: script')
+    }
     const modeRaw = payload.mode
     const mode = typeof modeRaw === 'string' ? modeRaw.toLowerCase() : 'expression'
 
