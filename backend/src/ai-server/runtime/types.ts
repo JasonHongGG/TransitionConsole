@@ -37,4 +37,6 @@ export interface AiRuntimeFactoryOptions {
   githubToken?: string
   cliPath?: string
   cliUrl?: string
+  geminiApiKey?: string
+  geminiApiBaseUrl?: string
 }

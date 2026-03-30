@@ -25,7 +25,8 @@ cd ../backend && npm install
 
 - Create `frontend/.env` from `frontend/.env.example`
 - Create `backend/.env` from `backend/.env.example`
-- Set `GITHUB_TOKEN` in `backend/.env`
+- If `AI_PROVIDER=copilot-sdk`, set `GITHUB_TOKEN` in `backend/.env`
+- If `AI_PROVIDER=gemini` or `gemini-api`, set `GEMINI_API_KEY` in `backend/.env`
 
 3. Install Playwright browser runtime (required)
 
@@ -74,6 +75,8 @@ npm run dev
 - AI runtime:
 	- `AI_PROVIDER`
 	- `GITHUB_TOKEN`
+	- `GEMINI_API_KEY`
+	- `GEMINI_API_BASE_URL`
 	- `AI_RUNTIME_MODEL`
 	- `AI_RUNTIME_TIMEOUT_MS`
 - Agent-specific timeouts (fallback to `AI_RUNTIME_TIMEOUT_MS`):
@@ -138,4 +141,4 @@ Use historical planner logs instead of live LLM planning:
 	- Run: `cd backend && npx playwright install chromium`
 - Start/step returns 500
 	- Check `/health` endpoints above
-	- Verify `GITHUB_TOKEN` and timeout values in `backend/.env`
+	- Verify the provider-specific credential (`GITHUB_TOKEN` or `GEMINI_API_KEY`) and timeout values in `backend/.env`
