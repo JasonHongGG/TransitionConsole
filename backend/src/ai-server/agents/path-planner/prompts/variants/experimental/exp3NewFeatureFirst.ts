@@ -14,7 +14,7 @@ export const exp3NewFeatureFirstPromptVariant = createExperimentalVariant({
   goal: '測量在 coverage 優先下，主動偏向新功能分支是否能比單純追未走過 transition 更快擴大探索面。',
   outputRules: [
     '若仍有可達的未覆蓋 state/transition，paths 應輸出到 maxPaths；只要 coverage 尚未達到 100%，就不應少於 maxPaths 條 path。',
-    '本實驗版本不要求 path 從 page_entry 開始；第一條 edge 只需是合法且語意合理的起點。',
+    '每條 path 的第一個 edge 必須從 page_entry.meta.entryStateId 出發。',
     '每條 path 至少要包含 1 個 walked=false 的 transition。',
     '若完全不存在任何合法且可達的 walked=false transition，回傳 {"paths": []}。',
     '若多條 path 新增 coverage 接近，優先保留主要前置流程重疊較低、能探索新功能分支者。',

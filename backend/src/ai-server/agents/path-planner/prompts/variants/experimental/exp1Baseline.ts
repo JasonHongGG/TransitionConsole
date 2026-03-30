@@ -13,7 +13,7 @@ export const exp1BaselinePromptVariant = createExperimentalVariant({
   goal: '建立最基礎的語意型 baseline，讓後續其他策略版本都能直接與它比較。',
   outputRules: [
     '若仍有合法且有測試價值的候選 path，paths 應盡量輸出到 maxPaths；不要過早停止在少量 path。',
-    '本實驗版本不要求 path 從 page_entry 開始；第一條 edge 只需是合法且語意合理的起點。',
+    '每條 path 的第一個 edge 必須從 page_entry.meta.entryStateId 出發。',
     '即使本版本不強調 coverage，也不得輸出明顯重複、只是名稱不同但 edgeIds 幾乎相同的 path。',
     '例子：若某 diagram 內存在一條明確的「填寫表單 -> 送出成功」合法序列，只要語意完整，即可直接作為一條有效 path。',
   ],

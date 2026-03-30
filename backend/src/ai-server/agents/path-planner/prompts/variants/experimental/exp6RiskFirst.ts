@@ -15,7 +15,7 @@ export const exp6RiskFirstPromptVariant = createExperimentalVariant({
   goal: '觀察風險導向是否能在 coverage 之外，用較少 path 揪出更有價值的問題。',
   outputRules: [
     '若仍有可達的未覆蓋 state/transition，paths 應輸出到 maxPaths；只要 coverage 尚未達到 100%，就不應少於 maxPaths 條 path。',
-    '本實驗版本不要求 path 從 page_entry 開始；第一條 edge 只需是合法且語意合理的起點。',
+    '每條 path 的第一個 edge 必須從 page_entry.meta.entryStateId 出發。',
     '每條 path 至少要包含 1 個 walked=false 的 transition。',
     '若完全不存在任何合法且可達的 walked=false transition，回傳 {"paths": []}。',
     '若新增 coverage 相近，優先選擇風險更高、狀態變化更大、或更可能暴露缺陷的 path。',

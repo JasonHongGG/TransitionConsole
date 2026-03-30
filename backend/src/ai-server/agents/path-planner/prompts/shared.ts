@@ -110,8 +110,6 @@ export const COMMON_HARD_RULES = [
 
 export const PRODUCTION_START_RULE = '每條 path 必須以 "page_entry" 這張 diagram 作為起點，且第一條 transition 必須從 "page_entry.meta.entryStateId" 出發。'
 
-export const EXPERIMENT_START_RULE = '本實驗版本中，每條 path 可從任一合法且語意合理的 transition 作為第一條邊開始，不需要以 "page_entry" 作為起點，也不要求第一條 transition 由 "page_entry.meta.entryStateId" 出發。'
-
 export const COMMON_OUTPUT_RULES = [
   'paths 長度不得超過 maxPaths。',
   'edgeIds 必須是有效 transition id。',

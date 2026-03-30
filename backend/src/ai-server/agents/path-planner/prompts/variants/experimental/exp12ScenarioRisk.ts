@@ -14,7 +14,7 @@ export const exp12ScenarioRiskPromptVariant = createExperimentalVariant({
   goal: '比較完整使用者情境與高風險探索同時成立時，是否能得到更貼近真實世界的高價值 path。',
   outputRules: [
     '若仍有可達的未覆蓋 state/transition，paths 應輸出到 maxPaths；只要 coverage 尚未達到 100%，就不應少於 maxPaths 條 path。',
-    '本實驗版本不要求 path 從 page_entry 開始；第一條 edge 只需是合法且語意合理的起點。',
+    '每條 path 的第一個 edge 必須從 page_entry.meta.entryStateId 出發。',
     '每條 path 至少要包含 1 個 walked=false 的 transition。',
     '若完全不存在任何合法且可達的 walked=false transition，回傳 {"paths": []}。',
     '當新增 coverage 相近時，優先選擇更像完整使用者情境且風險更高的 path。',

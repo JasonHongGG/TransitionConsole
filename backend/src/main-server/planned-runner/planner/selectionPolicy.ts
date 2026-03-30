@@ -9,8 +9,8 @@ const DEFAULT_PLANNER_PATH_SELECTION_POLICY: PlannerPathSelectionPolicy = {
 }
 
 const EXPERIMENTAL_PLANNER_PATH_SELECTION_POLICY: PlannerPathSelectionPolicy = {
-  requirePageEntryStart: false,
-  requireRequiredEntryState: false,
+  requirePageEntryStart: true,
+  requireRequiredEntryState: true,
   prioritizeNewCoverage: false,
   dedupeHistoricalSignatures: false,
 }
