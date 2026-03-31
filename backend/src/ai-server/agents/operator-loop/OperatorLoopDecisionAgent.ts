@@ -161,6 +161,18 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
 
   async decide(input: LoopDecisionInput): Promise<LoopDecision> {
     const mode = input.agentMode ?? this.defaultMode
+    const iteration = Number(input.runtimeState.iteration)
+    const key = this.sessionKey(input.context.runId, input.context.pathExecutionId)
+    const screenshotBase64 = input.screenshotBase64
+
+    const decisionScreenshotPath = await this.runtimeScreenshotLogger.saveDecisionInput({
+      runId: input.context.runId,
+      pathId: input.context.pathId,
+      stepOrder: input.currentTransition.stepOrder,
+      narrativeSummary: input.narrative.currentTransitionSummary,
+      iteration,
+      screenshotBase64: input.screenshotBase64,
+    })
 
     if (mode === 'mock') {
       const decision = await this.mockReplay.decide()
@@ -177,19 +189,6 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
 
       return decision as LoopDecision
     }
-
-    const key = this.sessionKey(input.context.runId, input.context.pathExecutionId)
-    const screenshotBase64 = input.screenshotBase64
-    const iteration = Number(input.runtimeState.iteration)
-
-    const decisionScreenshotPath = await this.runtimeScreenshotLogger.saveDecisionInput({
-      runId: input.context.runId,
-      pathId: input.context.pathId,
-      stepOrder: input.currentTransition.stepOrder,
-      narrativeSummary: input.narrative.currentTransitionSummary,
-      iteration,
-      screenshotBase64: input.screenshotBase64,
-    })
 
     const attachments: AiRuntimeMessageAttachment[] | undefined = decisionScreenshotPath
       ? [{
@@ -341,10 +340,6 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
 
   async appendFunctionResponses(input: LoopAppendFunctionResponsesInput): Promise<void> {
     const mode = input.agentMode ?? this.defaultMode
-    if (mode === 'mock') {
-      return
-    }
-
     const iteration = Number(input.runtimeState.iteration)
 
     await this.runtimeScreenshotLogger.saveFunctionResponses({
@@ -358,6 +353,10 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         screenshotBase64: item.screenshotBase64,
       })),
     })
+
+    if (mode === 'mock') {
+      return
+    }
 
     const key = this.sessionKey(input.runId, input.pathExecutionId)
     this.pushHistory(key, {
