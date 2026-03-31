@@ -6,7 +6,7 @@ import { loadSortedMockJsonFiles } from '../../common/mockReplayFileLoader'
 
 type ParsedOperatorResponse = {
   decision?: {
-    kind?: 'complete' | 'act' | 'fail'
+    kind?: 'complete' | 'advance' | 'act' | 'fail'
     reason?: string
     failureCode?: LoopDecision['failureCode']
     terminationReason?: LoopDecision['terminationReason']
@@ -71,6 +71,16 @@ const parseDecision = (input: ParsedOperatorResponse | undefined): LoopDecision 
       progressSummary: input.progressSummary,
       validationUpdates,
       terminationReason: input.decision.terminationReason ?? 'completed',
+    }
+  }
+
+  if (input.decision.kind === 'advance') {
+    return {
+      kind: 'advance',
+      reason: input.decision.reason,
+      progressSummary: input.progressSummary,
+      validationUpdates,
+      terminationReason: input.decision.terminationReason,
     }
   }
 

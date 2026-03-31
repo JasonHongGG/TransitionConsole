@@ -62,6 +62,114 @@ type ToolVerification = {
   reason: string
 }
 
+const AGENT_CURSOR_INIT_SCRIPT = `
+  if (window === window.top) {
+    const initCursor = () => {
+      if (document.getElementById('playwright-agent-cursor')) return;
+
+      const cursorContainer = document.createElement('div');
+      cursorContainer.id = 'playwright-agent-cursor';
+      cursorContainer.style.position = 'fixed';
+      // Adjust slightly so the SVG's visual tip aligns with the absolute coordinates
+      cursorContainer.style.left = '-3px'; 
+      cursorContainer.style.top = '-3px';
+      cursorContainer.style.width = '32px';
+      cursorContainer.style.height = '32px';
+      cursorContainer.style.pointerEvents = 'none';
+      cursorContainer.style.zIndex = '2147483647';
+      cursorContainer.style.transition = 'transform 0.05s linear'; // use transform for smooth movement
+      cursorContainer.style.transform = 'translate(-100px, -100px)';
+      cursorContainer.style.opacity = '0';
+
+      const svgPointer = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svgPointer.setAttribute('viewBox', '0 0 24 24');
+      svgPointer.setAttribute('width', '28');
+      svgPointer.setAttribute('height', '28');
+      svgPointer.style.filter = 'drop-shadow(2px 2px 3px rgba(0,0,0,0.5))';
+      
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', 'M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.87c.45 0 .67-.54.35-.85L5.85 2.86a.5.5 0 0 0-.85.35Z');
+      path.setAttribute('fill', '#ffffff');
+      path.setAttribute('stroke', '#000000');
+      path.setAttribute('stroke-width', '1.5');
+      path.setAttribute('stroke-linejoin', 'round');
+      
+      svgPointer.appendChild(path);
+      cursorContainer.appendChild(svgPointer);
+
+      const ripple = document.createElement('div');
+      ripple.id = 'playwright-agent-ripple';
+      ripple.style.position = 'absolute';
+      ripple.style.left = '-2px';
+      ripple.style.top = '-2px';
+      ripple.style.width = '18px';
+      ripple.style.height = '18px';
+      ripple.style.borderRadius = '50%';
+      ripple.style.backgroundColor = 'rgba(255, 0, 0, 0.3)';
+      ripple.style.border = '2px solid rgba(255, 0, 0, 0.8)';
+      ripple.style.transform = 'scale(0)';
+      ripple.style.opacity = '0';
+      ripple.style.pointerEvents = 'none';
+      
+      cursorContainer.appendChild(ripple);
+
+      if (document.documentElement) {
+        document.documentElement.appendChild(cursorContainer);
+      } else {
+        document.addEventListener('DOMContentLoaded', () => document.documentElement.appendChild(cursorContainer));
+      }
+
+      let isVisible = false;
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isVisible) {
+          cursorContainer.style.opacity = '1';
+          isVisible = true;
+        }
+        cursorContainer.style.transform = \`translate(\${e.clientX}px, \${e.clientY}px)\`;
+      }, { passive: true, capture: true });
+
+      let clickTimeout;
+      const triggerRipple = () => {
+        if (!isVisible) {
+           cursorContainer.style.opacity = '1';
+           isVisible = true;
+        }
+        
+        ripple.style.transition = 'none';
+        ripple.style.transform = 'scale(0.5)';
+        ripple.style.opacity = '1';
+        
+        void ripple.offsetWidth;
+        
+        ripple.style.transition = 'transform 0.4s ease-out, opacity 0.4s ease-out';
+        ripple.style.transform = 'scale(2.5)';
+        ripple.style.opacity = '0';
+        
+        svgPointer.style.transition = 'transform 0.1s ease-in-out';
+        svgPointer.style.transform = 'scale(0.85)';
+        
+        clearTimeout(clickTimeout);
+        clickTimeout = setTimeout(() => {
+          svgPointer.style.transition = 'transform 0.2s ease-in-out';
+          svgPointer.style.transform = 'scale(1)';
+        }, 150);
+      };
+
+      window.addEventListener('mousedown', triggerRipple, { passive: true, capture: true });
+      window.__triggerAgentClickEffect = triggerRipple;
+    };
+
+    if (document.documentElement) {
+      initCursor();
+    } else {
+      window.addEventListener('DOMContentLoaded', initCursor);
+    }
+  }
+`;
+
+const INITIAL_ITERATION = 1
+
 type BatchBoundary = 'batch-complete' | 'page-changed' | 'observation-required' | 'stop-requested'
 
 type ObservationState = {
@@ -369,7 +477,7 @@ const FOCUS_EDITABLE_AT_POINT_SCRIPT = String.raw`(function (point) {
 export class PlaywrightBrowserOperator implements BrowserOperator {
   private readonly sessions = new Map<string, BrowserSession>()
   private readonly runControls = new Map<string, RunControlState>()
-  private readonly highlightMouseEnabled = process.env.PLANNED_RUNNER_HIGHLIGHT_MOUSE === 'true'
+  private readonly highlightMouseEnabled = process.env.PLANNED_RUNNER_HIGHLIGHT_MOUSE !== 'false'
   private readonly browserHeadless = parseBooleanEnv(process.env.OPERATOR_BROWSER_HEADLESS, true)
   private readonly viewport = {
     width: DEFAULT_VIEWPORT_WIDTH,
@@ -561,6 +669,9 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
       screen: this.viewport,
       deviceScaleFactor: 1,
     })
+    
+    await contextInstance.addInitScript(AGENT_CURSOR_INIT_SCRIPT)
+    
     const page = await contextInstance.newPage()
 
     const normalizedUrl = context.targetUrl.startsWith('http://') || context.targetUrl.startsWith('https://')
@@ -850,43 +961,25 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     }
   }
 
-  private async highlightMouse(page: BrowserPage, x: number, y: number): Promise<void> {
+  private async highlightMouse(page: BrowserPage, x: number, y: number, isAction = true): Promise<void> {
     if (!this.highlightMouseEnabled) return
 
-    await page.evaluate(
-      ({ mouseX, mouseY }) => {
-        const elementId = 'playwright-feedback-circle'
-        const doc = (globalThis as { document?: DocumentLike }).document
-        if (!doc) {
-          return
+    // Smoothly glide the mouse to the target coordinate
+    await page.mouse.move(x, y, { steps: 15 })
+
+    if (isAction) {
+      // Trigger the custom ripple effect
+      await page.evaluate((_) => {
+        const w = globalThis as any;
+        if (typeof w.__triggerAgentClickEffect === 'function') {
+          w.__triggerAgentClickEffect()
         }
-
-        let div = doc.getElementById(elementId)
-        if (!div) {
-          div = doc.createElement('div')
-          div.id = elementId
-          div.style.pointerEvents = 'none'
-          div.style.border = '4px solid red'
-          div.style.borderRadius = '50%'
-          div.style.width = '20px'
-          div.style.height = '20px'
-          div.style.position = 'fixed'
-          div.style.zIndex = '9999'
-          doc.body.appendChild(div)
-        }
-
-        div.hidden = false
-        div.style.left = `${mouseX - 10}px`
-        div.style.top = `${mouseY - 10}px`
-
-        setTimeout(() => {
-          div.hidden = true
-        }, 2000)
-      },
-      { mouseX: x, mouseY: y },
-    )
-
-    await page.waitForTimeout(1000)
+      }, null)
+      // Allow animation to peak for screenshot capture
+      await page.waitForTimeout(200)
+    } else {
+      await page.waitForTimeout(100)
+    }
   }
 
   private async clickAt(page: BrowserPage, payload: ToolPayload): Promise<ToolExecutionResult> {
@@ -924,8 +1017,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     const chosenTarget = this.selectBestClickableTarget(before.pageState, coordinate.resolved)
     const hoverPoint = coordinate.resolved
 
-    await this.highlightMouse(page, hoverPoint.x, hoverPoint.y)
-    await page.mouse.move(hoverPoint.x, hoverPoint.y)
+    await this.highlightMouse(page, hoverPoint.x, hoverPoint.y, false)
 
     const after = await this.currentState(page)
     return {
@@ -1037,8 +1129,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     const magnitudeRaw = payload.magnitude
     const magnitude = typeof magnitudeRaw === 'number' && magnitudeRaw > 0 ? magnitudeRaw : 800
 
-    await this.highlightMouse(page, coordinate.resolved.x, coordinate.resolved.y)
-    await page.mouse.move(coordinate.resolved.x, coordinate.resolved.y)
+    await this.highlightMouse(page, coordinate.resolved.x, coordinate.resolved.y, false)
 
     let dx = 0
     let dy = 0
@@ -1082,11 +1173,9 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     const start = this.resolveCoordinates(before.pageState.viewport, payload)
     const destination = this.toViewportPoint(before.pageState.viewport, this.readNumber(payload, 'destination_x'), this.readNumber(payload, 'destination_y'))
 
-    await this.highlightMouse(page, start.resolved.x, start.resolved.y)
-    await page.mouse.move(start.resolved.x, start.resolved.y)
+    await this.highlightMouse(page, start.resolved.x, start.resolved.y, true)
     await page.mouse.down()
-    await this.highlightMouse(page, destination.x, destination.y)
-    await page.mouse.move(destination.x, destination.y)
+    await this.highlightMouse(page, destination.x, destination.y, false)
     await page.mouse.up()
 
     const after = await this.currentState(page)
@@ -1547,7 +1636,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
         const decisionStartedAt = Date.now()
         const decision = await this.loopAgent.decide({
-          agentMode: context.agentModes.operatorLoop,
+          agentMode: context.agentModes?.operatorLoop,
           context: {
             runId: context.runId,
             pathId: context.pathId,
@@ -1960,7 +2049,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
           if (this.loopAgent.appendFunctionResponses) {
             await this.loopAgent.appendFunctionResponses({
-              agentMode: context.agentModes.operatorLoop,
+              agentMode: context.agentModes?.operatorLoop,
               runId: context.runId,
               pathId: context.pathId,
               pathExecutionId: context.pathExecutionId,
@@ -2027,7 +2116,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
               screenshotBase64: lastState?.screenshot?.toString('base64'),
             }
             await this.loopAgent.appendFunctionResponses({
-              agentMode: context.agentModes.operatorLoop,
+              agentMode: context.agentModes?.operatorLoop,
               runId: context.runId,
               pathId: context.pathId,
               pathExecutionId: context.pathExecutionId,

@@ -84,7 +84,7 @@ export interface BrowserPage {
   title: () => Promise<string>
   mouse: {
     click: (x: number, y: number) => Promise<void>
-    move: (x: number, y: number) => Promise<void>
+    move: (x: number, y: number, options?: { steps?: number }) => Promise<void>
     wheel: (deltaX: number, deltaY: number) => Promise<void>
     down: () => Promise<void>
     up: () => Promise<void>
@@ -119,6 +119,7 @@ export interface BrowserSession {
   context: {
     close: () => Promise<void>
     newPage: () => Promise<BrowserPage>
+    addInitScript: (script: string) => Promise<void>
     on: (event: string, handler: (...args: unknown[]) => void) => void
   }
   page: BrowserPage
