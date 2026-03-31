@@ -77,7 +77,7 @@ const AGENT_CURSOR_INIT_SCRIPT = `
       cursorContainer.style.height = '32px';
       cursorContainer.style.pointerEvents = 'none';
       cursorContainer.style.zIndex = '2147483647';
-      cursorContainer.style.transition = 'transform 0.05s linear'; // use transform for smooth movement
+      cursorContainer.style.transition = 'transform 0.3s ease-out, opacity 0.2s ease-out';
       cursorContainer.style.transform = 'translate(-100px, -100px)';
       cursorContainer.style.opacity = '0';
 
@@ -121,13 +121,13 @@ const AGENT_CURSOR_INIT_SCRIPT = `
 
       let isVisible = false;
 
-      window.addEventListener('mousemove', (e) => {
+      window.__moveAgentCursor = (x, y) => {
         if (!isVisible) {
           cursorContainer.style.opacity = '1';
           isVisible = true;
         }
-        cursorContainer.style.transform = \`translate(\${e.clientX}px, \${e.clientY}px)\`;
-      }, { passive: true, capture: true });
+        cursorContainer.style.transform = \`translate(\${x}px, \${y}px)\`;
+      };
 
       let clickTimeout;
       const triggerRipple = () => {
@@ -156,7 +156,6 @@ const AGENT_CURSOR_INIT_SCRIPT = `
         }, 150);
       };
 
-      window.addEventListener('mousedown', triggerRipple, { passive: true, capture: true });
       window.__triggerAgentClickEffect = triggerRipple;
     };
 
@@ -964,8 +963,19 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
   private async highlightMouse(page: BrowserPage, x: number, y: number, isAction = true): Promise<void> {
     if (!this.highlightMouseEnabled) return
 
-    // Smoothly glide the mouse to the target coordinate
-    await page.mouse.move(x, y, { steps: 15 })
+    // Move the visual demonstration cursor
+    await page.evaluate(({ targetX, targetY }) => {
+      const w = globalThis as any;
+      if (typeof w.__moveAgentCursor === 'function') {
+        w.__moveAgentCursor(targetX, targetY)
+      }
+    }, { targetX: x, targetY: y })
+
+    // Move Playwright's CDP pointer to ensure hover states trigger correctly
+    await page.mouse.move(x, y)
+
+    // Wait for the smoother CSS transition on the cursor to mostly complete
+    await page.waitForTimeout(300)
 
     if (isAction) {
       // Trigger the custom ripple effect
@@ -978,7 +988,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
       // Allow animation to peak for screenshot capture
       await page.waitForTimeout(200)
     } else {
-      await page.waitForTimeout(100)
+      await page.waitForTimeout(50)
     }
   }
 
