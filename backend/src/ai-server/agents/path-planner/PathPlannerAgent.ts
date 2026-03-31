@@ -29,7 +29,7 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
 
   constructor(runtime: AiRuntime) {
     this.runtime = runtime
-    this.model = process.env.AI_RUNTIME_MODEL ?? 'gpt-5'
+    this.model = process.env.PATH_PLANNER_MODEL || process.env.AI_RUNTIME_MODEL || 'gpt-5'
     this.timeoutMs = Number(process.env.AI_RUNTIME_TIMEOUT_MS ?? 180000)
     this.defaultMode = (process.env.PATH_PLANNER_PROVIDER ?? 'llm').trim().toLowerCase() === 'mock-replay' ? 'mock' : 'llm'
     const promptVariant = resolvePathPlannerPromptVariant(process.env.PATH_PLANNER_PROMPT_VARIANT)
