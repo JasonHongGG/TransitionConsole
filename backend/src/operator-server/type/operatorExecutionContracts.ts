@@ -20,11 +20,10 @@ export type ExecutionFailureCode =
   | 'operator-timeout'
   | 'operator-no-progress'
   | 'operator-action-failed'
-  | 'validation-failed'
   | 'run-interrupted'
   | 'unexpected-error'
 
-export type OperatorTerminationReason = 'completed' | 'max-iterations' | 'operator-error' | 'validation-failed' | 'criteria-unmet' | 'stopped' | 'reset'
+export type OperatorTerminationReason = 'completed' | 'max-iterations' | 'operator-error' | 'criteria-unmet' | 'stopped' | 'reset'
 
 export interface StepValidationSpec {
   id: string
@@ -106,6 +105,12 @@ export interface UserTestingInfo {
   }>
 }
 
+export interface PathActorHint {
+  role: string
+  authState: 'guest' | 'authenticated' | 'either'
+  reason: string
+}
+
 export interface PlannedTransitionStep {
   id: string
   edgeId: string
@@ -123,6 +128,7 @@ export interface PlannedTransitionPath {
   id: string
   name: string
   semanticGoal: string
+  actorHint?: PathActorHint
   steps: PlannedTransitionStep[]
 }
 

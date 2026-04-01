@@ -47,7 +47,6 @@ export type ExecutionFailureCode =
   | 'operator-timeout'
   | 'operator-no-progress'
   | 'operator-action-failed'
-  | 'validation-failed'
   | 'run-interrupted'
   | 'unexpected-error'
 
@@ -55,7 +54,6 @@ export type OperatorTerminationReason =
   | 'completed'
   | 'max-iterations'
   | 'operator-error'
-  | 'validation-failed'
   | 'criteria-unmet'
   | 'stopped'
   | 'reset'
@@ -202,6 +200,12 @@ export interface DiagramLike {
   }
 }
 
+export interface PathActorHint {
+  role: string
+  authState: 'guest' | 'authenticated' | 'either'
+  reason: string
+}
+
 export interface PlannedTransitionStep {
   id: string
   edgeId: string
@@ -219,6 +223,7 @@ export interface PlannedTransitionPath {
   id: string
   name: string
   semanticGoal: string
+  actorHint?: PathActorHint
   steps: PlannedTransitionStep[]
 }
 
@@ -282,6 +287,10 @@ export interface PathExecutionSummary {
   currentStateId: string | null
   nextStateId: string | null
   activeEdgeId: string | null
+  hasValidationWarnings: boolean
+  validationWarningCount: number
+  latestValidationSummary?: StepValidationSummary
+  latestValidationResults?: StepValidationResult[]
   blockedReason?: string
   result?: TransitionResult
   startedAt?: string

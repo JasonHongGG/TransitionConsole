@@ -58,10 +58,17 @@ export interface PlannedTransitionStep {
   semantic: string
 }
 
+export interface PathActorHint {
+  role: string
+  authState: 'guest' | 'authenticated' | 'either'
+  reason: string
+}
+
 export interface PlannedTransitionPath {
   id: string
   name: string
   semanticGoal: string
+  actorHint?: PathActorHint
   steps: PlannedTransitionStep[]
 }
 
@@ -92,6 +99,10 @@ export interface PathExecutionSummary {
   currentStateId: string | null
   nextStateId: string | null
   activeEdgeId: string | null
+  hasValidationWarnings: boolean
+  validationWarningCount: number
+  latestValidationSummary?: StepValidationSummary
+  latestValidationResults?: StepValidationResult[]
   blockedReason?: string
   result?: TransitionResult
   startedAt?: string

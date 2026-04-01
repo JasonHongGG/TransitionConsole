@@ -19,6 +19,7 @@ export class PathNarratorApi implements PathNarrator {
         id: path.id,
         name: path.name,
         semanticGoal: path.semanticGoal,
+        actorHint: path.actorHint,
         steps: path.steps.map((step) => ({
           id: step.id,
           edgeId: step.edgeId,

@@ -6,6 +6,7 @@ import type {
   ElementExecutionStatus,
   PlannedRunPlan,
   RuntimeEdge,
+  UserTestingInfo,
 } from '../types'
 import { buildPlannerDiagrams } from './diagramPayload'
 import { isWalked, resolveGlobalEntryStateId } from './common'
@@ -24,8 +25,14 @@ export const generatePlannedPaths = async (
   nodeStatuses: Record<string, ElementExecutionStatus>,
   edgeStatuses: Record<string, ElementExecutionStatus>,
   previouslyPlannedPaths: PlannerHistoryPath[] = [],
+  userTestingInfo?: UserTestingInfo,
   agentMode?: AgentMode,
 ): Promise<PlannedRunPlan> => {
+  const availableTestingRoles = Array.from(new Set(
+    ['guest', ...(userTestingInfo?.accounts ?? []).map((account) => account.role?.trim().toLowerCase())]
+      .filter((role): role is string => Boolean(role)),
+  ))
+
   const normalizeId = (value: string): string => value.toLowerCase().replace(/[^a-z0-9]/g, '')
   const parsePathOrdinal = (pathId?: string): number => {
     if (!pathId) return Number.POSITIVE_INFINITY
@@ -60,6 +67,7 @@ export const generatePlannedPaths = async (
       targetUrl,
       specRaw,
       diagrams: plannerDiagrams,
+      availableTestingRoles,
     },
     previouslyPlannedPaths: sortedPreviouslyPlannedPaths,
   })

@@ -15,6 +15,7 @@ export const PATH_PLANNER_INPUT_SCHEMA = `Format:
     "stepId": "string|null 表示目前步驟 id（可選；通常為 null）",
     "targetUrl": "string 表示此次規劃的目標網址（可選）",
     "specRaw": "string 表示原始規格內容，用於推導語意與測試重點",
+    "availableTestingRoles": ["string 表示目前可用的測試角色，例如 admin/member/guest"],
     "diagrams": [
       {
         "id": "string 表示 diagram 唯一識別",
@@ -92,6 +93,11 @@ export const PATH_PLANNER_OUTPUT_SCHEMA = `Format:
       "pathId": "string 表示路徑識別，例如 path-1",
       "pathName": "string 表示路徑名稱（簡潔且可讀）",
       "semanticGoal": "string 表示此路徑的測試目的與語意",
+      "actorHint": {
+        "role": "string 表示此 path 應以哪個角色執行，例如 admin/member/guest",
+        "authState": "guest|authenticated|either 表示此 path 預期的登入狀態",
+        "reason": "string 簡短說明為何此 path 應使用這個角色"
+      },
       "edgeIds": ["string 表示依序執行的 transition id"]
     }
   ]
@@ -106,6 +112,8 @@ export const COMMON_HARD_RULES = [
   '跨 diagram 也必須靠合法 transition 串接（包含 connector-invokes transition）；不可憑語意直接從某 diagram state 跳到另一 diagram 的起點。',
   'previouslyPlannedPaths 是歷次規劃累積清單；本輪輸出不得與其中任一路徑的 edgeIds 序列完全相同。',
   'maxPaths 是本輪應規劃的 path 數量上限；只要仍存在合法且有意義的候選 path，便應盡量輸出到 maxPaths。',
+  '每條 path 只能有一個 actorHint；若流程中需要切換成不同角色，應拆成不同 path，而不是在同一路徑中切換身分。',
+  'actorHint.role 不可捏造，必須優先對應 context.availableTestingRoles，並與 path 涉及的 diagram.roles / variant.appliesToRoles / spec 語意一致。',
 ]
 
 export const PRODUCTION_START_RULE = '每條 path 必須以 "page_entry" 這張 diagram 作為起點，且第一條 transition 必須從 "page_entry.meta.entryStateId" 出發。'
@@ -116,6 +124,8 @@ export const COMMON_OUTPUT_RULES = [
   '每條 path 的 edgeIds 必須逐條連接；前一條 edge 的 to 必須等於下一條 edge 的 from。',
   '禁止不連通序列；若某條 path 任兩相鄰 edge 無法銜接，該 path 視為無效，不可輸出。',
   '輸出前請先逐條驗證每條 path 的連通性與起點合法性；若不合法，必須重排 edgeIds 或改選其他 path。',
+  '若某條 path 需要登入或特定權限，actorHint 必須明確指出角色與登入狀態，讓下游 operator-loop 在需要登入時有依據。',
+  '若沒有明確角色限制，可將 actorHint.authState 設為 either，但仍需提供最合理的 actorHint.role 與 reason。',
   '若無法完美最佳化，仍必須回傳符合上述 schema 的有效 JSON。',
 ]
 

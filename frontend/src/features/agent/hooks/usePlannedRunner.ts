@@ -63,7 +63,7 @@ export interface PlannedRunnerState {
   canStop: boolean
   canReset: boolean
   statusMessage: string
-  statusTone: 'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'
+  statusTone: 'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'warning' | 'error'
   waitingElapsedSeconds: number
   lastError: string | null
   plannerRound: number
@@ -115,7 +115,7 @@ const normalizeAccount = (account: Partial<TestingAccount>): TestingAccount => (
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 
 const VALIDATION_MESSAGE_ITEM_LIMIT = 3
-const GENERIC_VALIDATION_BLOCKED_REASON = 'transition completion rejected: all validations must pass'
+const GENERIC_VALIDATION_BLOCKED_REASON = 'validation issues recorded: validations were not fully satisfied'
 
 const formatValidationSummary = (summary: StepValidationSummary): string =>
   `${summary.pass}/${summary.total} passed${summary.fail > 0 ? ` · ${summary.fail} failed` : ''}${summary.pending > 0 ? ` · ${summary.pending} pending` : ''}`
@@ -156,7 +156,7 @@ const formatBlockedReasonDetail = (
 ): string | null => {
   const details: string[] = []
 
-  if (blockedReason && blockedReason !== GENERIC_VALIDATION_BLOCKED_REASON && !blockedReason.startsWith('transition completion rejected:')) {
+  if (blockedReason && blockedReason !== GENERIC_VALIDATION_BLOCKED_REASON && !blockedReason.startsWith('validation issues recorded:')) {
     details.push(blockedReason)
   }
   if (validationSummary && (validationSummary.fail > 0 || validationSummary.pending > 0)) {
@@ -393,6 +393,7 @@ const buildOverview = (
   const stepOrder = activePath?.currentTransitionOrder ?? plannedStatus?.currentStepOrder ?? null
   const stepTotal = activePath?.totalTransitions ?? plannedStatus?.currentPathStepTotal ?? null
   const stepName = activePath?.currentTransitionLabel ?? latestEntry?.context.stepLabel ?? 'Waiting for next step'
+  const latestValidationSummary = activePath?.latestValidationSummary ?? latestEntry?.diagnostics.validationSummary
   return {
     phase,
     phaseLabel: phaseLabel(phase),
@@ -401,12 +402,17 @@ const buildOverview = (
     stepLabel: stepOrder && stepTotal ? `Step ${stepOrder}/${stepTotal} · ${stepName}` : stepName,
     goal: activePath?.semanticGoal ?? latestEntry?.context.semanticGoal ?? 'Start a run to generate an execution path.',
     routeLabel: currentStateId || nextStateId ? `${currentStateId ?? 'Unknown'} → ${nextStateId ?? 'Pending'}` : 'Route not active yet',
-    latestValidationLabel: latestValidationLabel(timeline),
-    latestOutcomeLabel: latestEntry ? `${kindLabel(latestEntry.kind)} · ${latestEntry.detail}` : statusMessage,
+    latestValidationLabel: latestValidationSummary ? formatValidationSummary(latestValidationSummary) : latestValidationLabel(timeline),
+    latestOutcomeLabel:
+      activePath?.hasValidationWarnings && activePath.latestValidationSummary
+        ? `Validation warning · ${formatValidationSummary(activePath.latestValidationSummary)}`
+        : latestEntry
+          ? `${kindLabel(latestEntry.kind)} · ${latestEntry.detail}`
+          : statusMessage,
     blockedReason: formatBlockedReasonDetail(
       activePath?.blockedReason ?? latestEntry?.diagnostics.blockedReason ?? null,
-      latestEntry?.diagnostics.validationSummary,
-      latestEntry?.diagnostics.validationResults,
+      activePath?.blockedReason ? latestEntry?.diagnostics.validationSummary : activePath?.latestValidationSummary ?? latestEntry?.diagnostics.validationSummary,
+      activePath?.blockedReason ? latestEntry?.diagnostics.validationResults : activePath?.latestValidationResults ?? latestEntry?.diagnostics.validationResults,
     ),
   }
 }
@@ -447,45 +453,82 @@ const buildIssues = (
     })
   }
 
-  const activePath = resolveActivePath(plannedStatus)
-  if (activePath?.blockedReason) {
-    const activePathDiagnostic = timeline.find(
-      (entry) =>
-        entry.context.pathId === activePath.pathId &&
-        (Boolean(entry.diagnostics.validationSummary) || Boolean(entry.diagnostics.validationResults?.length) || entry.diagnostics.blockedReason === activePath.blockedReason),
-    )
+  plannedStatus?.paths
+    .filter((path) => Boolean(path.blockedReason))
+    .slice()
+    .reverse()
+    .slice(0, 3)
+    .forEach((path) => {
+      const diagnostic = timeline.find(
+        (entry) =>
+          entry.context.pathId === path.pathId &&
+          (Boolean(entry.diagnostics.validationSummary) || Boolean(entry.diagnostics.validationResults?.length) || entry.diagnostics.blockedReason === path.blockedReason),
+      )
 
-    pushIssue({
-      id: `path-blocked:${activePath.pathId}:${activePath.blockedReason}`,
-      severity: 'error',
-      title: 'Current path blocked',
-      detail:
-        formatBlockedReasonDetail(
-          activePath.blockedReason,
-          activePathDiagnostic?.diagnostics.validationSummary,
-          activePathDiagnostic?.diagnostics.validationResults,
-        ) ?? activePath.blockedReason,
-      context: {
-        pathId: activePath.pathId,
-        pathName: activePath.pathName,
-        semanticGoal: activePath.semanticGoal,
-        stepOrder: activePath.currentTransitionOrder,
-        totalSteps: activePath.totalTransitions,
-        currentStateId: activePath.currentStateId,
-        nextStateId: activePath.nextStateId,
-        activeEdgeId: activePath.activeEdgeId,
-      },
-      diagnostics: {
-        blockedReason: activePath.blockedReason,
-        validationSummary: activePathDiagnostic?.diagnostics.validationSummary,
-        validationResults: activePathDiagnostic?.diagnostics.validationResults,
-      },
-      timestamp: activePath.completedAt ?? activePath.startedAt ?? new Date().toISOString(),
+      pushIssue({
+        id: `path-blocked:${path.pathId}:${path.blockedReason}`,
+        severity: 'error',
+        title: 'Path blocked',
+        detail:
+          formatBlockedReasonDetail(
+            path.blockedReason,
+            diagnostic?.diagnostics.validationSummary,
+            diagnostic?.diagnostics.validationResults,
+            ) ?? path.blockedReason ?? 'Execution blocked',
+        context: {
+          pathId: path.pathId,
+          pathName: path.pathName,
+          semanticGoal: path.semanticGoal,
+          stepOrder: path.currentTransitionOrder,
+          totalSteps: path.totalTransitions,
+          currentStateId: path.currentStateId,
+          nextStateId: path.nextStateId,
+          activeEdgeId: path.activeEdgeId,
+        },
+        diagnostics: {
+          blockedReason: path.blockedReason,
+          validationSummary: diagnostic?.diagnostics.validationSummary,
+          validationResults: diagnostic?.diagnostics.validationResults,
+        },
+        timestamp: path.completedAt ?? path.startedAt ?? new Date().toISOString(),
+      })
     })
-  }
+
+  plannedStatus?.paths
+    .filter((path) => path.hasValidationWarnings && !path.blockedReason)
+    .slice()
+    .reverse()
+    .slice(0, 3)
+    .forEach((path) => {
+      pushIssue({
+        id: `path-validation-warning:${path.pathId}:${path.validationWarningCount}`,
+        severity: 'warning',
+        title: 'Path completed with validation issues',
+        detail: formatBlockedReasonDetail(
+          null,
+          path.latestValidationSummary,
+          path.latestValidationResults,
+        ) ?? `Validation issues recorded on ${path.pathName}`,
+        context: {
+          pathId: path.pathId,
+          pathName: path.pathName,
+          semanticGoal: path.semanticGoal,
+          stepOrder: path.currentTransitionOrder,
+          totalSteps: path.totalTransitions,
+          currentStateId: path.currentStateId,
+          nextStateId: path.nextStateId,
+          activeEdgeId: path.activeEdgeId,
+        },
+        diagnostics: {
+          validationSummary: path.latestValidationSummary,
+          validationResults: path.latestValidationResults,
+        },
+        timestamp: path.completedAt ?? path.startedAt ?? new Date().toISOString(),
+      })
+    })
 
   timeline
-    .filter((entry) => entry.level === 'error' || (entry.diagnostics.validationSummary?.fail ?? 0) > 0)
+    .filter((entry) => entry.level === 'error')
     .slice(0, 5)
     .forEach((entry) => {
       pushIssue({
@@ -515,7 +558,7 @@ export const usePlannedRunner = (
   const [isBusy, setIsBusy] = useState(false)
   const [controlPhase, setControlPhase] = useState<ControlPhase>('idle')
   const [statusMessage, setStatusMessage] = useState('Idle')
-  const [statusTone, setStatusTone] = useState<'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'>('idle')
+  const [statusTone, setStatusTone] = useState<'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'warning' | 'error'>('idle')
   const [waitingElapsedSeconds, setWaitingElapsedSeconds] = useState(0)
   const [lastError, setLastError] = useState<string | null>(null)
   const [plannerRound, setPlannerRound] = useState(0)
@@ -679,10 +722,22 @@ export const usePlannedRunner = (
       setControlPhase('completed')
       const uncoveredTotal = snapshot.coverage.uncoveredEdgeIds.length + snapshot.coverage.uncoveredNodeIds.length
       const hasFailure = Object.values(snapshot.edgeStatuses).some((status) => status === 'fail')
-      const passed = uncoveredTotal === 0 && !hasFailure
+      const hasValidationWarnings = snapshot.paths.some((path) => path.hasValidationWarnings)
+      const passed = uncoveredTotal === 0 && !hasFailure && !hasValidationWarnings
       setFullCoveragePassed(passed)
-      setStatusMessage(passed ? 'Full coverage complete: PASS' : 'Run complete: coverage or validation failed')
-      setStatusTone(passed ? 'success' : 'error')
+      if (passed) {
+        setStatusMessage('Full coverage complete: PASS')
+        setStatusTone('success')
+      } else if (hasFailure) {
+        setStatusMessage('Run complete: execution failed on one or more paths')
+        setStatusTone('error')
+      } else if (hasValidationWarnings) {
+        setStatusMessage('Run complete: execution continued, but validation issues were recorded')
+        setStatusTone('warning')
+      } else {
+        setStatusMessage('Run complete: coverage incomplete')
+        setStatusTone('warning')
+      }
       return
     }
 

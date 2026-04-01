@@ -18,6 +18,7 @@ import type {
   PlannedTransitionPath,
   RunnerAgentModes,
   RuntimeState,
+  StepValidationResult,
   StepExecutor,
 } from './types'
 import type { PlannedLiveEventBus } from './live-events/PlannedLiveEventBus'
@@ -96,6 +97,40 @@ export class PlannedRunner {
     this.publishLiveEvent?.(event)
   }
 
+  private countValidationWarnings(summary?: { fail: number; pending: number } | null): number {
+    if (!summary) return 0
+    return Math.max(0, summary.fail) + Math.max(0, summary.pending)
+  }
+
+  private summarizePathValidationWarnings(transitionResults: Array<{
+    validationResults: StepValidationResult[]
+    validationSummary: { total: number; pass: number; fail: number; pending: number }
+  }>): {
+    hasValidationWarnings: boolean
+    validationWarningCount: number
+    latestValidationSummary?: { total: number; pass: number; fail: number; pending: number }
+    latestValidationResults?: StepValidationResult[]
+  } {
+    let validationWarningCount = 0
+    let latestValidationSummary: { total: number; pass: number; fail: number; pending: number } | undefined
+    let latestValidationResults: StepValidationResult[] | undefined
+
+    transitionResults.forEach((transitionResult) => {
+      const count = this.countValidationWarnings(transitionResult.validationSummary)
+      if (count === 0) return
+      validationWarningCount += count
+      latestValidationSummary = transitionResult.validationSummary
+      latestValidationResults = transitionResult.validationResults
+    })
+
+    return {
+      hasValidationWarnings: validationWarningCount > 0,
+      validationWarningCount,
+      latestValidationSummary,
+      latestValidationResults,
+    }
+  }
+
   private handleLiveEvent(event: PlannedLiveEvent): void {
     const runtime = this.runtime
     if (!runtime) return
@@ -134,6 +169,7 @@ export class PlannedRunner {
       if (event.stepId) runtime.currentStepId = event.stepId
       
       if (event.pathId && event.currentStepOrder != null) {
+        const validationWarningCount = this.countValidationWarnings(event.validationSummary)
         this.updatePathSummary(event.pathId, runtime.currentBatchNumber, (summary) => ({
           ...summary,
           completedTransitions: event.currentStepOrder!,
@@ -143,6 +179,10 @@ export class PlannedRunner {
           currentStateId: event.currentStateId ?? summary.currentStateId,
           nextStateId: event.nextStateId ?? summary.nextStateId,
           activeEdgeId: event.activeEdgeId ?? event.edgeId ?? summary.activeEdgeId,
+          hasValidationWarnings: summary.hasValidationWarnings || validationWarningCount > 0,
+          validationWarningCount: summary.validationWarningCount + validationWarningCount,
+          latestValidationSummary: event.validationSummary ?? summary.latestValidationSummary,
+          latestValidationResults: event.validationResults ?? summary.latestValidationResults,
         }))
       }
       return
@@ -166,6 +206,8 @@ export class PlannedRunner {
       currentStateId: path.steps[0]?.fromStateId ?? null,
       nextStateId: path.steps[0]?.toStateId ?? null,
       activeEdgeId: path.steps[0]?.edgeId ?? null,
+      hasValidationWarnings: false,
+      validationWarningCount: 0,
     }))
   }
 
@@ -405,6 +447,7 @@ export class PlannedRunner {
       nodeStatuses,
       edgeStatuses,
       [],
+      request.userTestingInfo,
       initialAgentModes.pathPlanner,
     )
     const plannerElapsedMs = Date.now() - plannerStartedAt
@@ -627,6 +670,7 @@ export class PlannedRunner {
 
     const completedTransitions = result.transitionResults.length
     const finalTransition = result.transitionResults[result.transitionResults.length - 1]
+    const pathValidationWarnings = this.summarizePathValidationWarnings(result.transitionResults)
     if (result.terminationReason === 'stopped') {
       this.updatePathSummary(path.id, runtime.currentBatchNumber, (summary) => ({
         ...summary,
@@ -641,6 +685,10 @@ export class PlannedRunner {
         currentStateId: result.finalStateId,
         nextStateId: path.steps[0]?.toStateId ?? null,
         activeEdgeId: finalTransition?.step.edgeId ?? summary.activeEdgeId,
+        hasValidationWarnings: pathValidationWarnings.hasValidationWarnings,
+        validationWarningCount: pathValidationWarnings.validationWarningCount,
+        latestValidationSummary: pathValidationWarnings.latestValidationSummary,
+        latestValidationResults: pathValidationWarnings.latestValidationResults,
         completedAt,
       }))
 
@@ -698,6 +746,10 @@ export class PlannedRunner {
       currentStateId: result.finalStateId,
       nextStateId: null,
       activeEdgeId: finalTransition?.step.edgeId ?? null,
+      hasValidationWarnings: pathValidationWarnings.hasValidationWarnings,
+      validationWarningCount: pathValidationWarnings.validationWarningCount,
+      latestValidationSummary: pathValidationWarnings.latestValidationSummary,
+      latestValidationResults: pathValidationWarnings.latestValidationResults,
       completedAt,
     }))
 
@@ -705,10 +757,12 @@ export class PlannedRunner {
       runtime.completedPathsTotal += 1
       this.emitLiveEvent({
         type: 'path.completed',
-        level: 'success',
-        message: `Path completed: ${path.name}`,
+        level: pathValidationWarnings.hasValidationWarnings ? 'info' : 'success',
+        message: pathValidationWarnings.hasValidationWarnings
+          ? `Path completed with validation issues: ${path.name}`
+          : `Path completed: ${path.name}`,
         phase: 'completed',
-        kind: 'progress',
+        kind: pathValidationWarnings.hasValidationWarnings ? 'validation' : 'progress',
         runId: runtime.runId,
         pathId: path.id,
         pathName: path.name,
@@ -723,8 +777,8 @@ export class PlannedRunner {
         pathOrder: pathIndexInBatch + 1,
         totalPaths: runtime.currentBatchPaths.length,
         semanticGoal: path.semanticGoal,
-        validationSummary: finalTransition?.validationSummary,
-        validationResults: finalTransition?.validationResults,
+        validationSummary: pathValidationWarnings.latestValidationSummary,
+        validationResults: pathValidationWarnings.latestValidationResults,
       })
     } else {
       runtime.failedPathsTotal += 1
@@ -786,10 +840,15 @@ export class PlannedRunner {
     runtime.currentStateId = result.finalStateId
 
     if (latestEvent) {
+      const hasValidationWarnings = this.countValidationWarnings(latestEvent.validationSummary) > 0
       this.emitLiveEvent({
         type: 'transition.completed',
-        level: latestEvent.result === 'pass' ? 'success' : 'error',
-        message: latestEvent.message,
+        level: latestEvent.result === 'pass'
+          ? (hasValidationWarnings ? 'info' : 'success')
+          : 'error',
+        message: hasValidationWarnings
+          ? `${latestEvent.message} · validation issues recorded`
+          : latestEvent.message,
         phase: latestEvent.result === 'pass' ? 'validating' : 'failed',
         kind: latestEvent.result === 'pass' ? 'validation' : 'issue',
         runId: runtime.runId,
@@ -980,6 +1039,7 @@ export class PlannedRunner {
         this.runtime.nodeStatuses,
         this.runtime.edgeStatuses,
         this.runtime.executedPathHistory,
+        this.runtime.userTestingInfo,
         this.runtime.agentModes.pathPlanner,
       )
     } catch (error) {

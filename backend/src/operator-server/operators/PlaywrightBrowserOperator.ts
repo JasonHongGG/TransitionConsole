@@ -16,7 +16,6 @@ import type {
   BrowserOperatorRunResult,
   BrowserPage,
   BrowserSession,
-  DocumentLike,
   LoopCoordinateSpace,
   LoopElementState,
   LoopFunctionCall,
@@ -60,6 +59,11 @@ type CoordinateResolution = {
 type ToolVerification = {
   ok: boolean
   reason: string
+}
+
+type AgentCursorWindow = typeof globalThis & {
+  __moveAgentCursor?: (x: number, y: number) => void
+  __triggerAgentClickEffect?: () => void
 }
 
 const AGENT_CURSOR_INIT_SCRIPT = `
@@ -166,8 +170,6 @@ const AGENT_CURSOR_INIT_SCRIPT = `
     }
   }
 `;
-
-const INITIAL_ITERATION = 1
 
 type BatchBoundary = 'batch-complete' | 'page-changed' | 'observation-required' | 'stop-requested'
 
@@ -965,7 +967,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
     // Move the visual demonstration cursor
     await page.evaluate(({ targetX, targetY }) => {
-      const w = globalThis as any;
+      const w = globalThis as AgentCursorWindow
       if (typeof w.__moveAgentCursor === 'function') {
         w.__moveAgentCursor(targetX, targetY)
       }
@@ -979,8 +981,9 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
     if (isAction) {
       // Trigger the custom ripple effect
-      await page.evaluate((_) => {
-        const w = globalThis as any;
+      await page.evaluate((unused: null) => {
+        void unused
+        const w = globalThis as AgentCursorWindow
         if (typeof w.__triggerAgentClickEffect === 'function') {
           w.__triggerAgentClickEffect()
         }
@@ -1461,10 +1464,10 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     ].filter((item): item is string => Boolean(item))
 
     if (details.length === 0) {
-      return 'transition completion rejected: validations were not fully satisfied'
+      return 'validation issues recorded: validations were not fully satisfied'
     }
 
-    return `transition completion rejected: ${details.join(' | ')}`
+    return `validation issues recorded: ${details.join(' | ')}`
   }
 
   private applyValidationUpdates(
@@ -1662,6 +1665,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             name: path.name,
             semanticGoal: path.semanticGoal,
             totalSteps: path.steps.length,
+            actorHint: path.actorHint,
             steps: path.steps.map((pathStep) => ({
               id: pathStep.id,
               edgeId: pathStep.edgeId,
@@ -1783,39 +1787,17 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           const visualResults = currentValidationResults.filter((r) => r.observability !== 'deferred')
           const visualSummary = this.summarizeValidationResults(visualResults)
           const allVisualPassed = visualSummary.total === 0 || visualSummary.pass === visualSummary.total
+          const validationIssueReason = allVisualPassed
+            ? undefined
+            : this.buildValidationFailureBlockedReason(currentValidationResults)
           trace.push({
             iteration,
             url: runtimeState.url,
             observation: JSON.stringify(runtimeState),
             action: decision.kind === 'complete' ? 'path_complete' : 'advance_transition',
-            outcome: allVisualPassed ? 'success' : 'failed',
-            detail: decision.reason,
+            outcome: 'success',
+            detail: validationIssueReason ?? decision.reason,
           })
-
-          if (!allVisualPassed) {
-            const blockedReason = this.buildValidationFailureBlockedReason(currentValidationResults)
-            transitionResults.push({
-              step,
-              result: 'fail',
-              blockedReason,
-              failureCode: 'validation-failed',
-              terminationReason: 'validation-failed',
-              validationResults: currentValidationResults,
-              validationSummary: currentValidationSummary,
-              trace,
-              evidence: {
-                domSummary: `current_url=${page.url()}`,
-              },
-            })
-            return {
-              result: 'fail',
-              blockedReason,
-              failureCode: 'validation-failed',
-              terminationReason: 'validation-failed',
-              transitionResults,
-              finalStateId: latestStableStateId,
-            }
-          }
 
           latestStableStateId = step.toStateId
           transitionResults.push({
@@ -1831,8 +1813,10 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
           this.emitLiveEvent({
             type: 'transition.advanced',
-            level: 'success',
-            message: `Transition completed: ${step.label}`,
+            level: allVisualPassed ? 'success' : 'info',
+            message: allVisualPassed
+              ? `Transition completed: ${step.label}`
+              : `Transition completed with validation issues: ${step.label}`,
             phase: 'validating',
             kind: 'validation',
             runId: context.runId,
@@ -1851,6 +1835,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             currentPathStepTotal: path.steps.length,
             validationSummary: currentValidationSummary,
             validationResults: currentValidationResults,
+            blockedReason: validationIssueReason,
           })
 
           break
@@ -2114,6 +2099,21 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             })
           }
 
+          batchBoundary = 'observation-required'
+          batchToolSummaries.push(message)
+          latestObservation = {
+            summary: this.buildObservationSummary({
+              before: batchStartedFrom,
+              after: lastState ?? batchStartedFrom,
+              toolNames: batchToolNames,
+              toolSummaries: batchToolSummaries,
+              boundary: batchBoundary,
+            }),
+            source: 'tool-batch',
+            boundary: batchBoundary,
+            toolNames: [...batchToolNames],
+          }
+
           if (this.loopAgent.appendFunctionResponses) {
             const failedResponse: LoopFunctionResponse = {
               name: activeFunctionCall?.name ?? 'unknown_tool',
@@ -2141,6 +2141,10 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
                 actionCursor,
                 coordinateSpace: lastState?.pageState.viewport.coordinateSpace ?? runtimeState.coordinateSpace,
                 viewport: lastState?.pageState.viewport ?? runtimeState.viewport,
+                lastObservationSummary: latestObservation.summary,
+                lastObservationSource: latestObservation.source,
+                lastBatchToolNames: latestObservation.toolNames,
+                lastBatchBoundary: latestObservation.boundary,
               },
               observationSummary: latestObservation.summary,
               observationSource: latestObservation.source,
@@ -2172,9 +2176,9 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
           this.emitLiveEvent({
             type: 'operator.tool.failed',
-            level: 'error',
+            level: 'info',
             message,
-            phase: 'failed',
+            phase: 'operating',
             kind: 'issue',
             runId: context.runId,
             pathId: context.pathId,
@@ -2194,30 +2198,12 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             validationResults: currentValidationResults,
             meta: {
               toolName: activeFunctionCall?.name,
+              recoverable: true,
             },
           })
 
-          transitionResults.push({
-            step,
-            result: 'fail',
-            blockedReason: message,
-            failureCode: 'operator-action-failed',
-            terminationReason: 'operator-error',
-            validationResults: currentValidationResults,
-            validationSummary: currentValidationSummary,
-            trace,
-            evidence: {
-              domSummary: `current_url=${lastState?.url ?? page.url()}`,
-            },
-          })
-          return {
-            result: 'fail',
-            blockedReason: message,
-            failureCode: 'operator-action-failed',
-            terminationReason: 'operator-error',
-            transitionResults,
-            finalStateId: latestStableStateId,
-          }
+          actionCursor += 1
+          continue
         }
       }
 

@@ -1,4 +1,4 @@
-import type { UserTestingInfo } from './operatorExecutionContracts'
+import type { PathActorHint, UserTestingInfo } from './operatorExecutionContracts'
 
 export interface LoopValidationInput {
   id: string
@@ -107,6 +107,7 @@ export interface LoopDecisionInput {
     name: string
     semanticGoal: string
     totalSteps: number
+    actorHint?: PathActorHint
     steps: LoopPathStep[]
   }
   currentTransition: {
@@ -166,10 +167,9 @@ export type LoopFailureCode =
   | 'operator-timeout'
   | 'operator-no-progress'
   | 'operator-action-failed'
-  | 'validation-failed'
   | 'unexpected-error'
 
-export type LoopTerminationReason = 'completed' | 'max-iterations' | 'operator-error' | 'validation-failed' | 'criteria-unmet'
+export type LoopTerminationReason = 'completed' | 'max-iterations' | 'operator-error' | 'criteria-unmet'
 
 export interface LoopDecision {
   kind: 'complete' | 'advance' | 'act' | 'fail'

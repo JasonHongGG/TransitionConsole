@@ -171,7 +171,7 @@ export class DefaultPathNarratorAgent implements PathNarratorAgentContract {
       taskDescription: parsed?.narrative?.taskDescription?.trim() || `Execute path ${path.name}`,
       executionStrategy:
         parsed?.narrative?.executionStrategy?.trim() ||
-        'Keep one browser session for the full path and advance only when the current transition validations are satisfied.',
+        `Keep one browser session for the full path. Use path.actorHint as the actor identity reference when login or role-specific behavior is required. Continue when the UI flow is still operable; if validations fail or remain pending, record the validation issues clearly and keep executing instead of blocking the path.`,
       validations: transitions.flatMap((transition) => transition.validations),
       transitions,
     }

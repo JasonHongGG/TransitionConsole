@@ -1,9 +1,10 @@
-import type { AgentMode, DiagramValidation, RuntimeEdge } from '../types'
+import type { AgentMode, DiagramValidation, PathActorHint, RuntimeEdge } from '../types'
 
 export interface PlannedPathDraft {
   pathId?: string
   name?: string
   semanticGoal?: string
+  actorHint?: PathActorHint
   edgeIds: string[]
 }
 
@@ -63,6 +64,7 @@ export interface PathPlannerContext {
     targetUrl: string | null
     specRaw: string | null
     diagrams: PlannerDiagramPayload[]
+    availableTestingRoles: string[]
   }
   previouslyPlannedPaths: PlannerHistoryPath[]
 }

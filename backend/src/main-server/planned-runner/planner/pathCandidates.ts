@@ -130,6 +130,7 @@ const toPlannedPath = (candidate: PlannerPathCandidate, ordinal: number): Planne
   id: candidate.draft.pathId?.trim() || `path.${ordinal}`,
   name: candidate.draft.name?.trim() || `Path ${ordinal}`,
   semanticGoal: candidate.draft.semanticGoal?.trim() || candidate.edges[candidate.edges.length - 1].semantic,
+  actorHint: candidate.draft.actorHint,
   steps: candidate.edges.map((edge, index) => toPlannedStep(edge, index + 1)),
 })
 

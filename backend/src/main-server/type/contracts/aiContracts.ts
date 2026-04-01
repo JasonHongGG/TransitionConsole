@@ -1,4 +1,4 @@
-import type { AgentMode, DiagramValidation, StepNarrativeInstruction } from '../../planned-runner/types'
+import type { AgentMode, DiagramValidation, PathActorHint, StepNarrativeInstruction } from '../../planned-runner/types'
 import type { PathPlannerContext, PlannedPathDraft } from '../../planned-runner/planner/types'
 
 export interface ApiOkResponse {
@@ -35,6 +35,7 @@ export interface PathNarratorRequestPath {
   id: string
   name: string
   semanticGoal: string
+  actorHint?: PathActorHint
   steps: PathNarratorRequestStep[]
 }
 

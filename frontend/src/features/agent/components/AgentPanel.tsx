@@ -23,7 +23,7 @@ interface AgentPanelProps {
   canStop: boolean
   canReset: boolean
   statusMessage: string
-  statusTone: 'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'error'
+  statusTone: 'idle' | 'waiting' | 'running' | 'paused' | 'success' | 'warning' | 'error'
   waitingElapsedSeconds: number
   plannerRound: number
   completed: boolean
@@ -170,6 +170,8 @@ export const AgentPanel = ({
           ? 'Paused'
           : statusTone === 'success'
             ? 'Success'
+            : statusTone === 'warning'
+              ? 'Warning'
             : statusTone === 'error'
               ? 'Error'
               : 'Idle'
@@ -205,6 +207,24 @@ export const AgentPanel = ({
       .reverse()
       .find((path) => path.status !== 'pending') ?? null
   }, [plannedStatus])
+
+  const activePathResultLabel = activePath
+    ? activePath.status === 'fail' || Boolean(activePath.blockedReason)
+      ? 'Execution Failed'
+      : activePath.status === 'running'
+        ? (activePath.hasValidationWarnings
+            ? `Running with ${activePath.validationWarningCount} validation issue${activePath.validationWarningCount === 1 ? '' : 's'}`
+            : 'Running')
+        : activePath.status === 'paused'
+          ? (activePath.hasValidationWarnings
+              ? `Paused with ${activePath.validationWarningCount} validation issue${activePath.validationWarningCount === 1 ? '' : 's'}`
+              : 'Paused')
+          : activePath.hasValidationWarnings
+            ? `Passed with ${activePath.validationWarningCount} validation issue${activePath.validationWarningCount === 1 ? '' : 's'}`
+            : activePath.status === 'pass'
+          ? 'Pass'
+            : 'Pending'
+    : 'Not started yet'
 
   const testingInfoModal =
     showTestingInfoModal && typeof document !== 'undefined'
@@ -755,6 +775,20 @@ export const AgentPanel = ({
                       : 'No active batch'}
                   </strong>
                 </div>
+                <div className="agent-console-summary-row">
+                  <span>Path Result</span>
+                  <strong>
+                    {activePath?.status === 'fail' || activePath?.blockedReason ? (
+                      <span className="validation-status-tag fail">{activePathResultLabel}</span>
+                    ) : activePath?.hasValidationWarnings ? (
+                      <span className="validation-status-tag warning">{activePathResultLabel}</span>
+                    ) : activePath?.status === 'pass' ? (
+                      <span className="validation-status-tag pass">{activePathResultLabel}</span>
+                    ) : (
+                      activePathResultLabel
+                    )}
+                  </strong>
+                </div>
                 <div className="agent-console-summary-row multiline">
                   <span>Blocked Reason</span>
                   <strong>{overview.blockedReason ?? 'None'}</strong>
@@ -772,7 +806,7 @@ export const AgentPanel = ({
                   {issues.map((issue) => (
                     <li key={issue.id} className={`agent-issue-row ${issue.severity}`}>
                       <div className="agent-issue-topline">
-                        <span className={`validation-status-tag ${issue.severity === 'error' ? 'fail' : issue.severity === 'warning' ? 'pending' : 'pass'}`}>
+                        <span className={`validation-status-tag ${issue.severity === 'error' ? 'fail' : issue.severity === 'warning' ? 'warning' : 'pass'}`}>
                           {issue.severity.toUpperCase()}
                         </span>
                         <strong>{issue.title}</strong>
@@ -803,7 +837,7 @@ export const AgentPanel = ({
                     <li key={entry.id} className={`agent-timeline-row ${entry.level}`}>
                       <div className="agent-timeline-head">
                         <span className="agent-timeline-time">{formatTime(entry.timestamp)}</span>
-                        <span className={`validation-status-tag ${entry.level === 'error' ? 'fail' : entry.kind === 'validation' ? 'pending' : 'pass'}`}>
+                        <span className={`validation-status-tag ${entry.level === 'error' ? 'fail' : entry.kind === 'validation' && (((entry.diagnostics.validationSummary?.fail ?? 0) > 0) || ((entry.diagnostics.validationSummary?.pending ?? 0) > 0)) ? 'warning' : 'pass'}`}>
                           {formatTimelineKind(entry)}
                         </span>
                         <strong>{entry.title}</strong>

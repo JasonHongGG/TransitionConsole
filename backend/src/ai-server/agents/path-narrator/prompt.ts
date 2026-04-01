@@ -34,6 +34,8 @@ export const PATH_NARRATOR_PROMPT = `【系統角色】
 1. narrative.summary：一句話描述這條 path 的核心目的。
 2. narrative.taskDescription：描述整條 path 的操作與完成標準，讓 operator-loop 知道這是一條連續流程，不是互相無關的點擊集合。
 3. narrative.executionStrategy：描述執行策略，例如是否應維持同一 session、何時應優先看 URL、畫面文字、權限狀態，以及何時可安全 advance。
+4. 若 path.actorHint 存在，executionStrategy 與各 step 的 taskDescription 必須把它視為此 path 的唯一執行身分依據。不要要求 operator-loop 在執行時重新猜角色；若流程需要不同角色，代表 planner 應拆成不同 path。
+5. validation fail 或 pending 不應被描述成必然中止條件；只要 UI 流程仍可操作，就應標記 validation issue 並繼續執行，而不是把它寫成 path 必須停止。
 
 【transition narrative 要求】
 每個 transitions[i] 必須包含：

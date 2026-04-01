@@ -13,8 +13,37 @@ type PathPlannerEnvelope = {
     name?: string
     pathName?: string
     semanticGoal?: string
+    actorHint?: {
+      role?: string
+      authState?: 'guest' | 'authenticated' | 'either'
+      reason?: string
+    } | null
     edgeIds?: string[]
   }>
+}
+
+const normalizeActorHint = (
+  value: NonNullable<PathPlannerEnvelope['paths']>[number]['actorHint'],
+  availableTestingRoles: string[],
+): PlannedPathDraft['actorHint'] | undefined => {
+  if (!value || typeof value !== 'object') return undefined
+
+  const role = typeof value.role === 'string' ? value.role.trim().toLowerCase() : ''
+  const authState = value.authState === 'guest' || value.authState === 'authenticated' || value.authState === 'either'
+    ? value.authState
+    : undefined
+  const reason = typeof value.reason === 'string' ? value.reason.trim() : ''
+
+  if (!role || !authState || !reason) return undefined
+  if (role !== 'guest' && availableTestingRoles.length > 0 && !availableTestingRoles.includes(role)) {
+    return undefined
+  }
+
+  return {
+    role,
+    authState,
+    reason,
+  }
 }
 
 export class DefaultPathPlannerAgent implements PathPlannerAgent {
@@ -72,6 +101,7 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
         targetUrl: context.context.targetUrl ?? '',
         specRaw: context.context.specRaw ?? '',
         diagrams: context.context.diagrams,
+        availableTestingRoles: context.context.availableTestingRoles,
       },
       previouslyPlannedPaths: context.previouslyPlannedPaths,
     }
@@ -91,6 +121,7 @@ export class DefaultPathPlannerAgent implements PathPlannerAgent {
         pathId: draft.pathId?.trim() || undefined,
         name: draft.pathName?.trim() || draft.name?.trim() || undefined,
         semanticGoal: draft.semanticGoal?.trim() || undefined,
+        actorHint: normalizeActorHint(draft.actorHint, context.context.availableTestingRoles),
         edgeIds: (draft.edgeIds ?? []).filter((id): id is string => typeof id === 'string' && id.length > 0),
       }))
       .filter((draft) => draft.edgeIds.length > 0)

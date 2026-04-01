@@ -1542,6 +1542,11 @@
   color: #b7f7d0;
 }
 
+.status-pill.warning {
+  background: rgba(230, 178, 62, 0.2);
+  color: #f8e8b0;
+}
+
 .status-pill.error {
   background: rgba(244, 103, 103, 0.2);
   color: #f7b7b7;
@@ -2428,6 +2433,12 @@
 }
 
 .validation-status-tag.pending {
+  color: #f8e8b0;
+  background: rgba(230, 178, 62, 0.16);
+  border-color: rgba(230, 178, 62, 0.35);
+}
+
+.validation-status-tag.warning {
   color: #f8e8b0;
   background: rgba(230, 178, 62, 0.16);
   border-color: rgba(230, 178, 62, 0.35);

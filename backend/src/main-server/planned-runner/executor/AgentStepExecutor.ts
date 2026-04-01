@@ -137,7 +137,7 @@ export class AgentStepExecutor implements PathExecutor {
       narrative: {
         summary: path.semanticGoal || path.name,
         taskDescription: `Execute path ${path.name}`,
-        executionStrategy: 'Use a single browser session for the whole path. Advance only when the current transition validations pass.',
+        executionStrategy: 'Use a single browser session for the whole path. Treat path.actorHint as the actor identity for this path whenever login or role-specific behavior is required. Continue when the UI flow is still operable, even if some validations fail or remain pending, but record those validation issues explicitly instead of treating them as execution blockers.',
         validations: Array.from(flattenedValidations.values()),
         transitions,
       },
