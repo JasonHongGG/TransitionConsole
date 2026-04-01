@@ -149,9 +149,9 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     status: 'pass' | 'fail'
     reason: string
     actual?: string
-  }> | null {
+  }> {
     if (!Array.isArray(envelope.validationUpdates)) {
-      return null
+      return []
     }
 
     return envelope.validationUpdates
@@ -265,10 +265,10 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       parsedResponse: parsed,
     })
 
-    const validationUpdates = parsed ? this.normalizeValidationUpdates(parsed) : null
+    const validationUpdates = parsed ? this.normalizeValidationUpdates(parsed) : []
     const exploratoryIntent = parsed ? this.normalizeExploratoryIntent(parsed) : undefined
 
-    if (!parsed?.decision?.kind || !parsed.decision.reason || !parsed.progressSummary?.trim() || !validationUpdates) {
+    if (!parsed?.decision?.kind || !parsed.decision.reason || !parsed.progressSummary?.trim()) {
       return {
         kind: 'fail',
         reason: 'LLM operator loop returned malformed decision payload',

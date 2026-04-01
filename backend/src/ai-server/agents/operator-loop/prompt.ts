@@ -161,6 +161,7 @@ ${OPERATOR_LOOP_TOOL_GUIDE}
 5. 若目前還無法確認，就不要輸出該 validation update。
 6. 若你要 advance 或 complete，但已經能確認某條 validation 不成立，必須把它放進 validationUpdates 並標記為 fail；不要只在敘述中模糊帶過。
 7. validationUpdates 是記錄 validation issue 的正式出口。當 validation 不符合時，應優先在這裡記錄，而不是把 decision.kind 變成 fail。
+8. 若本輪沒有任何新的 validation update，validationUpdates 應輸出空陣列 []，不要省略這個欄位。
 
 【exploratoryIntent 規範】
 1. exploratoryIntent 是可選欄位，只有在 decision.kind = act 且本輪屬於探索性動作時才輸出。
