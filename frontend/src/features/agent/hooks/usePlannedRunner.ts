@@ -255,6 +255,7 @@ const deriveEventPhase = (event: PlannedLiveEvent): ExecutionPhase => {
 
 const shouldSurfaceEvent = (event: PlannedLiveEvent): boolean => {
   if (event.level === 'error') return true
+  if (event.type === 'operator.decision' && isRecord(event.meta) && event.meta.exploratory === true) return true
   switch (event.type) {
     case 'run.starting':
     case 'run.started':
@@ -297,6 +298,9 @@ const eventTitle = (event: PlannedLiveEvent): string => {
     if (tag === 'path-narrator') return 'Narrator completed'
     if (tag === 'path-narrator-input') return 'Narrator input loaded'
     if (tag === 'operator-loop') return 'Operator decision ready'
+  }
+  if (event.type === 'operator.decision' && isRecord(event.meta) && event.meta.exploratory === true) {
+    return 'Exploration'
   }
   if (event.type.startsWith('path.') && event.pathName) return event.pathName
   if (event.stepLabel) return event.stepLabel
@@ -344,6 +348,17 @@ const toTimelineEntry = (event: PlannedLiveEvent): ExecutionTimelineEntry => ({
     validationResults: event.validationResults,
     toolName: isRecord(event.meta) && typeof event.meta.toolName === 'string' ? event.meta.toolName : undefined,
     url: isRecord(event.meta) && typeof event.meta.url === 'string' ? event.meta.url : undefined,
+    exploratory: isRecord(event.meta) && event.meta.exploratory === true,
+    exploratoryKind:
+      isRecord(event.meta) &&
+      (event.meta.exploratoryIntentKind === 'prerequisite' || event.meta.exploratoryIntentKind === 'recovery' || event.meta.exploratoryIntentKind === 'diagnostic')
+        ? event.meta.exploratoryIntentKind
+        : undefined,
+    exploratorySummary: isRecord(event.meta) && typeof event.meta.exploratoryIntentSummary === 'string' ? event.meta.exploratoryIntentSummary : undefined,
+    exploratoryActionCount: isRecord(event.meta) && typeof event.meta.exploratoryActionCount === 'number' ? event.meta.exploratoryActionCount : undefined,
+    exploratoryActionLimit: isRecord(event.meta) && typeof event.meta.exploratoryActionLimit === 'number' ? event.meta.exploratoryActionLimit : undefined,
+    noProgressRounds: isRecord(event.meta) && typeof event.meta.noProgressRounds === 'number' ? event.meta.noProgressRounds : undefined,
+    repeatedActionCount: isRecord(event.meta) && typeof event.meta.repeatedActionCount === 'number' ? event.meta.repeatedActionCount : undefined,
   },
   rawType: event.type,
 })
@@ -404,7 +419,9 @@ const buildOverview = (
     routeLabel: currentStateId || nextStateId ? `${currentStateId ?? 'Unknown'} → ${nextStateId ?? 'Pending'}` : 'Route not active yet',
     latestValidationLabel: latestValidationSummary ? formatValidationSummary(latestValidationSummary) : latestValidationLabel(timeline),
     latestOutcomeLabel:
-      activePath?.hasValidationWarnings && activePath.latestValidationSummary
+      activePath?.isExploring && activePath.latestExploratorySummary
+        ? `Exploring · ${activePath.latestExploratorySummary}${activePath.exploratoryActionLimit > 0 ? ` (${activePath.exploratoryActionCount}/${activePath.exploratoryActionLimit})` : ''}`
+        : activePath?.hasValidationWarnings && activePath.latestValidationSummary
         ? `Validation warning · ${formatValidationSummary(activePath.latestValidationSummary)}`
         : latestEntry
           ? `${kindLabel(latestEntry.kind)} · ${latestEntry.detail}`
@@ -752,9 +769,14 @@ export const usePlannedRunner = (
     }
 
     if (snapshot.running && snapshot.currentPathName) {
+      const activePath = resolveActivePath(snapshot)
       setControlPhase('running')
       setStatusTone('running')
-      setStatusMessage(`Running ${snapshot.currentPathName} · step ${snapshot.currentStepOrder ?? 0}/${snapshot.currentPathStepTotal ?? 0}`)
+      setStatusMessage(
+        activePath?.isExploring
+          ? `Exploring ${snapshot.currentPathName} · ${activePath.latestExploratorySummary ?? 'establishing immediate prerequisite'}`
+          : `Running ${snapshot.currentPathName} · step ${snapshot.currentStepOrder ?? 0}/${snapshot.currentPathStepTotal ?? 0}`,
+      )
       return
     }
 

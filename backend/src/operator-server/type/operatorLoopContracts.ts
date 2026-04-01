@@ -22,6 +22,13 @@ export interface LoopValidationUpdate {
   actual?: string
 }
 
+export type LoopExploratoryIntentKind = 'prerequisite' | 'recovery' | 'diagnostic'
+
+export interface LoopExploratoryIntent {
+  kind: LoopExploratoryIntentKind
+  summary: string
+}
+
 export interface LoopPathStep {
   id: string
   edgeId: string
@@ -141,6 +148,12 @@ export interface LoopDecisionInput {
     lastObservationSource?: 'initial' | 'tool-batch'
     lastBatchToolNames?: string[]
     lastBatchBoundary?: 'batch-complete' | 'page-changed' | 'observation-required' | 'stop-requested'
+    exploratoryActionCount: number
+    exploratoryActionLimit: number
+    noProgressRounds: number
+    repeatedActionCount: number
+    lastActionSignature?: string
+    currentExploratoryIntent?: LoopExploratoryIntent
   }
   screenshotBase64: string
   narrative: {
@@ -176,6 +189,7 @@ export interface LoopDecision {
   reason: string
   progressSummary: string
   validationUpdates: LoopValidationUpdate[]
+  exploratoryIntent?: LoopExploratoryIntent
   functionCalls?: LoopFunctionCall[]
   failureCode?: LoopFailureCode
   terminationReason?: LoopTerminationReason
@@ -218,6 +232,12 @@ export interface LoopAppendFunctionResponsesInput {
     lastObservationSource?: 'initial' | 'tool-batch'
     lastBatchToolNames?: string[]
     lastBatchBoundary?: 'batch-complete' | 'page-changed' | 'observation-required' | 'stop-requested'
+    exploratoryActionCount: number
+    exploratoryActionLimit: number
+    noProgressRounds: number
+    repeatedActionCount: number
+    lastActionSignature?: string
+    currentExploratoryIntent?: LoopExploratoryIntent
   }
   observationSummary?: string
   observationSource?: 'initial' | 'tool-batch'

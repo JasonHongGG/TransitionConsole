@@ -136,6 +136,24 @@ export class PlannedRunner {
     if (!runtime) return
     if (event.runId !== runtime.runId) return
 
+    const eventMeta = event.meta
+    const exploratory = typeof eventMeta?.exploratory === 'boolean' ? eventMeta.exploratory : false
+    const exploratoryActionCount = typeof eventMeta?.exploratoryActionCount === 'number'
+      ? eventMeta.exploratoryActionCount
+      : undefined
+    const exploratoryActionLimit = typeof eventMeta?.exploratoryActionLimit === 'number'
+      ? eventMeta.exploratoryActionLimit
+      : undefined
+    const exploratoryKind =
+      eventMeta?.exploratoryIntentKind === 'prerequisite' ||
+      eventMeta?.exploratoryIntentKind === 'recovery' ||
+      eventMeta?.exploratoryIntentKind === 'diagnostic'
+        ? eventMeta.exploratoryIntentKind
+        : undefined
+    const exploratorySummary = typeof eventMeta?.exploratoryIntentSummary === 'string'
+      ? eventMeta.exploratoryIntentSummary
+      : undefined
+
     if (event.type === 'transition.started') {
       if (event.currentStateId && runtime.nodeStatuses[event.currentStateId] === 'untested') {
         runtime.nodeStatuses[event.currentStateId] = 'running'
@@ -150,6 +168,18 @@ export class PlannedRunner {
       if (event.currentStepOrder != null) runtime.currentStepOrder = event.currentStepOrder
       if (event.currentPathStepTotal != null) runtime.currentPathStepTotal = event.currentPathStepTotal
       if (event.stepId) runtime.currentStepId = event.stepId
+      return
+    }
+
+    if (event.type === 'operator.decision' && event.pathId) {
+      this.updatePathSummary(event.pathId, runtime.currentBatchNumber, (summary) => ({
+        ...summary,
+        isExploring: exploratory,
+        exploratoryActionCount: exploratoryActionCount ?? summary.exploratoryActionCount,
+        exploratoryActionLimit: exploratoryActionLimit ?? summary.exploratoryActionLimit,
+        latestExploratoryKind: exploratoryKind ?? summary.latestExploratoryKind,
+        latestExploratorySummary: exploratorySummary ?? (exploratory ? event.message : summary.latestExploratorySummary),
+      }))
       return
     }
 
@@ -179,6 +209,7 @@ export class PlannedRunner {
           currentStateId: event.currentStateId ?? summary.currentStateId,
           nextStateId: event.nextStateId ?? summary.nextStateId,
           activeEdgeId: event.activeEdgeId ?? event.edgeId ?? summary.activeEdgeId,
+          isExploring: false,
           hasValidationWarnings: summary.hasValidationWarnings || validationWarningCount > 0,
           validationWarningCount: summary.validationWarningCount + validationWarningCount,
           latestValidationSummary: event.validationSummary ?? summary.latestValidationSummary,
@@ -208,6 +239,9 @@ export class PlannedRunner {
       activeEdgeId: path.steps[0]?.edgeId ?? null,
       hasValidationWarnings: false,
       validationWarningCount: 0,
+      isExploring: false,
+      exploratoryActionCount: 0,
+      exploratoryActionLimit: 0,
     }))
   }
 
@@ -584,6 +618,11 @@ export class PlannedRunner {
       currentStateId: path.steps[0]?.fromStateId ?? null,
       nextStateId: path.steps[0]?.toStateId ?? null,
       activeEdgeId: path.steps[0]?.edgeId ?? null,
+      isExploring: false,
+      exploratoryActionCount: 0,
+      exploratoryActionLimit: 0,
+      latestExploratoryKind: undefined,
+      latestExploratorySummary: undefined,
       blockedReason: undefined,
     }))
 
@@ -685,6 +724,7 @@ export class PlannedRunner {
         currentStateId: result.finalStateId,
         nextStateId: path.steps[0]?.toStateId ?? null,
         activeEdgeId: finalTransition?.step.edgeId ?? summary.activeEdgeId,
+        isExploring: false,
         hasValidationWarnings: pathValidationWarnings.hasValidationWarnings,
         validationWarningCount: pathValidationWarnings.validationWarningCount,
         latestValidationSummary: pathValidationWarnings.latestValidationSummary,
@@ -746,6 +786,7 @@ export class PlannedRunner {
       currentStateId: result.finalStateId,
       nextStateId: null,
       activeEdgeId: finalTransition?.step.edgeId ?? null,
+      isExploring: false,
       hasValidationWarnings: pathValidationWarnings.hasValidationWarnings,
       validationWarningCount: pathValidationWarnings.validationWarningCount,
       latestValidationSummary: pathValidationWarnings.latestValidationSummary,

@@ -8,6 +8,8 @@ export type ValidationResolution = 'newly-verified' | 'reused-cache' | 'unverifi
 
 export type AgentMode = 'llm' | 'mock'
 
+export type ExploratoryActionKind = 'prerequisite' | 'recovery' | 'diagnostic'
+
 export interface RunnerAgentModes {
   pathPlanner: AgentMode
   pathNarrator: AgentMode
@@ -101,6 +103,11 @@ export interface PathExecutionSummary {
   activeEdgeId: string | null
   hasValidationWarnings: boolean
   validationWarningCount: number
+  isExploring: boolean
+  exploratoryActionCount: number
+  exploratoryActionLimit: number
+  latestExploratoryKind?: ExploratoryActionKind
+  latestExploratorySummary?: string
   latestValidationSummary?: StepValidationSummary
   latestValidationResults?: StepValidationResult[]
   blockedReason?: string
@@ -194,6 +201,13 @@ export interface ExecutionEventDiagnostics {
   validationResults?: StepValidationResult[]
   toolName?: string
   url?: string
+  exploratory?: boolean
+  exploratoryKind?: ExploratoryActionKind
+  exploratorySummary?: string
+  exploratoryActionCount?: number
+  exploratoryActionLimit?: number
+  noProgressRounds?: number
+  repeatedActionCount?: number
 }
 
 export interface PlannedRunPlan {

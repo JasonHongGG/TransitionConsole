@@ -17,6 +17,7 @@ export const PATH_NARRATOR_PROMPT = `【系統角色】
 8. executionStrategy 必須描述整條 path 的執行策略，而不是單一步驟的細節。
 9. 不可輸出與 path 無關的測試、驗證、或跨路徑假設。
 10. 不可輸出 terminationReason、decision、functionCalls；這些屬於 operator-loop，不屬於 narrator。
+11. 不可把缺少立即前提寫成「必然失敗」；operator-loop 可能先做有限的探索性動作來建立前提，再完成同一個 transition。
 
 【推導原則】
 1. 先理解 path.semanticGoal 與 path.name，再結合每個 step 的 from、to、summary、semanticGoal。
@@ -36,12 +37,14 @@ export const PATH_NARRATOR_PROMPT = `【系統角色】
 3. narrative.executionStrategy：描述執行策略，例如是否應維持同一 session、何時應優先看 URL、畫面文字、權限狀態，以及何時可安全 advance。
 4. 若 path.actorHint 存在，executionStrategy 與各 step 的 taskDescription 必須把它視為此 path 的唯一執行身分依據。不要要求 operator-loop 在執行時重新猜角色；若流程需要不同角色，代表 planner 應拆成不同 path。
 5. validation fail 或 pending 不應被描述成必然中止條件；只要 UI 流程仍可操作，就應標記 validation issue 並繼續執行，而不是把它寫成 path 必須停止。
+6. executionStrategy 應允許 operator-loop 在同一 session 內做「有限且與主線直接相關」的探索性動作，用來建立立即前提、修正偏離、或補足證據；但不可暗示它應任意擴散探索。
 
 【transition narrative 要求】
 每個 transitions[i] 必須包含：
 1. stepId：必須對應輸入 path.steps[i].id。
 2. summary：一句話描述該 transition 想達成的狀態變化。
 3. taskDescription：描述 operator-loop 在這個 transition 需要完成的具體事情，以及完成訊號。
+  taskDescription 應聚焦「目標狀態與完成訊號」，不要把唯一手段寫死；若直接控制可能暫時不存在，也不要把它表述成硬性失敗條件。
 4. validations：
    - 至少 1 筆。
    - 每筆需包含 id、type、description。

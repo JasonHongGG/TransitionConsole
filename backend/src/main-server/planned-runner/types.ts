@@ -26,6 +26,8 @@ export type ValidationType = (typeof VALIDATION_TYPES)[number]
 
 export type AgentMode = 'llm' | 'mock'
 
+export type ExploratoryActionKind = 'prerequisite' | 'recovery' | 'diagnostic'
+
 export interface RunnerAgentModes {
   pathPlanner: AgentMode
   pathNarrator: AgentMode
@@ -289,6 +291,11 @@ export interface PathExecutionSummary {
   activeEdgeId: string | null
   hasValidationWarnings: boolean
   validationWarningCount: number
+  isExploring: boolean
+  exploratoryActionCount: number
+  exploratoryActionLimit: number
+  latestExploratoryKind?: ExploratoryActionKind
+  latestExploratorySummary?: string
   latestValidationSummary?: StepValidationSummary
   latestValidationResults?: StepValidationResult[]
   blockedReason?: string

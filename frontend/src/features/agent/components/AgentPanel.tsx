@@ -211,6 +211,8 @@ export const AgentPanel = ({
   const activePathResultLabel = activePath
     ? activePath.status === 'fail' || Boolean(activePath.blockedReason)
       ? 'Execution Failed'
+      : activePath.isExploring
+        ? `Exploring${activePath.exploratoryActionLimit > 0 ? ` ${activePath.exploratoryActionCount}/${activePath.exploratoryActionLimit}` : ''}`
       : activePath.status === 'running'
         ? (activePath.hasValidationWarnings
             ? `Running with ${activePath.validationWarningCount} validation issue${activePath.validationWarningCount === 1 ? '' : 's'}`

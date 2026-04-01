@@ -18,6 +18,7 @@ import type {
   BrowserSession,
   LoopCoordinateSpace,
   LoopElementState,
+  LoopExploratoryIntent,
   LoopFunctionCall,
   LoopFunctionResponse,
   LoopPageState,
@@ -259,6 +260,7 @@ const parseIntegerEnv = (value: string | undefined, fallback: number): number =>
 const toElapsedSeconds = (elapsedMs: number): number => Math.max(1, Math.ceil(elapsedMs / 1000))
 
 const NORMALIZED_COORDINATE_SCALE = 1000
+const OPERATOR_LOOP_EXPLORATORY_ACTION_LIMIT = parseIntegerEnv(process.env.OPERATOR_LOOP_EXPLORATORY_ACTION_LIMIT, 4)
 const DEFAULT_VIEWPORT_WIDTH = parseIntegerEnv(process.env.OPERATOR_BROWSER_VIEWPORT_WIDTH, 1440)
 const DEFAULT_VIEWPORT_HEIGHT = parseIntegerEnv(process.env.OPERATOR_BROWSER_VIEWPORT_HEIGHT, 1200)
 const COORDINATE_SPACE: LoopCoordinateSpace = 'viewport-normalized-1000'
@@ -570,6 +572,77 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     } catch {
       return previous.url !== next.url
     }
+  }
+
+  private buildStateFingerprint(state: CurrentState): string {
+    const normalize = (value: string | null | undefined, maxLength = 60): string =>
+      (value ?? '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, maxLength)
+
+    const elementFingerprint = (element: LoopElementState | null): string => {
+      if (!element) return 'none'
+      return [
+        normalize(element.tagName, 20),
+        normalize(element.role, 20),
+        normalize(element.identifier, 40),
+        normalize(element.name, 40),
+        normalize(element.placeholder, 40),
+        normalize(element.text, 40),
+        element.disabled ? 'disabled' : 'enabled',
+        element.focused ? 'focused' : 'blurred',
+        element.visible ? 'visible' : 'hidden',
+        element.checked === null ? 'unchecked-state-unknown' : element.checked ? 'checked' : 'unchecked',
+        element.valueState,
+        `${element.rect.normalizedCenterX}:${element.rect.normalizedCenterY}`,
+      ].join('|')
+    }
+
+    const listFingerprint = (elements: LoopElementState[]): string =>
+      elements
+        .slice(0, 8)
+        .map((element) => elementFingerprint(element))
+        .join('||')
+
+    return [
+      normalize(state.url, 160),
+      normalize(state.title, 80),
+      elementFingerprint(state.pageState.activeElement),
+      listFingerprint(state.pageState.inputs),
+      listFingerprint(state.pageState.buttons),
+      listFingerprint(state.pageState.links),
+      listFingerprint(state.pageState.clickables),
+    ].join('###')
+  }
+
+  private didBatchMakeProgress(options: {
+    before: CurrentState
+    after: CurrentState
+    boundary: BatchBoundary
+    validationUpdates: Array<{ id: string; status: 'pass' | 'fail'; reason: string; actual?: string }>
+  }): boolean {
+    if (options.validationUpdates.length > 0) {
+      return true
+    }
+
+    if (options.boundary === 'page-changed') {
+      return true
+    }
+
+    return this.buildStateFingerprint(options.before) !== this.buildStateFingerprint(options.after)
+  }
+
+  private buildActionSignature(functionCalls: LoopFunctionCall[], exploratoryIntent?: LoopExploratoryIntent): string {
+    const toolSignature = functionCalls
+      .map((call) => `${call.name}:${JSON.stringify(call.args)}`)
+      .join(' -> ')
+
+    if (!exploratoryIntent) {
+      return `direct|${toolSignature}`
+    }
+
+    return `${exploratoryIntent.kind}|${exploratoryIntent.summary}|${toolSignature}`
   }
 
   private buildObservationSummary(options: {
@@ -1548,6 +1621,12 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
       const validations = rawValidations.map((v) => ({ ...v, observability: this.inferObservability(v) }))
       const validationsById = new Map(validations.map((validation) => [validation.id, validation] as const))
       const trace: PathTransitionResult['trace'] = []
+      const exploratoryActionLimit = OPERATOR_LOOP_EXPLORATORY_ACTION_LIMIT
+      let exploratoryActionCount = 0
+      let noProgressRounds = 0
+      let repeatedActionCount = 0
+      let lastActionSignature: string | undefined
+      let currentExploratoryIntent: LoopExploratoryIntent | undefined
 
       this.emitLiveEvent({
         type: 'transition.started',
@@ -1591,6 +1670,12 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           lastObservationSource: latestObservation.source,
           lastBatchToolNames: latestObservation.toolNames,
           lastBatchBoundary: latestObservation.boundary,
+          exploratoryActionCount,
+          exploratoryActionLimit,
+          noProgressRounds,
+          repeatedActionCount,
+          lastActionSignature,
+          currentExploratoryIntent,
         }
 
         if (this.getInterruptReason(context.runId) === 'reset') {
@@ -1732,6 +1817,24 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
         const decisionElapsedMs = Date.now() - decisionStartedAt
         const decisionElapsedSeconds = toElapsedSeconds(decisionElapsedMs)
 
+        const nextExploratoryActionCount = decision.kind === 'act' && decision.exploratoryIntent
+          ? exploratoryActionCount + 1
+          : exploratoryActionCount
+        const explorationBudgetExceeded = decision.kind === 'act'
+          && Boolean(decision.exploratoryIntent)
+          && exploratoryActionCount >= exploratoryActionLimit
+        const effectiveDecision = explorationBudgetExceeded
+          ? {
+              kind: 'fail' as const,
+              reason: `Exploration budget exhausted for ${step.label}. ${exploratoryActionCount}/${exploratoryActionLimit} exploratory batches were already used without reaching the transition goal.`,
+              progressSummary: 'exploration budget exhausted before the current transition could return to the main line',
+              validationUpdates: decision.validationUpdates,
+              exploratoryIntent: decision.exploratoryIntent,
+              failureCode: 'operator-no-progress' as const,
+              terminationReason: 'criteria-unmet' as const,
+            }
+          : decision
+
         this.emitLiveEvent({
           type: 'agent.generation.completed',
           level: 'success',
@@ -1758,10 +1861,10 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
 
         this.emitLiveEvent({
           type: 'operator.decision',
-          level: decision.kind === 'fail' ? 'error' : 'info',
-          message: decision.reason,
-          phase: decision.kind === 'fail' ? 'failed' : 'operating',
-          kind: decision.kind === 'fail' ? 'issue' : 'progress',
+          level: effectiveDecision.kind === 'fail' ? 'error' : 'info',
+          message: effectiveDecision.reason,
+          phase: effectiveDecision.kind === 'fail' ? 'failed' : 'operating',
+          kind: effectiveDecision.kind === 'fail' ? 'issue' : 'progress',
           runId: context.runId,
           pathId: context.pathId,
           pathName: context.pathName,
@@ -1773,17 +1876,27 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           semanticGoal: context.semanticGoal,
           iteration,
           actionCursor,
-          blockedReason: decision.kind === 'fail' ? decision.reason : undefined,
-          failureCode: decision.kind === 'fail' ? decision.failureCode : undefined,
-          terminationReason: decision.kind === 'fail' ? decision.terminationReason : undefined,
+          blockedReason: effectiveDecision.kind === 'fail' ? effectiveDecision.reason : undefined,
+          failureCode: effectiveDecision.kind === 'fail' ? effectiveDecision.failureCode : undefined,
+          terminationReason: effectiveDecision.kind === 'fail' ? effectiveDecision.terminationReason : undefined,
+          meta: {
+            exploratory: Boolean(decision.exploratoryIntent),
+            exploratoryIntentKind: decision.exploratoryIntent?.kind,
+            exploratoryIntentSummary: decision.exploratoryIntent?.summary,
+            exploratoryActionCount: nextExploratoryActionCount,
+            exploratoryActionLimit,
+            noProgressRounds,
+            repeatedActionCount,
+            lastActionSignature,
+          },
         })
 
-        this.applyValidationUpdates(context, step, validationsById, validationLedger, decision.validationUpdates, iteration)
+        this.applyValidationUpdates(context, step, validationsById, validationLedger, effectiveDecision.validationUpdates, iteration)
 
         const currentValidationResults = this.buildValidationResults(context, step, validations, validationLedger, iteration)
         const currentValidationSummary = this.summarizeValidationResults(currentValidationResults)
 
-        if (decision.kind === 'advance' || decision.kind === 'complete') {
+        if (effectiveDecision.kind === 'advance' || effectiveDecision.kind === 'complete') {
           const visualResults = currentValidationResults.filter((r) => r.observability !== 'deferred')
           const visualSummary = this.summarizeValidationResults(visualResults)
           const allVisualPassed = visualSummary.total === 0 || visualSummary.pass === visualSummary.total
@@ -1794,9 +1907,9 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             iteration,
             url: runtimeState.url,
             observation: JSON.stringify(runtimeState),
-            action: decision.kind === 'complete' ? 'path_complete' : 'advance_transition',
+            action: effectiveDecision.kind === 'complete' ? 'path_complete' : 'advance_transition',
             outcome: 'success',
-            detail: validationIssueReason ?? decision.reason,
+            detail: validationIssueReason ?? effectiveDecision.reason,
           })
 
           latestStableStateId = step.toStateId
@@ -1841,13 +1954,13 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           break
         }
 
-        if (decision.kind === 'fail') {
+        if (effectiveDecision.kind === 'fail') {
           transitionResults.push({
             step,
             result: 'fail',
-            blockedReason: decision.reason,
-            failureCode: decision.failureCode ?? 'operator-no-progress',
-            terminationReason: decision.terminationReason ?? 'criteria-unmet',
+            blockedReason: effectiveDecision.reason,
+            failureCode: effectiveDecision.failureCode ?? 'operator-no-progress',
+            terminationReason: effectiveDecision.terminationReason ?? 'criteria-unmet',
             validationResults: currentValidationResults,
             validationSummary: currentValidationSummary,
             trace,
@@ -1857,15 +1970,15 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
           })
           return {
             result: 'fail',
-            blockedReason: decision.reason,
-            failureCode: decision.failureCode ?? 'operator-no-progress',
-            terminationReason: decision.terminationReason ?? 'criteria-unmet',
+            blockedReason: effectiveDecision.reason,
+            failureCode: effectiveDecision.failureCode ?? 'operator-no-progress',
+            terminationReason: effectiveDecision.terminationReason ?? 'criteria-unmet',
             transitionResults,
             finalStateId: latestStableStateId,
           }
         }
 
-        const nextFunctionCalls = this.normalizeFunctionCallsFromDecision(decision)
+        const nextFunctionCalls = this.normalizeFunctionCallsFromDecision(effectiveDecision)
         if (nextFunctionCalls.length === 0) {
           transitionResults.push({
             step,
@@ -1888,6 +2001,16 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             transitionResults,
             finalStateId: latestStableStateId,
           }
+        }
+
+        const actionSignature = this.buildActionSignature(nextFunctionCalls, effectiveDecision.exploratoryIntent)
+        repeatedActionCount = actionSignature === lastActionSignature ? repeatedActionCount + 1 : 1
+        lastActionSignature = actionSignature
+        if (effectiveDecision.exploratoryIntent) {
+          exploratoryActionCount += 1
+          currentExploratoryIntent = effectiveDecision.exploratoryIntent
+        } else {
+          currentExploratoryIntent = undefined
         }
 
         const functionResponses: LoopFunctionResponse[] = []
@@ -1967,7 +2090,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
                 description: functionCall.description,
               },
               outcome: 'success',
-              detail: decision.reason,
+              detail: effectiveDecision.reason,
             })
 
             this.emitLiveEvent({
@@ -2042,6 +2165,15 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             toolNames: [...batchToolNames],
           }
 
+          noProgressRounds = this.didBatchMakeProgress({
+            before: batchStartedFrom,
+            after: lastState,
+            boundary: batchBoundary,
+            validationUpdates: effectiveDecision.validationUpdates,
+          })
+            ? 0
+            : noProgressRounds + 1
+
           if (this.loopAgent.appendFunctionResponses) {
             await this.loopAgent.appendFunctionResponses({
               agentMode: context.agentModes?.operatorLoop,
@@ -2063,6 +2195,12 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
                 lastObservationSource: latestObservation.source,
                 lastBatchToolNames: latestObservation.toolNames,
                 lastBatchBoundary: latestObservation.boundary,
+                exploratoryActionCount,
+                exploratoryActionLimit,
+                noProgressRounds,
+                repeatedActionCount,
+                lastActionSignature,
+                currentExploratoryIntent,
               },
               observationSummary: latestObservation.summary,
               observationSource: latestObservation.source,
@@ -2113,6 +2251,7 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             boundary: batchBoundary,
             toolNames: [...batchToolNames],
           }
+          noProgressRounds += 1
 
           if (this.loopAgent.appendFunctionResponses) {
             const failedResponse: LoopFunctionResponse = {
@@ -2145,6 +2284,12 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
                 lastObservationSource: latestObservation.source,
                 lastBatchToolNames: latestObservation.toolNames,
                 lastBatchBoundary: latestObservation.boundary,
+                exploratoryActionCount,
+                exploratoryActionLimit,
+                noProgressRounds,
+                repeatedActionCount,
+                lastActionSignature,
+                currentExploratoryIntent,
               },
               observationSummary: latestObservation.summary,
               observationSource: latestObservation.source,

@@ -7,6 +7,7 @@ import type {
   LoopAppendFunctionResponsesInput,
   LoopDecision,
   LoopDecisionInput,
+  LoopExploratoryIntent,
   LoopFunctionCall,
 } from '../../../operator-server/type/operatorLoopContracts'
 import type { OperatorLoopDecisionAgent as OperatorLoopDecisionAgentContract } from '../types'
@@ -20,6 +21,10 @@ type LoopDecisionEnvelope = {
     reason?: string
     failureCode?: LoopDecision['failureCode']
     terminationReason?: LoopDecision['terminationReason']
+  }
+  exploratoryIntent?: {
+    kind?: 'prerequisite' | 'recovery' | 'diagnostic'
+    summary?: string
   }
   functionCalls?: Array<{
     name?: string
@@ -42,6 +47,7 @@ type ConversationDecisionPayload = {
     failureCode?: LoopDecision['failureCode']
     terminationReason?: LoopDecision['terminationReason']
   }
+  exploratoryIntent?: LoopExploratoryIntent
   functionCalls: LoopFunctionCall[]
   progressSummary: string
   validationUpdates: Array<{
@@ -159,6 +165,21 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       }))
   }
 
+  private normalizeExploratoryIntent(envelope: LoopDecisionEnvelope): LoopExploratoryIntent | undefined {
+    const kind = envelope.exploratoryIntent?.kind
+    const summary = envelope.exploratoryIntent?.summary?.trim()
+
+    if (!summary) return undefined
+    if (kind !== 'prerequisite' && kind !== 'recovery' && kind !== 'diagnostic') {
+      return undefined
+    }
+
+    return {
+      kind,
+      summary,
+    }
+  }
+
   async decide(input: LoopDecisionInput): Promise<LoopDecision> {
     const mode = input.agentMode ?? this.defaultMode
     const iteration = Number(input.runtimeState.iteration)
@@ -245,6 +266,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
     })
 
     const validationUpdates = parsed ? this.normalizeValidationUpdates(parsed) : null
+    const exploratoryIntent = parsed ? this.normalizeExploratoryIntent(parsed) : undefined
 
     if (!parsed?.decision?.kind || !parsed.decision.reason || !parsed.progressSummary?.trim() || !validationUpdates) {
       return {
@@ -282,6 +304,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         type: 'decision',
         payload: {
           decision: normalizedDecision,
+          exploratoryIntent,
           functionCalls,
           progressSummary: parsed.progressSummary,
           validationUpdates,
@@ -293,6 +316,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         reason: normalizedDecision.reason,
         progressSummary: parsed.progressSummary,
         validationUpdates,
+        exploratoryIntent,
         functionCalls,
       }
     }
@@ -302,6 +326,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       type: 'decision',
       payload: {
         decision: normalizedDecision,
+        exploratoryIntent,
         functionCalls: [],
         progressSummary: parsed.progressSummary,
         validationUpdates,
@@ -314,6 +339,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         reason: normalizedDecision.reason,
         progressSummary: parsed.progressSummary,
         validationUpdates,
+        exploratoryIntent,
         terminationReason: normalizedDecision.terminationReason,
       }
     }
@@ -324,6 +350,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
         reason: normalizedDecision.reason,
         progressSummary: parsed.progressSummary,
         validationUpdates,
+        exploratoryIntent,
         terminationReason: normalizedDecision.terminationReason ?? 'completed',
       }
     }
@@ -333,6 +360,7 @@ export class DefaultOperatorLoopDecisionAgent implements OperatorLoopDecisionAge
       reason: normalizedDecision.reason,
       progressSummary: parsed.progressSummary,
       validationUpdates,
+      exploratoryIntent,
       failureCode: normalizedDecision.failureCode ?? 'operator-no-progress',
       terminationReason: normalizedDecision.terminationReason ?? 'criteria-unmet',
     }

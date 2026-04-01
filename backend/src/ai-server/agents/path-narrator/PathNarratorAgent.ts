@@ -99,7 +99,7 @@ export class DefaultPathNarratorAgent implements PathNarratorAgentContract {
       stepId: step.id,
       edgeId: step.edgeId,
       summary: step.summary ?? `${step.from.stateId} -> ${step.to.stateId}`,
-      taskDescription: `完成 path transition：${step.summary ?? step.semanticGoal ?? step.edgeId}`,
+      taskDescription: `完成此 transition 的主目標：${step.summary ?? step.semanticGoal ?? step.edgeId}。若直接控制暫時不存在，可先在同一 session 內建立立即前提，再回到這個 transition 完成主目標。`,
       validations,
     }
   }
@@ -171,7 +171,7 @@ export class DefaultPathNarratorAgent implements PathNarratorAgentContract {
       taskDescription: parsed?.narrative?.taskDescription?.trim() || `Execute path ${path.name}`,
       executionStrategy:
         parsed?.narrative?.executionStrategy?.trim() ||
-        `Keep one browser session for the full path. Use path.actorHint as the actor identity reference when login or role-specific behavior is required. Continue when the UI flow is still operable; if validations fail or remain pending, record the validation issues clearly and keep executing instead of blocking the path.`,
+        `Keep one browser session for the full path. Use path.actorHint as the actor identity reference when login or role-specific behavior is required. Let operator-loop use bounded exploratory actions only when it needs to establish the current transition's immediate prerequisite, recover the main line, or gather stronger evidence. Continue when the UI flow is still operable; if validations fail or remain pending, record the validation issues clearly and keep executing instead of blocking the path.`,
       validations: transitions.flatMap((transition) => transition.validations),
       transitions,
     }
