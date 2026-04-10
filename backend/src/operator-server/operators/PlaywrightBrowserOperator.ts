@@ -704,6 +704,64 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
     }
   }
 
+  private buildNoConvergenceFailure(options: {
+    existingTransitionResults: PathTransitionResult[]
+    step: PlannedTransitionStep
+    trace: PathTransitionResult['trace']
+    validationResults: StepValidationResult[]
+    validationSummary: StepValidationSummary
+    currentUrl: string
+    finalStateId: string | null
+    exploratoryActionCount: number
+    exploratoryActionLimit: number
+    noProgressRounds: number
+    lastError?: string
+    failureCode?: 'operator-no-progress' | 'operator-action-failed'
+  }): BrowserOperatorRunResult {
+    const blockedReason = [
+      `Transition did not converge for ${options.step.label}.`,
+      `${options.exploratoryActionCount}/${options.exploratoryActionLimit} exploratory batches were used without reaching the goal.`,
+      `No progress was detected for ${options.noProgressRounds} round(s).`,
+      options.lastError ? `Last execution error: ${options.lastError}` : null,
+    ]
+      .filter((part): part is string => Boolean(part))
+      .join(' ')
+
+    const failureCode = options.failureCode ?? 'operator-no-progress'
+
+    return {
+      result: 'fail',
+      blockedReason,
+      failureCode,
+      terminationReason: 'criteria-unmet',
+      transitionResults: [
+        ...options.existingTransitionResults,
+        {
+          step: options.step,
+          result: 'fail',
+          blockedReason,
+          failureCode,
+          terminationReason: 'criteria-unmet',
+          validationResults: options.validationResults,
+          validationSummary: options.validationSummary,
+          trace: options.trace,
+          evidence: {
+            domSummary: `current_url=${options.currentUrl}`,
+          },
+        },
+      ],
+      finalStateId: options.finalStateId,
+    }
+  }
+
+  private shouldFailForNoConvergence(options: {
+    exploratoryActionCount: number
+    exploratoryActionLimit: number
+    noProgressRounds: number
+  }): boolean {
+    return options.exploratoryActionCount >= options.exploratoryActionLimit && options.noProgressRounds > 0
+  }
+
   private async closeSessionByKey(key: string): Promise<void> {
     const session = this.sessions.get(key)
     if (!session) return
@@ -2174,6 +2232,25 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
             ? 0
             : noProgressRounds + 1
 
+          if (this.shouldFailForNoConvergence({
+            exploratoryActionCount,
+            exploratoryActionLimit,
+            noProgressRounds,
+          })) {
+            return this.buildNoConvergenceFailure({
+              existingTransitionResults: transitionResults,
+              step,
+              trace,
+              validationResults: currentValidationResults,
+              validationSummary: currentValidationSummary,
+              currentUrl: lastState.url,
+              finalStateId: latestStableStateId,
+              exploratoryActionCount,
+              exploratoryActionLimit,
+              noProgressRounds,
+            })
+          }
+
           if (this.loopAgent.appendFunctionResponses) {
             await this.loopAgent.appendFunctionResponses({
               agentMode: context.agentModes?.operatorLoop,
@@ -2346,6 +2423,27 @@ export class PlaywrightBrowserOperator implements BrowserOperator {
               recoverable: true,
             },
           })
+
+          if (this.shouldFailForNoConvergence({
+            exploratoryActionCount,
+            exploratoryActionLimit,
+            noProgressRounds,
+          })) {
+            return this.buildNoConvergenceFailure({
+              existingTransitionResults: transitionResults,
+              step,
+              trace,
+              validationResults: currentValidationResults,
+              validationSummary: currentValidationSummary,
+              currentUrl: lastState?.url ?? page.url(),
+              finalStateId: latestStableStateId,
+              exploratoryActionCount,
+              exploratoryActionLimit,
+              noProgressRounds,
+              lastError: message,
+              failureCode: 'operator-action-failed',
+            })
+          }
 
           actionCursor += 1
           continue

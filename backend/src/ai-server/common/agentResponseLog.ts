@@ -26,12 +26,25 @@ const timestampForFile = (): string => {
 
 const randomSuffix = (): string => Math.random().toString(36).slice(2, 8)
 
+const sanitizePathSegment = (value: string | undefined | null): string | null => {
+  if (!value) return null
+  const normalized = value.trim().replace(/[^a-zA-Z0-9._-]+/g, '-')
+  return normalized.length > 0 ? normalized.slice(0, 120) : null
+}
+
 export const writeAgentResponseLog = async (options: AgentResponseLogOptions): Promise<string> => {
   const baseDir = path.resolve(process.cwd(), 'logs', 'ai-agent-responses', options.agent)
-  await mkdir(baseDir, { recursive: true })
+  const runSegment = sanitizePathSegment(options.runId)
+  const pathSegment = sanitizePathSegment(options.pathId)
+  const logDir = runSegment
+    ? path.join(baseDir, runSegment, ...(pathSegment ? [pathSegment] : []))
+    : baseDir
 
-  const fileName = `${timestampForFile()}_${randomSuffix()}.json`
-  const filePath = path.join(baseDir, fileName)
+  await mkdir(logDir, { recursive: true })
+
+  const stepSegment = sanitizePathSegment(options.stepId)
+  const fileName = `${timestampForFile()}${stepSegment ? `_${stepSegment}` : ''}_${randomSuffix()}.json`
+  const filePath = path.join(logDir, fileName)
 
   const payload = {
     agent: options.agent,
