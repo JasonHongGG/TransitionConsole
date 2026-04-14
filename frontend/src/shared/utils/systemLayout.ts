@@ -17,6 +17,7 @@ export type SystemGroupRow = 'pages' | 'features' | 'other'
 
 interface SystemLayoutOptions {
   mode?: SystemLayoutMode
+  hiddenDiagramIds?: Iterable<string>
 }
 
 interface GroupNode extends SimulationNodeDatum {
@@ -125,6 +126,29 @@ const emptyLayout = (mode: SystemLayoutMode): SystemLayout => ({
   height: 0,
   bounds: { minX: 0, maxX: 0, minY: 0, maxY: 0 },
 })
+
+const filterSystemLayoutInput = (
+  diagrams: Diagram[],
+  connectors: DiagramConnector[],
+  hiddenDiagramIds?: Iterable<string>,
+) => {
+  const hiddenIds = hiddenDiagramIds ? new Set(hiddenDiagramIds) : null
+  if (!hiddenIds || hiddenIds.size === 0) {
+    return { diagrams, connectors }
+  }
+
+  const visibleDiagrams = diagrams.filter((diagram) => !hiddenIds.has(diagram.id))
+  const visibleDiagramIdSet = new Set(visibleDiagrams.map((diagram) => diagram.id))
+  const visibleConnectors = connectors.filter(
+    (connector) =>
+      visibleDiagramIdSet.has(connector.from.diagramId) && visibleDiagramIdSet.has(connector.to.diagramId),
+  )
+
+  return {
+    diagrams: visibleDiagrams,
+    connectors: visibleConnectors,
+  }
+}
 
 const toGroupRow = (diagram: Diagram): SystemGroupRow => {
   if (diagram.level === 'page') return 'pages'
@@ -706,13 +730,15 @@ export function computeSystemLayout(
   options: SystemLayoutOptions = {},
 ): SystemLayout {
   const mode = options.mode ?? 'interactive'
-  if (diagrams.length === 0) {
+  const filtered = filterSystemLayoutInput(diagrams, connectors, options.hiddenDiagramIds)
+
+  if (filtered.diagrams.length === 0) {
     return emptyLayout(mode)
   }
 
   if (mode === 'paper-full-system') {
-    return computePaperSystemLayout(diagrams, connectors)
+    return computePaperSystemLayout(filtered.diagrams, filtered.connectors)
   }
 
-  return computeInteractiveSystemLayout(diagrams, connectors)
+  return computeInteractiveSystemLayout(filtered.diagrams, filtered.connectors)
 }

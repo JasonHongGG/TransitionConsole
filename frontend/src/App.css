@@ -839,18 +839,188 @@
 .system-export-modal {
   width: min(1500px, 98vw);
   max-height: 94vh;
-  padding-bottom: 16px;
+  padding: 14px;
+  gap: 12px;
+}
+
+.system-export-modal-header {
+  align-items: flex-start;
+  gap: 10px;
 }
 
 .system-export-modal-header h3 {
   margin: 0;
+  font-size: 18px;
+  line-height: 1.1;
 }
 
 .system-export-modal-body {
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
+.system-export-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 340px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 0;
+  flex: 1;
+}
+
+.system-export-filter-panel {
+  min-width: 0;
+}
+
+.system-export-filter-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
+  padding: 18px;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(25, 33, 54, 0.96), rgba(16, 21, 35, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.system-export-filter-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.system-export-filter-card-header h4,
+.system-export-filter-section-header h4 {
+  margin: 4px 0 0;
+  font-size: 15px;
+}
+
+.system-export-selection-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 204, 119, 0.12);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.system-export-filter-help,
+.system-export-preview-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.system-export-filter-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.system-export-filter-actions .header-button {
+  flex: 1;
+  justify-content: center;
+}
+
+.system-export-filter-sections {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
   min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.system-export-filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.system-export-filter-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.system-export-filter-section-header span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.system-export-filter-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.system-export-diagram-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.system-export-diagram-option:hover {
+  border-color: rgba(255, 204, 119, 0.22);
+  background: rgba(255, 255, 255, 0.04);
+  transform: translateY(-1px);
+}
+
+.system-export-diagram-option.is-selected {
+  border-color: rgba(255, 204, 119, 0.24);
+  background: rgba(255, 204, 119, 0.08);
+}
+
+.system-export-diagram-option input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
+  accent-color: #f5c46b;
+}
+
+.system-export-diagram-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.system-export-diagram-option-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.system-export-diagram-option-meta {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.system-export-preview-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .system-export-field-label {
@@ -864,13 +1034,13 @@
 .system-export-title-block {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   min-width: 0;
 }
 
 .system-export-title-meta {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
 }
 
@@ -878,7 +1048,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 8px;
   margin-left: auto;
   flex-wrap: wrap;
 }
@@ -886,14 +1056,14 @@
 .system-export-inline-group {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .system-export-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px;
+  padding: 3px;
   border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.04);
@@ -904,9 +1074,14 @@
   border-radius: 10px;
   background: transparent;
   color: var(--muted);
-  padding: 8px 12px;
+  padding: 7px 10px;
   font-size: 12px;
   font-weight: 700;
+}
+
+.system-export-header-download {
+  min-height: 34px;
+  white-space: nowrap;
 }
 
 .system-export-toggle button.active {
@@ -922,7 +1097,7 @@
 .system-export-preview-shell {
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 10px;
   flex: 1;
   min-height: 0;
 }
@@ -945,6 +1120,30 @@
   display: block;
 }
 
+.system-export-empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+  color: #334155;
+}
+
+.system-export-empty-state strong {
+  font-size: 16px;
+}
+
+.system-export-empty-state span {
+  max-width: 360px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
 .system-export-graph .node {
   cursor: default;
 }
@@ -959,14 +1158,6 @@
   font-size: 13px;
 }
 
-.system-export-actions {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 10px;
-  margin-top: 4px;
-}
-
 .system-export-download-btn:disabled {
   opacity: 0.65;
   cursor: progress;
@@ -977,27 +1168,35 @@
     align-items: flex-start;
     flex-direction: column;
   }
+
+  .system-export-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .system-export-filter-card {
+    max-height: 320px;
+  }
 }
 
 @media (max-width: 760px) {
   .system-export-modal {
     width: min(100vw - 16px, 100vw);
-    padding: 16px;
+    padding: 12px;
+  }
+
+  .system-export-filter-card-header,
+  .system-export-preview-meta {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .system-export-filter-actions {
+    flex-direction: column;
   }
 
   .system-export-preview-frame {
     min-height: 320px;
     max-height: 62vh;
-  }
-
-  .system-export-actions {
-    justify-content: stretch;
-  }
-
-  .system-export-actions .header-button,
-  .system-export-actions .header-file {
-    flex: 1;
-    justify-content: center;
   }
 }
 
