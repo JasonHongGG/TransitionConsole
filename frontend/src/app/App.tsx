@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import '../App.css'
 import type { DiagramConnector, GraphData } from '../types'
 import { DiagramList, DiagramView } from '../features/diagram'
-import { SystemView } from '../features/system'
+import { SystemView, SystemViewExportModal } from '../features/system'
 import { AgentPanel, usePlannedRunner } from '../features/agent'
 import { TemporaryRunnerSettingsButtons } from '../features/agent/components/TemporaryRunnerSettingsButtons'
+import { createSystemRenderSnapshot, type SystemRenderSnapshot } from '../features/system/utils/systemGraph'
 
 type ViewMode = 'diagram' | 'system'
 type FocusMode = 'off' | 'current' | 'path'
@@ -22,6 +23,7 @@ function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [agentPanelCollapsed, setAgentPanelCollapsed] = useState(false)
   const [focusMode, setFocusMode] = useState<FocusMode>('path')
+  const [systemExportSnapshot, setSystemExportSnapshot] = useState<SystemRenderSnapshot | null>(null)
 
   useEffect(() => {
     const loadData = async () => {
@@ -58,7 +60,7 @@ function App() {
   }, [data])
 
   const visibleConnectors = useMemo(
-    () => connectors.filter((connector) => connector.type !== 'contains'),
+    () => connectors.filter((connector) => connector.type === 'invokes'),
     [connectors],
   )
 
@@ -119,12 +121,13 @@ function App() {
       setError(null)
       setFocusDiagramId(null)
       setViewMode('diagram')
+      setSystemExportSnapshot(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid JSON file')
     }
   }
 
-  const handleExport = () => {
+  const handleDataExport = () => {
     if (!data) {
       return
     }
@@ -136,6 +139,18 @@ function App() {
     link.download = `${data.system ?? 'transition-diagram'}.json`
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  const openSystemExportPreview = () => {
+    setSystemExportSnapshot(
+      createSystemRenderSnapshot({
+        coverage: agentRunner.coverage,
+        currentStateId: agentRunner.currentStateId,
+        activeEdgeId: agentRunner.activeEdgeId,
+        nextStateId: agentRunner.nextStateId,
+        isTesting: isTestingPhase,
+      }),
+    )
   }
 
   if (error) {
@@ -200,7 +215,7 @@ function App() {
             </span>
             匯入
           </label>
-          <button type="button" className="header-button" onClick={handleExport}>
+          <button type="button" className="header-button" onClick={handleDataExport}>
             <span className="button-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" className="icon">
                 <path
@@ -214,7 +229,7 @@ function App() {
                 <path d="M9.5 14.5 12 17l2.5-2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
               </svg>
             </span>
-            匯出
+            匯出資料
           </button>
           <TemporaryRunnerSettingsButtons
             getSettings={agentRunner.getTemporarySettings}
@@ -230,6 +245,7 @@ function App() {
               setError(null)
               setFocusDiagramId(null)
               setViewMode('diagram')
+              setSystemExportSnapshot(null)
             }}
           >
             <span className="button-icon" aria-hidden="true">
@@ -395,6 +411,26 @@ function App() {
                       ) : null}
                     </div>
                   ) : null}
+                  {viewMode === 'system' ? (
+                    <div className="panel-header-actions">
+                      <button type="button" className="header-file panel-export-button" onClick={openSystemExportPreview}>
+                        <span className="button-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24" className="icon">
+                            <path
+                              d="M7 4h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.6"
+                            />
+                            <path d="M14 4v5h5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                            <path d="M12 9v8" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                            <path d="M9.5 14.5 12 17l2.5-2.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+                          </svg>
+                        </span>
+                        預覽下載圖
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
                 {viewMode === 'diagram' && selectedDiagram ? (
                   <DiagramView
@@ -523,6 +559,16 @@ function App() {
             </div>
           </div>
         </div>
+      ) : null}
+
+      {systemExportSnapshot ? (
+        <SystemViewExportModal
+          diagrams={data.diagrams}
+          connectors={visibleConnectors}
+          snapshot={systemExportSnapshot}
+          systemName={data.spec.summary.productName || data.system}
+          onClose={() => setSystemExportSnapshot(null)}
+        />
       ) : null}
     </div>
   )

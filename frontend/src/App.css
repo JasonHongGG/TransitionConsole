@@ -294,6 +294,18 @@
   margin-bottom: 4px;
 }
 
+.panel-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.panel-export-button {
+  white-space: nowrap;
+}
+
 .panel-heading {
   display: flex;
   flex-direction: column;
@@ -820,6 +832,175 @@
   scrollbar-width: thin;
 }
 
+.system-export-backdrop {
+  z-index: 60;
+}
+
+.system-export-modal {
+  width: min(1500px, 98vw);
+  max-height: 94vh;
+  padding-bottom: 16px;
+}
+
+.system-export-modal-header h3 {
+  margin: 0;
+}
+
+.system-export-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.system-export-field-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.system-export-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.system-export-title-meta {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.system-export-header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.system-export-inline-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.system-export-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.system-export-toggle button {
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.system-export-toggle button.active {
+  background: rgba(255, 204, 119, 0.16);
+  color: var(--accent);
+}
+
+.system-export-toggle button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.system-export-preview-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+}
+
+.system-export-preview-frame {
+  position: relative;
+  width: 100%;
+  min-height: 640px;
+  max-height: min(82vh, 1040px);
+  flex: 1;
+  border-radius: 24px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #ffffff;
+}
+
+.system-export-preview-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.system-export-graph .node {
+  cursor: default;
+}
+
+.system-export-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(244, 103, 103, 0.28);
+  background: rgba(244, 103, 103, 0.1);
+  color: #ffb2b2;
+  font-size: 13px;
+}
+
+.system-export-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.system-export-download-btn:disabled {
+  opacity: 0.65;
+  cursor: progress;
+}
+
+@media (max-width: 1080px) {
+  .system-export-modal-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 760px) {
+  .system-export-modal {
+    width: min(100vw - 16px, 100vw);
+    padding: 16px;
+  }
+
+  .system-export-preview-frame {
+    min-height: 320px;
+    max-height: 62vh;
+  }
+
+  .system-export-actions {
+    justify-content: stretch;
+  }
+
+  .system-export-actions .header-button,
+  .system-export-actions .header-file {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
 .agent-float {
   position: absolute;
   right: 0;
@@ -989,6 +1170,128 @@
 
 .system-canvas .node {
   cursor: pointer;
+}
+
+.system-export-scene .system-export-bg {
+  fill: #ffffff;
+}
+
+.system-export-scene .diagram-group-bg {
+  fill: rgba(15, 23, 42, 0.03);
+  stroke: rgba(15, 23, 42, 0.12);
+  stroke-width: 1.8;
+}
+
+.system-export-scene .diagram-group-label {
+  fill: #334155;
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.system-export-scene .node rect {
+  fill: #ffffff;
+  stroke: rgba(15, 23, 42, 0.26);
+  stroke-width: 2;
+}
+
+.system-export-scene .node text {
+  fill: #0f172a;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.system-export-scene .node.start rect {
+  stroke: #0369a1;
+}
+
+.system-export-scene .node.end rect {
+  stroke: #b91c1c;
+}
+
+.system-export-scene .node.current rect,
+.system-export-scene .node.selected rect,
+.system-export-scene .node.node-status-running rect {
+  fill: rgba(245, 158, 11, 0.16);
+  stroke: #b7791f;
+  stroke-width: 2.6;
+}
+
+.system-export-scene .node.node-status-pass rect {
+  fill: rgba(116, 203, 177, 0.18);
+  stroke: #74cbb1;
+  stroke-width: 2.4;
+}
+
+.system-export-scene .node.node-status-fail rect {
+  fill: rgba(220, 38, 38, 0.11);
+  stroke: #dc2626;
+  stroke-width: 2.4;
+}
+
+.system-export-scene .node.node-status-untested rect {
+  fill: rgba(255, 255, 255, 0.98);
+  stroke: rgba(71, 85, 105, 0.45);
+  stroke-width: 1.9;
+}
+
+.system-export-scene .edge-path,
+.system-export-scene .cross-edge-path,
+.system-export-scene .variant-edge-path {
+  stroke-width: 2.2;
+  opacity: 1;
+  stroke: #6b7280;
+}
+
+.system-export-scene .edge-path {
+  stroke-width: 1.8;
+  opacity: 0.92;
+}
+
+.system-export-scene .cross-edge-path,
+.system-export-scene .variant-edge-path {
+  stroke-width: 2.25;
+}
+
+.system-export-scene .variant-edge-path {
+  stroke-dasharray: 8 6;
+}
+
+.system-export-scene .edge-label,
+.system-export-scene .cross-edge-label,
+.system-export-scene .variant-edge-label {
+  display: none;
+}
+
+.system-export-scene .edge-status-running .edge-path,
+.system-export-scene .edge-status-running .cross-edge-path,
+.system-export-scene .edge-status-running .variant-edge-path {
+  stroke: #b7791f;
+}
+
+.system-export-scene .edge-status-pass .edge-path,
+.system-export-scene .edge-status-pass .cross-edge-path,
+.system-export-scene .edge-status-pass .variant-edge-path {
+  stroke: #74cbb1;
+}
+
+.system-export-scene .edge-status-fail .edge-path,
+.system-export-scene .edge-status-fail .cross-edge-path,
+.system-export-scene .edge-status-fail .variant-edge-path {
+  stroke: #dc2626;
+}
+
+.system-export-scene .edge-status-untested .edge-path {
+  stroke: #6b7280;
+}
+
+.system-export-scene .edge-status-untested .cross-edge-path,
+.system-export-scene .edge-status-untested .variant-edge-path {
+  stroke: #6b7280;
+}
+
+.system-export-scene .edge-status-untested .cross-edge-label,
+.system-export-scene .edge-status-untested .variant-edge-label {
+  fill: #6b7280;
 }
 
 .node.selected rect {
@@ -1296,8 +1599,8 @@
 }
 
 .node.node-status-pass rect {
-  fill: rgba(96, 214, 156, 0.2);
-  stroke: rgba(96, 214, 156, 0.95);
+  fill: rgba(149, 233, 206, 0.18);
+  stroke: rgba(149, 233, 206, 0.96);
 }
 
 .node.node-status-fail rect {
@@ -1375,7 +1678,7 @@
 .edge-status-pass .edge-path,
 .edge-status-pass .cross-edge-path,
 .edge-status-pass .variant-edge-path {
-  stroke: rgba(96, 214, 156, 0.95);
+  stroke: rgba(149, 233, 206, 0.96);
   opacity: 0.95;
 }
 

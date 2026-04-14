@@ -81,7 +81,7 @@ export const DiagramView = ({
 
   const markerFill = useCallback((status: ElementExecutionStatus) => {
     if (status === 'running') return 'rgba(255, 204, 119, 0.98)'
-    if (status === 'pass') return 'rgba(96, 214, 156, 0.95)'
+    if (status === 'pass') return 'rgba(149, 233, 206, 0.96)'
     if (status === 'fail') return 'rgba(244, 103, 103, 0.95)'
     return 'rgba(255, 255, 255, 0.35)'
   }, [])

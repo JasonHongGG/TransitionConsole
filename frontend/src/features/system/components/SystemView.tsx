@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useLayoutEffect, useRef, useState } from 'react'
-import { curveCatmullRom, line, select, zoom, type ZoomBehavior, zoomIdentity } from 'd3'
-import type { CoverageState, Diagram, DiagramConnector, ElementExecutionStatus } from '../../../types'
+import { select, zoom, type ZoomBehavior, zoomIdentity } from 'd3'
+import type { CoverageState, Diagram, DiagramConnector } from '../../../types'
 import { computeSystemLayout } from '../../../shared/utils/systemLayout'
+import { SystemGraphSvg } from './SystemGraphSvg'
 
 const WHEEL_ZOOM_STEP = Math.log2(1.1)
 
@@ -24,8 +25,6 @@ interface NodeRelationItem {
   targetDiagramName: string
   reason: string
 }
-
-const EDGE_STATUSES: ElementExecutionStatus[] = ['untested', 'running', 'pass', 'fail']
 
 export const SystemView = ({
   diagrams,
@@ -54,64 +53,6 @@ export const SystemView = ({
   const [zoomInfo, setZoomInfo] = useState({ k: 1, x: 0, y: 0 })
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [nodeHistory, setNodeHistory] = useState<string[]>([])
-
-  const resolveNodeStatus = useCallback(
-    (nodeId: string): ElementExecutionStatus => {
-      const snapshotStatus = coverage.nodeStatuses?.[nodeId]
-      if (snapshotStatus && snapshotStatus !== 'untested') {
-        return snapshotStatus
-      }
-      if (isTesting && currentStateId === nodeId) return 'running'
-      if (isTesting && nextStateId === nodeId) return 'running'
-      if (snapshotStatus) {
-        return snapshotStatus
-      }
-      if (coverage.visitedNodes.has(nodeId)) return 'pass'
-      return 'untested'
-    },
-    [coverage.nodeStatuses, coverage.visitedNodes, currentStateId, isTesting, nextStateId],
-  )
-
-  const resolveEdgeStatus = useCallback(
-    (edgeId: string): ElementExecutionStatus => {
-      const snapshotStatus = coverage.edgeStatuses?.[edgeId]
-      if (snapshotStatus && snapshotStatus !== 'untested') {
-        return snapshotStatus
-      }
-      if (isTesting && activeEdgeId === edgeId) {
-        return 'running'
-      }
-      if (snapshotStatus) {
-        return snapshotStatus
-      }
-      const result = coverage.transitionResults[edgeId]
-      if (result === 'pass' || result === 'fail') return result
-      return 'untested'
-    },
-    [isTesting, activeEdgeId, coverage.edgeStatuses, coverage.transitionResults],
-  )
-
-  const edgeLine = useMemo(
-    () =>
-      line<{ x: number; y: number }>()
-        .x((d) => d.x)
-        .y((d) => d.y)
-        .curve(curveCatmullRom.alpha(0.7)),
-    [],
-  )
-
-  const markerFill = useCallback(
-    (status: ElementExecutionStatus, markerKind: 'system' | 'connector' | 'variant') => {
-      if (status === 'running') return 'rgba(255, 204, 119, 0.98)'
-      if (status === 'pass') return 'rgba(96, 214, 156, 0.95)'
-      if (status === 'fail') return 'rgba(244, 103, 103, 0.95)'
-      if (markerKind === 'connector' || markerKind === 'variant') {
-        return isTesting ? 'rgba(255, 255, 255, 0.85)' : 'var(--accent)'
-      }
-      return 'rgba(255, 255, 255, 0.35)'
-    },
-    [isTesting],
-  )
 
   const computeFitTransform = useCallback(() => {
     if (!svgRef.current) return zoomIdentity
@@ -518,189 +459,23 @@ export const SystemView = ({
         </aside>
       ) : null}
 
-      <svg
-        ref={svgRef}
+      <SystemGraphSvg
+        svgRef={svgRef}
+        viewportRef={viewportRef}
+        diagrams={diagrams}
+        connectors={connectors}
+        systemLayout={systemLayout}
+        coverage={coverage}
+        currentStateId={currentStateId}
+        isTesting={isTesting}
+        activeEdgeId={activeEdgeId}
+        nextStateId={nextStateId}
+        selectedNodeId={selectedNodeId}
+        onNodeClick={(nodeId) => focusNode(nodeId)}
         className="diagram-svg"
-        role="img"
         style={{ cursor: 'grab' }}
-      >
-        <defs>
-          {EDGE_STATUSES.map((status) => (
-            <marker
-              key={`arrow-system-${status}`}
-              id={`arrow-system-${status}`}
-              viewBox="0 0 10 10"
-              refX="9"
-              refY="5"
-              markerWidth="6"
-              markerHeight="6"
-              orient="auto-start-reverse"
-            >
-              <path d="M 0 0 L 10 5 L 0 10 z" fill={markerFill(status, 'system')} />
-            </marker>
-          ))}
-          {EDGE_STATUSES.map((status) => (
-            <marker
-              key={`arrow-connector-${status}`}
-              id={`arrow-connector-${status}`}
-              viewBox="0 0 10 10"
-              refX="9"
-              refY="5"
-              markerWidth="6"
-              markerHeight="6"
-              orient="auto-start-reverse"
-            >
-              <path d="M 0 0 L 10 5 L 0 10 z" fill={markerFill(status, 'connector')} />
-            </marker>
-          ))}
-          {EDGE_STATUSES.map((status) => (
-            <marker
-              key={`arrow-variant-${status}`}
-              id={`arrow-variant-${status}`}
-              viewBox="0 0 10 10"
-              refX="9"
-              refY="5"
-              markerWidth="6"
-              markerHeight="6"
-              orient="auto-start-reverse"
-            >
-              <path d="M 0 0 L 10 5 L 0 10 z" fill={markerFill(status, 'variant')} />
-            </marker>
-          ))}
-        </defs>
-
-        <g ref={viewportRef}>
-          {/* Diagram group backgrounds */}
-          <g className="system-groups">
-            {systemLayout.groups.map((group) => (
-              <g key={group.id}>
-                <circle
-                  cx={group.cx}
-                  cy={group.cy}
-                  r={group.radius}
-                  className="diagram-group-bg"
-                />
-                <text
-                  x={group.cx}
-                  y={group.cy - group.radius - 8}
-                  className="diagram-group-label"
-                  textAnchor="middle"
-                >
-                  {group.name}
-                </text>
-              </g>
-            ))}
-          </g>
-
-          {/* Base/delta variant edges */}
-          <g className="variant-edges">
-            {systemLayout.variantEdges.map((edge) => {
-              const edgeStatus = resolveEdgeStatus(edge.id)
-              const midX = (edge.from.x + edge.to.x) / 2
-              const midY = (edge.from.y + edge.to.y) / 2
-              const roleText = edge.roles.length > 0 ? edge.roles.join(' | ') : 'all roles'
-              return (
-                <g key={edge.id} className={`edge-status-${edgeStatus}`}>
-                  <path
-                    d={`M ${edge.from.x} ${edge.from.y} L ${edge.to.x} ${edge.to.y}`}
-                    className="variant-edge-path"
-                    markerEnd={`url(#arrow-variant-${edgeStatus})`}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                  <text x={midX} y={midY - 8} className="variant-edge-label" textAnchor="middle">
-                    extends ({roleText})
-                  </text>
-                </g>
-              )
-            })}
-          </g>
-
-          {/* Cross-diagram connector edges (explicit state-to-state) */}
-          <g className="cross-edges">
-            {systemLayout.crossEdges.map((edge) => {
-              const edgeStatus = resolveEdgeStatus(edge.id)
-              const midX = (edge.from.x + edge.to.x) / 2
-              const midY = (edge.from.y + edge.to.y) / 2
-              const dx = edge.to.x - edge.from.x
-              const dy = edge.to.y - edge.from.y
-              const len = Math.sqrt(dx * dx + dy * dy) || 1
-              const baseOffset = Math.min(len * 0.15, 50)
-              const laneCenter = (edge.parallelCount - 1) / 2
-              const laneOffset = (edge.parallelIndex - laneCenter) * 14
-              const offset = baseOffset + laneOffset
-              const cpX = midX - (dy / len) * offset
-              const cpY = midY + (dx / len) * offset
-
-              const labelOffset = 8 + Math.abs(laneOffset) * 0.35
-
-              const path = edgeLine([
-                { x: edge.from.x, y: edge.from.y },
-                { x: cpX, y: cpY },
-                { x: edge.to.x, y: edge.to.y },
-              ])
-              return (
-                <g key={edge.id} className={`edge-status-${edgeStatus}`}>
-                  <path
-                    d={path ?? ''}
-                    className="cross-edge-path"
-                    markerEnd={`url(#arrow-connector-${edgeStatus})`}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                  <text x={cpX} y={cpY - labelOffset} className="cross-edge-label" textAnchor="middle">
-                    {edge.label}
-                  </text>
-                </g>
-              )
-            })}
-          </g>
-
-          {/* Intra-diagram edges */}
-          <g className="diagram-edges">
-            {systemLayout.intraEdges.map((edge) => {
-              const edgeStatus = resolveEdgeStatus(edge.id)
-              const path = edgeLine(edge.points) ?? ''
-              const midPoint = edge.points[Math.floor(edge.points.length / 2)]
-              return (
-                <g key={edge.id} className={`edge-status-${edgeStatus}`}>
-                  <path
-                    d={path}
-                    className="edge-path"
-                    markerEnd={`url(#arrow-system-${edgeStatus})`}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                  {edge.label && midPoint ? (
-                    <text x={midPoint.x} y={midPoint.y - 10} className="edge-label">
-                      {edge.label}
-                    </text>
-                  ) : null}
-                </g>
-              )
-            })}
-          </g>
-
-          {/* All nodes */}
-          <g className="diagram-nodes">
-            {systemLayout.nodes.map((node) => {
-              const executionStatus = resolveNodeStatus(node.id)
-              const visited = coverage.visitedNodes.has(node.id)
-              const current = currentStateId === node.id
-              return (
-                <g
-                  key={node.id}
-                  transform={`translate(${node.x - node.width / 2}, ${node.y - node.height / 2})`}
-                  className={`node ${node.type} ${visited ? 'visited' : ''} ${current ? 'current' : ''} ${selectedNodeId === node.id ? 'selected' : ''} node-status-${executionStatus}`}
-                  onClick={() => focusNode(node.id)}
-                >
-                  <rect width={node.width} height={node.height} rx={12} ry={12} />
-                  <text x={node.width / 2} y={node.height / 2 + 4} textAnchor="middle">
-                    {node.label}
-                  </text>
-                </g>
-              )
-            })}
-          </g>
-        </g>
-      </svg>
+        ariaLabel="System transition diagram"
+      />
       <div className="zoom-info">
         <span>{Math.round(zoomInfo.k * 100)}%</span>
         <span className="zoom-info-sep">·</span>

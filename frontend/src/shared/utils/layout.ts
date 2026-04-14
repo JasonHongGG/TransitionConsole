@@ -4,6 +4,22 @@ import type { Diagram, DiagramLayout } from '../types'
 const NODE_WIDTH = 140
 const NODE_HEIGHT = 44
 
+export type DiagramLayoutMode = 'interactive' | 'paper-full-system'
+
+interface LayoutDiagramOptions {
+  mode?: DiagramLayoutMode
+}
+
+const PAPER_MIN_NODE_WIDTH = 220
+const PAPER_MAX_NODE_WIDTH = 420
+const PAPER_NODE_HEIGHT = 70
+
+const estimatePaperNodeWidth = (label: string) => {
+  const normalized = label.trim()
+  const width = Math.round(normalized.length * 11.4 + 72)
+  return Math.max(PAPER_MIN_NODE_WIDTH, Math.min(PAPER_MAX_NODE_WIDTH, width))
+}
+
 const toStateDisplayLabel = (state: Diagram['states'][number]): string => {
   const label = state.label?.trim()
   if (label) {
@@ -18,7 +34,9 @@ const toStateDisplayLabel = (state: Diagram['states'][number]): string => {
   return idParts[idParts.length - 1] ?? state.id
 }
 
-export const layoutDiagram = (diagram: Diagram): DiagramLayout => {
+export const layoutDiagram = (diagram: Diagram, options: LayoutDiagramOptions = {}): DiagramLayout => {
+  const mode = options.mode ?? 'interactive'
+
   if (diagram.states.length === 0) {
     return {
       nodes: [],
@@ -35,14 +53,18 @@ export const layoutDiagram = (diagram: Diagram): DiagramLayout => {
   }
 
   const graph = new dagre.graphlib.Graph()
-  graph.setGraph({ rankdir: 'LR', nodesep: 56, ranksep: 80, marginx: 20, marginy: 20 })
+  graph.setGraph(
+    mode === 'paper-full-system'
+      ? { rankdir: 'LR', nodesep: 92, ranksep: 124, marginx: 36, marginy: 30 }
+      : { rankdir: 'LR', nodesep: 56, ranksep: 80, marginx: 20, marginy: 20 },
+  )
   graph.setDefaultEdgeLabel(() => ({}))
 
   diagram.states.forEach((state) => {
     const displayLabel = toStateDisplayLabel(state)
     graph.setNode(state.id, {
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
+      width: mode === 'paper-full-system' ? estimatePaperNodeWidth(displayLabel) : NODE_WIDTH,
+      height: mode === 'paper-full-system' ? PAPER_NODE_HEIGHT : NODE_HEIGHT,
       label: displayLabel,
       type: state.type,
     })
@@ -62,8 +84,8 @@ export const layoutDiagram = (diagram: Diagram): DiagramLayout => {
       label: displayLabel,
       x: node?.x ?? 0,
       y: node?.y ?? 0,
-      width: node?.width ?? NODE_WIDTH,
-      height: node?.height ?? NODE_HEIGHT,
+      width: node?.width ?? (mode === 'paper-full-system' ? estimatePaperNodeWidth(displayLabel) : NODE_WIDTH),
+      height: node?.height ?? (mode === 'paper-full-system' ? PAPER_NODE_HEIGHT : NODE_HEIGHT),
       type: state.type,
     }
   })
