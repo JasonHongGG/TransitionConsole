@@ -226,7 +226,13 @@ export const SystemGraphSvg = ({
               ) : (
                 <circle cx={group.cx} cy={group.cy} r={group.radius} className="diagram-group-bg" />
               )}
-              <text x={group.labelX} y={group.labelY} className="diagram-group-label" textAnchor="middle">
+              <text
+                x={group.labelX}
+                y={group.labelY}
+                className="diagram-group-label"
+                textAnchor="middle"
+                dominantBaseline={isPaperMode ? 'hanging' : undefined}
+              >
                 {group.name}
               </text>
             </g>
@@ -350,7 +356,7 @@ export const SystemGraphSvg = ({
                 onClick={onNodeClick ? () => onNodeClick(node.id) : undefined}
               >
                 <rect width={node.width} height={node.height} rx={12} ry={12} />
-                <text x={node.width / 2} y={node.height / 2 + 4} textAnchor="middle">
+                <text x={node.width / 2} y={node.height / 2} textAnchor="middle" dominantBaseline="middle">
                   {node.label}
                 </text>
               </g>

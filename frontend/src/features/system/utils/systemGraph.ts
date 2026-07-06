@@ -36,7 +36,7 @@ export const EDGE_STATUSES: ElementExecutionStatus[] = ['untested', 'running', '
 export const PAPER_FULL_SYSTEM_PRESET: SystemPaperExportPreset = {
   mode: 'paper-full-system',
   title: '完整系統論文圖',
-  viewBoxPadding: 64,
+  viewBoxPadding: 20,
   defaultScale: 3,
   fileSuffix: 'paper-full-system',
 }
@@ -44,7 +44,7 @@ export const PAPER_FULL_SYSTEM_PRESET: SystemPaperExportPreset = {
 const PAPER_STATUS_STROKE: Record<ElementExecutionStatus, string> = {
   untested: '#6b7280',
   running: '#b7791f',
-  pass: '#74cbb1',
+  pass: '#f28b82',
   fail: '#dc2626',
 }
 const INTERACTIVE_IDLE_CONNECTOR = 'rgba(255, 204, 119, 0.92)'
@@ -184,9 +184,9 @@ export function getSystemGraphViewBox(layout: SystemLayout, padding = 120): Syst
     } else {
       includePoint(group.cx - group.radius, group.cy - group.radius)
       includePoint(group.cx + group.radius, group.cy + group.radius)
+      includePoint(group.labelX, group.labelY - 36)
+      includePoint(group.labelX, group.labelY + 16)
     }
-    includePoint(group.labelX, group.labelY - 36)
-    includePoint(group.labelX, group.labelY + 16)
   })
 
   layout.intraEdges.forEach((edge) => {

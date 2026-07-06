@@ -1383,7 +1383,7 @@
 
 .system-export-scene .diagram-group-label {
   fill: #334155;
-  font-size: 32px;
+  font-size: 46px;
   font-weight: 800;
 }
 
@@ -1395,7 +1395,7 @@
 
 .system-export-scene .node text {
   fill: #0f172a;
-  font-size: 30px;
+  font-size: 42px;
   font-weight: 700;
 }
 
@@ -1416,8 +1416,8 @@
 }
 
 .system-export-scene .node.node-status-pass rect {
-  fill: rgba(116, 203, 177, 0.18);
-  stroke: #74cbb1;
+  fill: rgba(248, 113, 113, 0.16);
+  stroke: #f28b82;
   stroke-width: 2.4;
 }
 
@@ -1470,7 +1470,7 @@
 .system-export-scene .edge-status-pass .edge-path,
 .system-export-scene .edge-status-pass .cross-edge-path,
 .system-export-scene .edge-status-pass .variant-edge-path {
-  stroke: #74cbb1;
+  stroke: #f28b82;
 }
 
 .system-export-scene .edge-status-fail .edge-path,

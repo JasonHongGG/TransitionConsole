@@ -33,7 +33,7 @@ function buildExportCss(): string {
 
     .system-export-svg-root .diagram-group-label {
       fill: #334155;
-      font-size: 32px;
+      font-size: 46px;
       font-weight: 800;
       letter-spacing: 0.5px;
     }
@@ -46,7 +46,7 @@ function buildExportCss(): string {
 
     .system-export-svg-root .node text {
       fill: #0f172a;
-      font-size: 30px;
+      font-size: 42px;
       font-weight: 700;
     }
 
@@ -67,8 +67,8 @@ function buildExportCss(): string {
     }
 
     .system-export-svg-root .node.node-status-pass rect {
-      fill: rgba(116, 203, 177, 0.18);
-      stroke: #74cbb1;
+      fill: rgba(248, 113, 113, 0.16);
+      stroke: #f28b82;
       stroke-width: 2.4;
     }
 
@@ -118,7 +118,7 @@ function buildExportCss(): string {
     .system-export-svg-root .edge-status-pass .edge-path,
     .system-export-svg-root .edge-status-pass .cross-edge-path,
     .system-export-svg-root .edge-status-pass .variant-edge-path {
-      stroke: #74cbb1;
+      stroke: #f28b82;
     }
 
     .system-export-svg-root .edge-status-fail .edge-path,

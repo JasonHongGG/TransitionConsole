@@ -105,15 +105,23 @@ export interface SystemLayout {
   bounds: { minX: number; maxX: number; minY: number; maxY: number }
 }
 
-const PAPER_GROUP_PADDING_X = 42
-const PAPER_GROUP_PADDING_Y = 28
-const PAPER_CLUSTER_GAP = 88
-const PAPER_DELTA_GAP = 44
-const PAPER_ROW_GAP = 150
-const PAPER_GROUP_LABEL_GAP = 28
-const PAPER_LINE_GAP = 92
-const PAPER_TARGET_ROW_WIDTH = 2700
-const PAPER_MAX_CLUSTERS_PER_LINE = 4
+const PAPER_GROUP_PADDING_X = 18
+const PAPER_GROUP_PADDING_BOTTOM = 12
+const PAPER_GROUP_TITLE_HEIGHT = 56
+const PAPER_GROUP_TITLE_INSET_Y = 12
+const PAPER_GROUP_TITLE_GAP = 20
+const PAPER_GROUP_TITLE_CHAR_WIDTH = 21
+const PAPER_CLUSTER_GAP = 40
+const PAPER_DELTA_GAP = 28
+const PAPER_ROW_GAP = 84
+const PAPER_LINE_GAP = 88
+const PAPER_TARGET_ROW_WIDTH = 2200
+const PAPER_MAX_CLUSTERS_PER_LINE = 3
+
+const estimatePaperGroupTitleWidth = (title: string) => {
+  const normalized = title.trim()
+  return Math.max(1, Math.round(normalized.length * PAPER_GROUP_TITLE_CHAR_WIDTH))
+}
 
 const emptyLayout = (mode: SystemLayoutMode): SystemLayout => ({
   mode,
@@ -161,8 +169,11 @@ const createGroupNodes = (diagrams: Diagram[], layoutMode: DiagramLayoutMode, mo
     const layout = layoutDiagram(diagram, { mode: layoutMode })
 
     if (mode === 'paper-full-system') {
-      const width = layout.width + PAPER_GROUP_PADDING_X * 2
-      const height = layout.height + PAPER_GROUP_PADDING_Y * 2
+      const contentWidth = Math.max(1, layout.bounds.maxX - layout.bounds.minX)
+      const contentHeight = Math.max(1, layout.bounds.maxY - layout.bounds.minY)
+      const titleWidth = estimatePaperGroupTitleWidth(diagram.name)
+      const width = Math.max(contentWidth, titleWidth) + PAPER_GROUP_PADDING_X * 2
+      const height = contentHeight + PAPER_GROUP_TITLE_HEIGHT + PAPER_GROUP_TITLE_GAP + PAPER_GROUP_PADDING_BOTTOM
       return {
         id: diagram.id,
         name: diagram.name,
@@ -216,7 +227,7 @@ const buildGroupInfo = (groups: GroupNode[], mode: SystemLayoutMode): SystemGrou
     labelX: group.x ?? 0,
     labelY:
       mode === 'paper-full-system'
-        ? (group.y ?? 0) - group.height / 2 - PAPER_GROUP_LABEL_GAP
+        ? (group.y ?? 0) - group.height / 2 + PAPER_GROUP_TITLE_INSET_Y
         : (group.y ?? 0) - group.radius - 8,
   }))
 
@@ -331,9 +342,9 @@ const computeBounds = (layout: Pick<SystemLayout, 'nodes' | 'groups' | 'crossEdg
     } else {
       includePoint(group.cx - group.radius, group.cy - group.radius)
       includePoint(group.cx + group.radius, group.cy + group.radius)
+      includePoint(group.labelX, group.labelY - 28)
+      includePoint(group.labelX, group.labelY + 12)
     }
-    includePoint(group.labelX, group.labelY - 28)
-    includePoint(group.labelX, group.labelY + 12)
   })
 
   layout.intraEdges.forEach((edge) => {
@@ -683,7 +694,11 @@ const computePaperSystemLayout = (diagrams: Diagram[], connectors: DiagramConnec
 
   groups.forEach((group) => {
     const originX = (group.x ?? 0) - group.width / 2 + PAPER_GROUP_PADDING_X
-    const originY = (group.y ?? 0) - group.height / 2 + PAPER_GROUP_PADDING_Y
+    const originY =
+      (group.y ?? 0) -
+      group.height / 2 +
+      PAPER_GROUP_TITLE_HEIGHT +
+      PAPER_GROUP_TITLE_GAP
     const layout = group.layout
 
     layout.nodes.forEach((node) => {

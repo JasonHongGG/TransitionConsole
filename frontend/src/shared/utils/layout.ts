@@ -10,13 +10,13 @@ interface LayoutDiagramOptions {
   mode?: DiagramLayoutMode
 }
 
-const PAPER_MIN_NODE_WIDTH = 220
-const PAPER_MAX_NODE_WIDTH = 420
-const PAPER_NODE_HEIGHT = 70
+const PAPER_MIN_NODE_WIDTH = 256
+const PAPER_MAX_NODE_WIDTH = 520
+const PAPER_NODE_HEIGHT = 92
 
 const estimatePaperNodeWidth = (label: string) => {
   const normalized = label.trim()
-  const width = Math.round(normalized.length * 11.4 + 72)
+  const width = Math.round(normalized.length * 14.1 + 104)
   return Math.max(PAPER_MIN_NODE_WIDTH, Math.min(PAPER_MAX_NODE_WIDTH, width))
 }
 
@@ -55,7 +55,7 @@ export const layoutDiagram = (diagram: Diagram, options: LayoutDiagramOptions = 
   const graph = new dagre.graphlib.Graph()
   graph.setGraph(
     mode === 'paper-full-system'
-      ? { rankdir: 'LR', nodesep: 92, ranksep: 124, marginx: 36, marginy: 30 }
+      ? { rankdir: 'LR', nodesep: 60, ranksep: 78, marginx: 18, marginy: 16 }
       : { rankdir: 'LR', nodesep: 56, ranksep: 80, marginx: 20, marginy: 20 },
   )
   graph.setDefaultEdgeLabel(() => ({}))
